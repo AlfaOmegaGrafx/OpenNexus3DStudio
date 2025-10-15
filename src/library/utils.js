@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter";
 import { Buffer } from "buffer";
 import html2canvas from "html2canvas";
-import VRMExporter from "./VRMExporter";
+import { VRMExporter } from "./VRMExporter";
 import { CullHiddenFaces, DisposeCullMesh } from './cull-mesh.js';
 import { combine } from "./merge-geometry";
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';

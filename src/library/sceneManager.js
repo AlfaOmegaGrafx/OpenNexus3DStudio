@@ -1,0 +1,1392 @@
+/**
+ * SceneManager - Central orchestrator for 3D scene management
+ * Similar to CharacterManager in CharacterStudio, but focused on 3D AIGC workflows
+ */
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLBExporter } from './glbExporter.js';
+import { VRMLoader } from './vrmLoader.js';
+import { VRMExporter } from './VRMExporter.js';
+import { VRMExpressionPresetName } from '@pixiv/three-vrm';
+
+export class SceneManager {
+  constructor() {
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.controls = null;
+    this.currentModel = null;
+    this.renderMode = 'solid';
+    this.isInitialized = false;
+    this.selectedBoneName = null;
+    
+    // Loaders
+    this.gltfLoader = new GLTFLoader();
+    this.objLoader = new OBJLoader();
+    this.fbxLoader = new FBXLoader();
+    
+    // Event listeners
+    this.eventListeners = new Map();
+    
+    // GLB Exporter
+    this.glbExporter = new GLBExporter();
+    
+    // VRM Loader and Exporter
+    this.vrmLoader = new VRMLoader();
+    this.vrmExporter = new VRMExporter();
+  }
+
+  /**
+   * Initialize the 3D scene
+   * @param {HTMLElement} container - Container element for the scene
+   * @param {Object} options - Scene configuration options
+   */
+  async initialize(container, options = {}) {
+    try {
+      const {
+        width = container.clientWidth,
+        height = container.clientHeight,
+        backgroundColor = 0x1a1a1a,
+        enableShadows = true,
+        enableAntialias = true
+      } = options;
+
+      // Create scene
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(backgroundColor);
+
+      // Create camera
+      this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+      this.camera.position.set(0, 1.5, 3); // Position camera to look at a human-sized model
+
+      // Create renderer
+      this.renderer = new THREE.WebGLRenderer({ 
+        antialias: enableAntialias,
+        alpha: true
+      });
+      this.renderer.setSize(width, height);
+      this.renderer.setPixelRatio(window.devicePixelRatio);
+      
+      if (enableShadows) {
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
+      
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.0;
+
+      // Create controls
+      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.05;
+
+      // Setup lighting
+      this.setupLighting();
+
+      // Ground plane removed - user doesn't want it
+
+      // Add helpers
+      this.addHelpers();
+
+      // Mount renderer
+      container.appendChild(this.renderer.domElement);
+
+      // Setup resize handler
+      this.setupResizeHandler();
+
+      this.isInitialized = true;
+      this.emit('initialized', { scene: this.scene, camera: this.camera, renderer: this.renderer });
+      
+      return { scene: this.scene, camera: this.camera, renderer: this.renderer, controls: this.controls };
+    } catch (error) {
+      console.error('Failed to initialize scene:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Setup scene lighting
+   */
+  setupLighting() {
+    // Ambient light - brighter overall illumination
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+    this.scene.add(ambientLight);
+
+    // 3-Point Lighting Setup
+    
+    // 1. Key Light (Main light) - Front and slightly to the right
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    keyLight.position.set(5, 8, 3);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 50;
+    keyLight.shadow.camera.left = -10;
+    keyLight.shadow.camera.right = 10;
+    keyLight.shadow.camera.top = 10;
+    keyLight.shadow.camera.bottom = -10;
+    this.scene.add(keyLight);
+
+    // 2. Fill Light (Softer light) - Front and slightly to the left
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    fillLight.position.set(-3, 5, 2);
+    this.scene.add(fillLight);
+
+    // 3. Rim Light (Back light) - Behind the model
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    rimLight.position.set(-2, 3, -5);
+    this.scene.add(rimLight);
+
+    // Additional accent light for better illumination
+    const accentLight = new THREE.PointLight(0xffffff, 0.5, 20);
+    accentLight.position.set(0, 10, 0);
+    this.scene.add(accentLight);
+  }
+
+  /**
+   * Add scene helpers (grid, axes)
+   */
+  addGroundPlane() {
+    // Remove the ground plane - user doesn't want it
+    // The existing grid helper is sufficient
+  }
+
+  addHelpers() {
+    // Grid helper
+    const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x444444);
+    this.scene.add(gridHelper);
+
+    // Axes helper
+    const axesHelper = new THREE.AxesHelper(2);
+    this.scene.add(axesHelper);
+  }
+
+  /**
+   * Load a 3D model
+   * @param {File|string} source - File object or URL
+   * @param {Object} options - Loading options
+   */
+  async loadModel(source, options = {}) {
+    try {
+      this.emit('modelLoadingStart', { source });
+      console.log('Loading model:', source);
+
+      let model;
+      const fileExtension = this.getFileExtension(source);
+      console.log('File extension detected:', fileExtension);
+
+      switch (fileExtension) {
+        case 'glb':
+        case 'gltf':
+          model = await this.loadGLTF(source);
+          break;
+        case 'obj':
+          model = await this.loadOBJ(source);
+          break;
+        case 'fbx':
+          model = await this.loadFBX(source);
+          break;
+        case 'vrm':
+          model = await this.loadVRM(source);
+          break;
+        default:
+          const supportedFormats = ['glb', 'gltf', 'obj', 'fbx', 'vrm'];
+          const fileInfo = source instanceof File ? 
+            `File: ${source.name} (Type: ${source.type})` : 
+            `Source: ${source}`;
+          throw new Error(`Unsupported file format: ${fileExtension || 'unknown'}. ${fileInfo}. Supported formats: ${supportedFormats.join(', ')}`);
+      }
+
+      // Remove existing model
+      if (this.currentModel) {
+        this.scene.remove(this.currentModel);
+        this.currentModel = null;
+        this.currentVRM = null; // Clear VRM reference
+      }
+
+      // Process and add new model
+      console.log('Processing model with options:', options);
+      this.currentModel = this.processModel(model, options);
+      console.log('Model processed, adding to scene...');
+      this.scene.add(this.currentModel);
+
+      // Store original materials for render mode restoration
+      this.storeOriginalMaterials();
+
+      // Update materials based on render mode
+      this.updateRenderMode(this.renderMode);
+
+              // Ensure model is properly positioned
+              this.ensureModelOnGround();
+
+              this.emit('modelLoaded', { model: this.currentModel });
+              return this.currentModel;
+    } catch (error) {
+      console.error('Failed to load model:', error);
+      this.emit('modelLoadError', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Load GLTF/GLB model
+   */
+  async loadGLTF(source) {
+    return new Promise((resolve, reject) => {
+      this.gltfLoader.load(
+        source,
+        (gltf) => resolve(gltf.scene),
+        (progress) => this.emit('modelLoadingProgress', { progress }),
+        (error) => reject(error)
+      );
+    });
+  }
+
+  /**
+   * Load OBJ model
+   */
+  async loadOBJ(source) {
+    return new Promise((resolve, reject) => {
+      this.objLoader.load(
+        source,
+        (obj) => resolve(obj),
+        (progress) => this.emit('modelLoadingProgress', { progress }),
+        (error) => reject(error)
+      );
+    });
+  }
+
+  /**
+   * Load FBX model
+   */
+  async loadFBX(source) {
+    return new Promise((resolve, reject) => {
+      this.fbxLoader.load(
+        source,
+        (fbx) => resolve(fbx),
+        (progress) => this.emit('modelLoadingProgress', { progress }),
+        (error) => reject(error)
+      );
+    });
+  }
+
+  /**
+   * Load VRM model
+   */
+  async loadVRM(source) {
+    try {
+      const vrm = await this.vrmLoader.loadVRM(source, {
+        normalize: true,
+        addDefaultMaterials: true,
+        processBlendShapes: true,
+        setupBones: true
+      });
+      
+      // Store the VRM object for blend shape access
+      this.currentVRM = vrm;
+      
+      // Return the VRM scene with VRM object attached
+      const scene = vrm.scene;
+      scene.userData.vrm = vrm;
+      return scene;
+    } catch (error) {
+      console.error('VRM loading failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get VRM blend shapes
+   */
+  getVRMBlendShapes() {
+    console.log('getVRMBlendShapes called, currentVRM:', !!this.currentVRM);
+    if (!this.currentVRM) {
+      console.log('No currentVRM found');
+      return [];
+    }
+    
+    const blendShapes = [];
+    
+    // VRM standard blend shape name mapping based on VRMExpressionPresetName
+    const blendShapeNameMap = {
+      // Numeric blend shape mappings (common in some VRM models)
+      '0': 'Neutral',
+      '1': 'Happy',
+      '2': 'Angry',
+      '3': 'Sad',
+      '4': 'Surprised',
+      '5': 'Blink',
+      '6': 'A (Mouth Open)',
+      '7': 'I (Smile)',
+      '8': 'U (Pucker)',
+      '9': 'E (Grin)',
+      '10': 'O (Round)',
+      '11': 'Joy',
+      '12': 'Fun',
+      '13': 'Sorrow',
+      '14': 'Left Blink',
+      '15': 'Right Blink',
+      '16': 'Look Up',
+      '17': 'Look Down',
+      '18': 'Look Left',
+      '19': 'Look Right',
+      
+      // Facial expressions (VRM 1.0 standard)
+      'happy': 'Happy',
+      'angry': 'Angry', 
+      'sorrow': 'Sorrow',
+      'fun': 'Fun',
+      'surprised': 'Surprised',
+      'neutral': 'Neutral',
+      'relaxed': 'Relaxed',
+      'excited': 'Excited',
+      'sleepy': 'Sleepy',
+      'confused': 'Confused',
+      'disgusted': 'Disgusted',
+      'fearful': 'Fearful',
+      'sad': 'Sad',
+      
+      // Lip sync visemes (phonemes)
+      'aa': 'A (Mouth Open)',
+      'ih': 'I (Smile)', 
+      'ou': 'U (Pucker)',
+      'ee': 'E (Grin)',
+      'oh': 'O (Round)',
+      
+      // Eye movements
+      'blink': 'Blink',
+      'blink_l': 'Left Blink',
+      'blink_r': 'Right Blink',
+      'lookup': 'Look Up',
+      'lookdown': 'Look Down', 
+      'lookleft': 'Look Left',
+      'lookright': 'Look Right',
+      
+      // Additional VRM expressions
+      'joy': 'Joy',
+      'a': 'A (Mouth Open)',
+      'i': 'I (Smile)',
+      'u': 'U (Pucker)',
+      'e': 'E (Grin)',
+      'o': 'O (Round)',
+      
+      // Legacy VRM 0.x mappings
+      'Ah': 'A (Mouth Open)',
+      'Ih': 'I (Smile)',
+      'Ou': 'U (Pucker)', 
+      'Ee': 'E (Grin)',
+      'Oh': 'O (Round)',
+      'Blink': 'Blink',
+      'Blink_L': 'Left Blink',
+      'Blink_R': 'Right Blink',
+      'LookUp': 'Look Up',
+      'LookDown': 'Look Down',
+      'LookLeft': 'Look Left', 
+      'LookRight': 'Look Right'
+    };
+    
+    const getDisplayName = (technicalName) => {
+      // First check our custom mapping
+      if (blendShapeNameMap[technicalName]) {
+        return blendShapeNameMap[technicalName];
+      }
+      
+      // Then check if it's a VRMExpressionPresetName value
+      const presetEntries = Object.entries(VRMExpressionPresetName);
+      for (const [key, value] of presetEntries) {
+        if (value === technicalName) {
+          // Convert key to human-readable format
+          return key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+        }
+      }
+      
+      // Fallback to original name
+      return technicalName;
+    };
+    
+    // Extract ALL blend shapes from the VRM model - both expressions and morph targets
+    console.log('Extracting blend shapes from VRM model...');
+    
+    // First, try to get VRM expressions (these are the high-level expressions)
+    let vrmExpressions = [];
+    if (this.currentVRM.blendShapeProxy) {
+      console.log('VRM has blendShapeProxy');
+      const expressions = this.currentVRM.blendShapeProxy.getExpressionManager();
+      if (expressions) {
+        const expressionNames = expressions.getExpressionNames();
+        console.log('Found VRM expressions:', expressionNames.length);
+        vrmExpressions = expressionNames;
+      }
+    } else if (this.currentVRM.expressionManager) {
+      console.log('VRM has direct expressionManager');
+      const expressions = this.currentVRM.expressionManager.expressions;
+      if (expressions) {
+        const expressionNames = Object.keys(expressions);
+        console.log('Found VRM expressions:', expressionNames.length);
+        vrmExpressions = expressionNames;
+      }
+    }
+    
+    // Extract morph targets from all meshes in the scene
+    if (this.currentVRM.scene) {
+      console.log('Checking VRM scene for morph targets...');
+      this.currentVRM.scene.traverse((child) => {
+        if (child.isMesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
+          console.log('Found morph targets on mesh:', child.name, child.morphTargetInfluences.length);
+          if (child.morphTargetDictionary) {
+            const morphTargetNames = Object.keys(child.morphTargetDictionary);
+            console.log('Morph target dictionary:', morphTargetNames.length, 'targets');
+            console.log('Morph target names:', morphTargetNames.slice(0, 10), '...'); // Show first 10 names
+            
+            morphTargetNames.forEach(name => {
+              // Only add if not already in VRM expressions and not already added
+              if (!vrmExpressions.includes(name) && !blendShapes.find(bs => bs.technicalName === name)) {
+                blendShapes.push({
+                  name: name, // Use the actual morph target name
+                  technicalName: name,
+                  value: 0
+                });
+              }
+            });
+          }
+        }
+      });
+    }
+    
+    // Add VRM expressions (these are usually the main facial expressions)
+    vrmExpressions.forEach(name => {
+      if (!blendShapes.find(bs => bs.technicalName === name)) {
+        blendShapes.push({
+          name: getDisplayName(name),
+          technicalName: name,
+          value: 0
+        });
+      }
+    });
+    
+    // Check for blend shapes in VRM metadata
+    if (this.currentVRM.meta && this.currentVRM.meta.blendShapeGroups) {
+      console.log('Found blend shape groups in VRM meta:', this.currentVRM.meta.blendShapeGroups.length);
+      this.currentVRM.meta.blendShapeGroups.forEach(group => {
+        if (group.binds) {
+          group.binds.forEach(bind => {
+            const name = bind.name || `BlendShape_${bind.index}`;
+            // Only add if not already added
+            if (!blendShapes.find(bs => bs.technicalName === name)) {
+              blendShapes.push({
+                name: name,
+                technicalName: name,
+                value: 0
+              });
+            }
+          });
+        }
+      });
+    }
+    
+    console.log('Total blend shapes extracted:', blendShapes.length);
+    console.log('Blend shape names (first 10):', blendShapes.slice(0, 10).map(bs => bs.name));
+    console.log('All blend shape technical names:', blendShapes.map(bs => bs.technicalName));
+    return blendShapes;
+  }
+
+  /**
+   * Set VRM blend shape value
+   */
+  setVRMBlendShape(name, value) {
+    if (!this.currentVRM) return;
+    
+    // Try blendShapeProxy first (for VRM expressions)
+    if (this.currentVRM.blendShapeProxy) {
+      const expressions = this.currentVRM.blendShapeProxy.getExpressionManager();
+      if (expressions) {
+        expressions.setValue(name, value);
+        return;
+      }
+    }
+    
+    // Try direct expressionManager
+    if (this.currentVRM.expressionManager && this.currentVRM.expressionManager.expressions) {
+      const expressions = this.currentVRM.expressionManager.expressions;
+      if (expressions[name] && typeof expressions[name].setValue === 'function') {
+        expressions[name].setValue(value);
+        return;
+      }
+    }
+    
+    // Try blendShapeManager
+    if (this.currentVRM.blendShapeManager && this.currentVRM.blendShapeManager.expressions) {
+      const expressions = this.currentVRM.blendShapeManager.expressions;
+      if (expressions[name] && typeof expressions[name].setValue === 'function') {
+        expressions[name].setValue(value);
+        return;
+      }
+    }
+    
+    // Try to set morph target directly on meshes
+    if (this.currentVRM.scene) {
+      this.currentVRM.scene.traverse((child) => {
+        if (child.isMesh && child.morphTargetInfluences && child.morphTargetDictionary) {
+          const morphIndex = child.morphTargetDictionary[name];
+          if (morphIndex !== undefined) {
+            child.morphTargetInfluences[morphIndex] = value;
+            console.log(`Set morph target ${name} to ${value} on mesh ${child.name}`);
+            return;
+          }
+        }
+      });
+    }
+    
+    console.warn('Could not set blend shape value for:', name);
+  }
+
+  /**
+   * Process loaded model (center, scale, etc.)
+   */
+  processModel(model, options = {}) {
+    const { autoCenter = true, autoScale = true, scale = 1 } = options;
+    console.log('processModel called with options:', { autoCenter, autoScale, scale });
+
+    if (autoCenter || autoScale) {
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const targetScale = autoScale ? (2 / maxDim) * scale : scale;
+      
+      console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
+      
+      model.scale.setScalar(targetScale);
+      
+      // Rotate model 180 degrees around Y-axis to face the viewport
+      model.rotation.y += Math.PI;
+      
+              if (autoCenter) {
+                // Recalculate bounding box after rotation and scaling
+                const rotatedBox = new THREE.Box3().setFromObject(model);
+                
+                // Position model so feet are at the ground plane (y = 0)
+                const modelBottom = rotatedBox.min.y;
+                
+                // Move the model down so its bottom is at y = 0
+                model.position.y = -modelBottom;
+                model.position.x = 0;
+                model.position.z = 0;
+                
+                // Update controls target to look at the model center
+                if (this.controls) {
+                  this.controls.target.set(0, 1, 0); // Look at center height of a typical human
+                }
+                
+                console.log('Model positioning:', {
+                  originalBox: { min: box.min, max: box.max },
+                  rotatedBox: { min: rotatedBox.min, max: rotatedBox.max },
+                  modelBottom,
+                  finalPosition: model.position,
+                  scale: model.scale,
+                  controlsTarget: this.controls ? this.controls.target : 'no controls'
+                });
+              }
+    } else {
+      // Rotate model 180 degrees around Y-axis to face the viewport
+      model.rotation.y += Math.PI;
+    }
+
+    return model;
+  }
+
+  /**
+   * Ensure model is positioned with feet on the ground
+   */
+  ensureModelOnGround() {
+    if (!this.currentModel) return;
+    
+    // Get the current bounding box
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    const modelBottom = box.min.y;
+    
+    // If the model is floating above ground, move it down
+    if (modelBottom > 0) {
+      this.currentModel.position.y -= modelBottom;
+      console.log('Model moved to ground level:', {
+        originalBottom: modelBottom,
+        newPosition: this.currentModel.position
+      });
+    }
+  }
+
+  /**
+   * Create bone visualization for skeleton mode
+   */
+  createBoneVisualization() {
+    try {
+      console.log('Creating bone visualization...');
+      if (!this.currentModel) {
+        console.log('No current model found');
+        return;
+      }
+
+      // Remove existing bone visualization
+      this.clearBoneVisualization();
+
+      const boneHelpers = [];
+      const boneConnections = [];
+
+      // Create bone visualization for VRM models
+      if (this.currentVRM && this.currentVRM.humanoid) {
+        console.log('Creating VRM bone visualization');
+        console.log('VRM object:', this.currentVRM);
+        console.log('Humanoid:', this.currentVRM.humanoid);
+        const humanoid = this.currentVRM.humanoid;
+        
+        // Create helpers for each bone
+        if (humanoid.humanoidBones && Array.isArray(humanoid.humanoidBones)) {
+          console.log('Found humanoid bones:', humanoid.humanoidBones.length, humanoid.humanoidBones);
+          humanoid.humanoidBones.forEach((boneName, index) => {
+            try {
+              const bone = humanoid.getNormalizedBoneNode(boneName);
+              console.log(`Processing bone ${boneName}:`, bone);
+              if (bone) {
+                // Create a small sphere to represent the bone joint
+                // Make finger joints much smaller
+                const isFingerBone = boneName.toLowerCase().includes('finger') || 
+                                   boneName.toLowerCase().includes('thumb') || 
+                                   boneName.toLowerCase().includes('hand') ||
+                                   boneName.toLowerCase().includes('toe');
+                const sphereSize = isFingerBone ? 0.008 : 0.015;
+                const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
+                const material = new THREE.MeshBasicMaterial({ 
+                  color: 0xff0000, // Red for unselected bones
+                  transparent: true,
+                  opacity: 1.0 // Fully opaque for better visibility
+                });
+                const boneHelper = new THREE.Mesh(geometry, material);
+                
+                // Position at bone location in world space
+                bone.getWorldPosition(boneHelper.position);
+                boneHelper.userData.boneName = boneName;
+                boneHelper.userData.isBoneHelper = true;
+                boneHelper.userData.originalBone = bone;
+                
+                if (this.scene) {
+                  this.scene.add(boneHelper);
+                  boneHelpers.push(boneHelper);
+                  console.log('Added bone helper for', boneName, 'at position:', boneHelper.position);
+                } else {
+                  console.warn('No scene available to add bone helper');
+                }
+              }
+            } catch (error) {
+              console.warn('Error creating bone helper for', boneName, error);
+            }
+          });
+        }
+
+        // Create bone connections (lines between parent and child bones)
+        try {
+          this.createBoneConnections(humanoid, boneConnections);
+        } catch (error) {
+          console.warn('Error creating bone connections:', error);
+        }
+        
+        // If no bones were found via VRM humanoid, try to find bones directly from the model
+        if (boneHelpers.length === 0) {
+          console.log('No VRM humanoid bones found, trying direct model traversal...');
+          this.currentModel.traverse((child) => {
+            try {
+              if (child.isBone) {
+                console.log('Found direct bone:', child.name, 'at position:', child.position);
+                // Create a small sphere to represent the bone joint
+                // Make finger joints much smaller
+                const isFingerBone = child.name.toLowerCase().includes('finger') || 
+                                   child.name.toLowerCase().includes('thumb') || 
+                                   child.name.toLowerCase().includes('hand') ||
+                                   child.name.toLowerCase().includes('toe');
+                const sphereSize = isFingerBone ? 0.008 : 0.015;
+                const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
+                const material = new THREE.MeshBasicMaterial({ 
+                  color: 0xff0000, // Red for unselected bones
+                  transparent: true,
+                  opacity: 1.0 // Fully opaque for better visibility
+                });
+                const boneHelper = new THREE.Mesh(geometry, material);
+                
+                // Position at bone location in world space
+                child.getWorldPosition(boneHelper.position);
+                boneHelper.userData.boneName = child.name;
+                boneHelper.userData.isBoneHelper = true;
+                boneHelper.userData.originalBone = child;
+                
+                if (this.scene) {
+                  this.scene.add(boneHelper);
+                  boneHelpers.push(boneHelper);
+                  console.log('Added direct bone helper for', child.name, 'at position:', boneHelper.position);
+                } else {
+                  console.warn('No scene available to add direct bone helper');
+                }
+              }
+            } catch (error) {
+              console.warn('Error creating direct bone helper for', child.name, error);
+            }
+          });
+          
+          // Create bone connections for direct bones
+          try {
+            this.createBoneConnectionsForModel(this.currentModel, boneConnections);
+          } catch (error) {
+            console.warn('Error creating direct bone connections:', error);
+          }
+        }
+      } else {
+        console.log('Creating non-VRM bone visualization');
+        console.log('Current model:', this.currentModel);
+        console.log('Current VRM:', this.currentVRM);
+        let boneCount = 0;
+        // For non-VRM models, traverse the scene to find bones
+        this.currentModel.traverse((child) => {
+          try {
+            if (child.isBone) {
+              boneCount++;
+              console.log('Found bone:', child.name, 'at position:', child.position);
+              // Create a small sphere to represent the bone joint
+              // Make finger joints much smaller
+              const isFingerBone = child.name.toLowerCase().includes('finger') || 
+                                 child.name.toLowerCase().includes('thumb') || 
+                                 child.name.toLowerCase().includes('hand') ||
+                                 child.name.toLowerCase().includes('toe');
+              const sphereSize = isFingerBone ? 0.008 : 0.015;
+              const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
+              const material = new THREE.MeshBasicMaterial({ 
+                color: 0xff6600, // Bright orange like in the image
+                transparent: true,
+                opacity: 1.0 // Fully opaque for better visibility
+              });
+              const boneHelper = new THREE.Mesh(geometry, material);
+              
+              // Position at bone location in world space
+              child.getWorldPosition(boneHelper.position);
+              boneHelper.userData.boneName = child.name;
+              boneHelper.userData.isBoneHelper = true;
+              boneHelper.userData.originalBone = child;
+              
+              if (this.scene) {
+                this.scene.add(boneHelper);
+                boneHelpers.push(boneHelper);
+                console.log('Added bone helper for', child.name, 'at position:', boneHelper.position);
+              } else {
+                console.warn('No scene available to add bone helper');
+              }
+            }
+          } catch (error) {
+            console.warn('Error creating bone helper for', child.name, error);
+          }
+        });
+
+        console.log('Total bones found in model:', boneCount);
+        
+        // Create bone connections for non-VRM models
+        try {
+          this.createBoneConnectionsForModel(this.currentModel, boneConnections);
+        } catch (error) {
+          console.warn('Error creating bone connections for model:', error);
+        }
+      }
+
+      // Store bone helpers and connections for cleanup
+      this.boneHelpers = boneHelpers;
+      this.boneConnections = boneConnections;
+      console.log('Created bone visualization with', boneHelpers.length, 'bones and', boneConnections.length, 'connections');
+      
+      // If no bones were found, create a simple fallback visualization
+      if (boneHelpers.length === 0) {
+        console.log('No bones found, creating fallback visualization');
+        this.createFallbackBoneVisualization();
+      } else {
+        console.log('Bones found, skipping fallback visualization');
+      }
+    } catch (error) {
+      console.error('Error in createBoneVisualization:', error);
+      // Clear any partial bone visualization on error
+      this.clearBoneVisualization();
+    }
+  }
+
+  /**
+   * Create fallback bone visualization when no bones are found
+   */
+  createFallbackBoneVisualization() {
+    try {
+      console.log('Creating fallback bone visualization');
+      
+      // Create a simple wireframe box to represent the model's bounding box
+      if (this.currentModel && this.scene) {
+        const box = new THREE.Box3().setFromObject(this.currentModel);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        
+        const geometry = new THREE.BoxGeometry(size.x * 0.8, size.y * 0.8, size.z * 0.8);
+        const material = new THREE.MeshBasicMaterial({ 
+          color: 0x00ff00,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.3
+        });
+        const wireframeBox = new THREE.Mesh(geometry, material);
+        wireframeBox.position.copy(center);
+        wireframeBox.userData.isFallbackBone = true;
+        
+        this.scene.add(wireframeBox);
+        this.boneHelpers = [wireframeBox];
+        this.boneConnections = [];
+        
+        console.log('Created fallback wireframe box');
+      }
+    } catch (error) {
+      console.warn('Error creating fallback bone visualization:', error);
+    }
+  }
+
+  /**
+   * Create bone connections for VRM models
+   */
+  createBoneConnections(humanoid, boneConnections) {
+    try {
+      const bonePositions = new Map();
+      
+      // First, collect all bone positions
+      if (humanoid.humanoidBones && Array.isArray(humanoid.humanoidBones)) {
+        humanoid.humanoidBones.forEach((boneName) => {
+          try {
+            const bone = humanoid.getNormalizedBoneNode(boneName);
+            if (bone) {
+              const worldPosition = new THREE.Vector3();
+              bone.getWorldPosition(worldPosition);
+              bonePositions.set(boneName, worldPosition);
+            }
+          } catch (error) {
+            console.warn('Error getting bone position for', boneName, error);
+          }
+        });
+
+        // Create connections between parent and child bones
+        humanoid.humanoidBones.forEach((boneName) => {
+          try {
+            const bone = humanoid.getNormalizedBoneNode(boneName);
+            if (bone && bone.parent && bone.parent.isBone) {
+              const parentPosition = bonePositions.get(bone.parent.name);
+              if (parentPosition) {
+                const boneWorldPosition = new THREE.Vector3();
+                bone.getWorldPosition(boneWorldPosition);
+                const geometry = new THREE.BufferGeometry().setFromPoints([
+                  parentPosition,
+                  boneWorldPosition
+                ]);
+                const material = new THREE.LineBasicMaterial({ 
+                  color: 0xff6600, // Bright orange like in the image
+                  transparent: true,
+                  opacity: 1.0 // Fully opaque for better visibility
+                });
+                const connection = new THREE.Line(geometry, material);
+                connection.userData.isBoneConnection = true;
+                if (this.scene) {
+                  this.scene.add(connection);
+                  boneConnections.push(connection);
+                  console.log('Added bone connection from', bone.parent.name, 'to', boneName);
+                } else {
+                  console.warn('No scene available to add bone connection');
+                }
+              }
+            }
+          } catch (error) {
+            console.warn('Error creating bone connection for', boneName, error);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Error in createBoneConnections:', error);
+    }
+  }
+
+  /**
+   * Create bone connections for non-VRM models
+   */
+  createBoneConnectionsForModel(model, boneConnections) {
+    try {
+      const bonePositions = new Map();
+      
+      // First, collect all bone positions
+      model.traverse((child) => {
+        try {
+          if (child.isBone) {
+            const worldPosition = new THREE.Vector3();
+            child.getWorldPosition(worldPosition);
+            bonePositions.set(child.name, worldPosition);
+          }
+        } catch (error) {
+          console.warn('Error getting bone position for', child.name, error);
+        }
+      });
+
+      // Create connections between parent and child bones
+      model.traverse((child) => {
+        try {
+          if (child.isBone && child.parent && child.parent.isBone) {
+            const parentPosition = bonePositions.get(child.parent.name);
+            if (parentPosition) {
+              const childWorldPosition = new THREE.Vector3();
+              child.getWorldPosition(childWorldPosition);
+              const geometry = new THREE.BufferGeometry().setFromPoints([
+                parentPosition,
+                childWorldPosition
+              ]);
+              const material = new THREE.LineBasicMaterial({ 
+                color: 0xff6600, // Bright orange like in the image
+                transparent: true,
+                opacity: 1.0 // Fully opaque for better visibility
+              });
+              const connection = new THREE.Line(geometry, material);
+              connection.userData.isBoneConnection = true;
+              if (this.scene) {
+                this.scene.add(connection);
+                boneConnections.push(connection);
+                console.log('Added bone connection from', child.parent.name, 'to', child.name);
+              } else {
+                console.warn('No scene available to add bone connection');
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Error creating bone connection for', child.name, error);
+        }
+      });
+    } catch (error) {
+      console.warn('Error in createBoneConnectionsForModel:', error);
+    }
+  }
+
+  /**
+   * Highlight a specific bone with selection state
+   */
+  highlightBone(boneName) {
+    if (!this.boneHelpers) return;
+    
+    // Check if this bone is already selected
+    const currentlySelected = this.boneHelpers.find(helper => 
+      helper.userData.boneName === this.selectedBoneName
+    );
+    
+    // If clicking the same bone, toggle it off
+    if (this.selectedBoneName === boneName && currentlySelected) {
+      this.selectedBoneName = null;
+      // Reset all bone colors and scales to default
+      this.boneHelpers.forEach(helper => {
+        helper.material.color.setHex(0xff0000); // Red for unselected
+        helper.material.opacity = 1.0;
+        helper.scale.set(1, 1, 1);
+      });
+      console.log('Deselected bone:', boneName);
+      return;
+    }
+    
+    // Reset all bone colors and scales to default
+    this.boneHelpers.forEach(helper => {
+      helper.material.color.setHex(0xff0000); // Red for unselected
+      helper.material.opacity = 1.0;
+      helper.scale.set(1, 1, 1);
+    });
+    
+    // Highlight the selected bone
+    const selectedBone = this.boneHelpers.find(helper => 
+      helper.userData.boneName === boneName
+    );
+    
+    if (selectedBone) {
+      this.selectedBoneName = boneName;
+      selectedBone.material.color.setHex(0x00ff00); // Green for selected
+      selectedBone.material.opacity = 1.0;
+      selectedBone.scale.set(1.5, 1.5, 1.5); // Make selected bone larger
+      console.log('Selected bone:', boneName);
+    }
+  }
+
+  /**
+   * Clear bone visualization
+   */
+  clearBoneVisualization() {
+    try {
+      if (this.boneHelpers && this.scene) {
+        this.boneHelpers.forEach(helper => {
+          try {
+            this.scene.remove(helper);
+          } catch (error) {
+            console.warn('Error removing bone helper:', error);
+          }
+        });
+        this.boneHelpers = [];
+      }
+      
+      if (this.boneConnections && this.scene) {
+        this.boneConnections.forEach(connection => {
+          try {
+            this.scene.remove(connection);
+          } catch (error) {
+            console.warn('Error removing bone connection:', error);
+          }
+        });
+        this.boneConnections = [];
+      }
+    } catch (error) {
+      console.warn('Error in clearBoneVisualization:', error);
+    }
+  }
+
+  /**
+   * Set render mode
+   * @param {string} mode - Render mode (solid, wireframe, skeleton, partColorize, rendered)
+   */
+  setRenderMode(mode) {
+    this.renderMode = mode;
+    this.updateRenderMode(mode);
+    this.emit('renderModeChanged', { mode });
+  }
+
+  /**
+   * Store original materials when model is loaded
+   */
+  storeOriginalMaterials() {
+    if (!this.currentModel) return;
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && !child.userData.originalMaterial) {
+        // Store original material
+        child.userData.originalMaterial = child.material.clone();
+        child.userData.originalColor = child.material.color.clone();
+      }
+    });
+  }
+
+  /**
+   * Restore original materials
+   */
+  restoreOriginalMaterials() {
+    if (!this.currentModel) return;
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.userData.originalMaterial) {
+        // Restore original material properties
+        const original = child.userData.originalMaterial;
+        child.material.color.copy(child.userData.originalColor);
+        child.material.wireframe = original.wireframe;
+        child.material.transparent = original.transparent;
+        child.material.opacity = original.opacity;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+
+  /**
+   * Update model materials based on render mode
+   */
+  updateRenderMode(mode) {
+    if (!this.currentModel) return;
+
+    // Store original materials if not already stored
+    this.storeOriginalMaterials();
+
+    this.currentModel.traverse((child) => {
+      if (child.isMesh) {
+        switch (mode) {
+          case 'solid':
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            // Restore original color
+            if (child.userData.originalColor) {
+              child.material.color.copy(child.userData.originalColor);
+            }
+            // Clear bone visualization
+            this.clearBoneVisualization();
+            break;
+          case 'wireframe':
+            child.material.wireframe = true;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            // Keep original color for wireframe
+            if (child.userData.originalColor) {
+              child.material.color.copy(child.userData.originalColor);
+            }
+            // Clear bone visualization
+            this.clearBoneVisualization();
+            break;
+          case 'skeleton':
+            try {
+              console.log('Setting skeleton mode for mesh:', child.name);
+              child.material.wireframe = true;
+              child.material.transparent = true;
+              child.material.opacity = 0.1; // More transparent to see bones better
+              child.material.color.setHex(0x666666); // Gray wireframe
+            } catch (error) {
+              console.error('Error setting skeleton mode for mesh:', child.name, error);
+            }
+            break;
+          case 'partColorize':
+            const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
+            const colorIndex = Math.floor(Math.random() * colors.length);
+            child.material.color.setHex(colors[colorIndex]);
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            break;
+          case 'rendered':
+            // Restore original materials for rendered mode
+            this.restoreOriginalMaterials();
+            // Clear bone visualization
+            this.clearBoneVisualization();
+            break;
+        }
+      }
+    });
+
+    // Create bone visualization for skeleton mode (after mesh processing)
+    if (mode === 'skeleton') {
+      console.log('Creating bone visualization for skeleton mode');
+      console.log('Current model:', this.currentModel);
+      console.log('Current VRM:', this.currentVRM);
+      console.log('Scene:', this.scene);
+      this.createBoneVisualization();
+    }
+  }
+
+  /**
+   * Setup resize handler
+   */
+  setupResizeHandler() {
+    const handleResize = () => {
+      if (!this.renderer || !this.camera) return;
+      
+      const width = this.renderer.domElement.parentElement.clientWidth;
+      const height = this.renderer.domElement.parentElement.clientHeight;
+      
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height);
+    };
+
+    window.addEventListener('resize', handleResize);
+    this.eventListeners.set('resize', handleResize);
+  }
+
+  /**
+   * Get file extension from source
+   */
+  getFileExtension(source) {
+    let extension = '';
+    
+    if (source instanceof File) {
+      const fileName = source.name;
+      console.log('File name:', fileName);
+      console.log('File type:', source.type);
+      const parts = fileName.split('.');
+      console.log('File name parts:', parts);
+      if (parts.length > 1) {
+        extension = parts.pop().toLowerCase();
+      }
+      
+      // Fallback: try to detect from MIME type
+      if (!extension && source.type) {
+        const mimeToExtension = {
+          'model/gltf-binary': 'glb',
+          'model/gltf+json': 'gltf',
+          'model/obj': 'obj',
+          'model/fbx': 'fbx',
+          'application/octet-stream': 'vrm' // VRM files often have this MIME type
+        };
+        extension = mimeToExtension[source.type] || '';
+      }
+    } else if (typeof source === 'string') {
+      console.log('String source:', source);
+      const parts = source.split('.');
+      console.log('String parts:', parts);
+      if (parts.length > 1) {
+        extension = parts.pop().toLowerCase();
+      }
+    }
+    
+    console.log('File extension detected:', extension);
+    return extension;
+  }
+
+  /**
+   * Export current model
+   * @param {string} format - Export format (glb, gltf, obj)
+   * @param {Object} options - Export options
+   */
+  async exportModel(format = 'glb', options = {}) {
+    if (!this.currentModel) {
+      throw new Error('No model to export');
+    }
+
+    try {
+      this.emit('modelExportStart', { model: this.currentModel, format, options });
+
+      let result;
+      switch (format) {
+        case 'glb':
+          result = await this.exportToGLB(options);
+          break;
+        case 'gltf':
+          result = await this.exportToGLTF(options);
+          break;
+        case 'vrm':
+          result = await this.exportToVRM(options);
+          break;
+        default:
+          throw new Error(`Unsupported export format: ${format}`);
+      }
+
+      this.emit('modelExportComplete', { model: this.currentModel, format, result });
+      return result;
+    } catch (error) {
+      console.error('Model export failed:', error);
+      this.emit('modelExportError', { error, model: this.currentModel, format });
+      throw error;
+    }
+  }
+
+  /**
+   * Export to GLB format
+   * @param {Object} options - Export options
+   */
+  async exportToGLB(options = {}) {
+    const {
+      filename = 'open3dstudio_export.glb',
+      forCharacterStudio = true,
+      ...exportOptions
+    } = options;
+
+    if (forCharacterStudio) {
+      return await this.glbExporter.exportForCharacterStudio(this.currentModel, {
+        filename,
+        ...exportOptions
+      });
+    } else {
+      return await this.glbExporter.exportToGLB(this.currentModel, {
+        filename,
+        ...exportOptions
+      });
+    }
+  }
+
+  /**
+   * Export to GLTF format
+   * @param {Object} options - Export options
+   */
+  async exportToGLTF(options = {}) {
+    // Placeholder for GLTF export
+    // Would implement similar to GLB export but with different format
+    throw new Error('GLTF export not yet implemented');
+  }
+
+  /**
+   * Export to VRM format
+   * @param {Object} options - Export options
+   */
+  async exportToVRM(options = {}) {
+    const {
+      filename = 'open3dstudio_export.vrm',
+      vrmVersion = '0.0',
+      metadata = {},
+      ...exportOptions
+    } = options;
+
+    return await this.vrmExporter.exportToVRM(this.currentModel, {
+      filename,
+      vrmVersion,
+      metadata,
+      ...exportOptions
+    });
+  }
+
+  /**
+   * Clear current model
+   */
+  clearModel() {
+    if (this.currentModel) {
+      this.scene.remove(this.currentModel);
+      this.currentModel = null;
+      this.emit('modelCleared');
+    }
+  }
+
+  /**
+   * Start render loop
+   */
+  startRenderLoop() {
+    const animate = () => {
+      requestAnimationFrame(animate);
+      
+      if (this.controls) {
+        this.controls.update();
+      }
+      
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    };
+    
+    animate();
+  }
+
+  /**
+   * Event system
+   */
+  on(event, callback) {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    this.eventListeners.get(event).push(callback);
+  }
+
+  off(event, callback) {
+    if (this.eventListeners.has(event)) {
+      const listeners = this.eventListeners.get(event);
+      const index = listeners.indexOf(callback);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  emit(event, data) {
+    if (this.eventListeners.has(event)) {
+      this.eventListeners.get(event).forEach(callback => callback(data));
+    }
+  }
+
+  /**
+   * Cleanup
+   */
+  dispose() {
+    // Remove event listeners
+    this.eventListeners.forEach((listeners, event) => {
+      if (event === 'resize') {
+        window.removeEventListener('resize', listeners[0]);
+      }
+    });
+    this.eventListeners.clear();
+
+    // Dispose Three.js objects
+    if (this.renderer) {
+      this.renderer.dispose();
+    }
+    if (this.controls) {
+      this.controls.dispose();
+    }
+
+    this.isInitialized = false;
+  }
+}

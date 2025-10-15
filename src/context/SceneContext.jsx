@@ -1,170 +1,171 @@
-import React, { createContext, useEffect, useState } from "react"
+import React, { createContext, useContext, useRef, useEffect } from 'react';
+import { SceneManager } from '../library/sceneManager';
 
-import gsap from "gsap"
-import { sceneInitializer } from "../library/sceneInitializer"
-import { LoraDataGenerator } from "../library/loraDataGenerator"
-import { SpriteAtlasGenerator } from "../library/spriteAtlasGenerator"
-import { ThumbnailGenerator } from "../library/thumbnailsGenerator"
+const SceneContext = createContext();
 
-export const SceneContext = createContext({
-    /**
- * @typedef {import('../library/characterManager').CharacterManager} CharacterManager
- * @type {CharacterManager}
- */
-  characterManager: null,
-  /**
-   * @typedef {Object} MoveCameraParam
-   * @property {number} targetX
-   * @property {number} targetY
-   * @property {number} targetZ
-   * @property {number} distance
-   * @param {MoveCameraParam} _value
-   */
-  // eslint-disable-next-line no-unused-vars
-  moveCamera: (_value) => {},
-})
-
-export const SceneProvider = (props) => {
-  const [characterManager, setCharacterManager] = useState(null)
-  const [loraDataGenerator, setLoraDataGenerator] = useState(null)
-  const [spriteAtlasGenerator, setSpriteAtlasGenerator] = useState(null)
-  const [decalManager, setDecalManager] = useState(null)
-  const [thumbnailsGenerator, setThumbnailsGenerator] = useState(null)
-  const [sceneElements, setSceneElements] = useState(null)
-  const [animationManager, setAnimationManager] = useState(null)
-  const [lookAtManager, setLookAtManager] = useState(null)
-  const [scene, setScene] = useState(null)
-  const [camera, setCamera] = useState(null)
-  const [controls, setControls] = useState(null)
-
-  const [manifest, setManifest] = useState(null)
-  const [debugMode, setDebugMode] = useState(false);
-
-  let loaded = false
-  let [isLoaded, setIsLoaded] = useState(false)
-  useEffect(()=>{
-    // hacky prevention of double render
-    if (loaded || isLoaded) return
-    setIsLoaded(true)
-    loaded = true;
-
-    const {
-      scene,
-      camera,
-      controls,
-      characterManager,
-      sceneElements
-    } = sceneInitializer("editor-scene");
-    setCamera(camera);
-    setScene(scene);
-    setCharacterManager(characterManager);
-    setSceneElements(sceneElements);
-    setAnimationManager(characterManager.animationManager)
-    setLookAtManager(characterManager.lookAtManager)
-    setDecalManager(characterManager.overlayedTextureManager)
-    setControls(controls);
-    setLoraDataGenerator(new LoraDataGenerator(characterManager))
-    setSpriteAtlasGenerator(new SpriteAtlasGenerator(characterManager))
-    setThumbnailsGenerator(new ThumbnailGenerator(characterManager))
-  },[])
-
-
-  const toggleDebugMode = (isDebug) => {
-    if (isDebug == null)
-      isDebug = !debugMode;
-
-    setDebugMode(isDebug);
-    scene.traverse((child) => {
-      if (child.isMesh) {
-        if (child.setDebugMode){
-          child.setDebugMode(isDebug);
-        }
-      }
-    });
+export const useScene = () => {
+  const context = useContext(SceneContext);
+  if (!context) {
+    throw new Error('useScene must be used within a SceneProvider');
   }
+  return context;
+};
+
+export const SceneProvider = ({ children }) => {
+  const sceneManagerRef = useRef(null);
+  const containerRef = useRef(null);
+  const [isInitialized, setIsInitialized] = React.useState(false);
+  const [currentModel, setCurrentModel] = React.useState(null);
+  const [renderMode, setRenderMode] = React.useState('solid');
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  // Initialize scene manager
   useEffect(() => {
-    if (manifest != null){
-      if (manifest.defaultAnimations){
-        const locationArray = manifest.defaultAnimations.map(animation => animation.location);
-        animationManager.storeDefaultAnimationPaths(locationArray, "");
+    if (!sceneManagerRef.current) {
+      sceneManagerRef.current = new SceneManager();
+    }
+  }, []);
+
+  // Setup event listeners after scene is initialized
+  useEffect(() => {
+    if (sceneManagerRef.current && isInitialized) {
+      const handleModelLoaded = (data) => {
+        // Use requestAnimationFrame to defer state update to next frame
+        requestAnimationFrame(() => setCurrentModel(data.model));
+      };
+
+      const handleModelCleared = () => {
+        // Use requestAnimationFrame to defer state update to next frame
+        requestAnimationFrame(() => setCurrentModel(null));
+      };
+
+      const handleRenderModeChanged = (data) => {
+        // Use requestAnimationFrame to defer state update to next frame
+        requestAnimationFrame(() => setRenderMode(data.mode));
+      };
+
+      sceneManagerRef.current.on('modelLoaded', handleModelLoaded);
+      sceneManagerRef.current.on('modelCleared', handleModelCleared);
+      sceneManagerRef.current.on('renderModeChanged', handleRenderModeChanged);
+
+      // Cleanup function
+      return () => {
+        if (sceneManagerRef.current) {
+          sceneManagerRef.current.off('modelLoaded', handleModelLoaded);
+          sceneManagerRef.current.off('modelCleared', handleModelCleared);
+          sceneManagerRef.current.off('renderModeChanged', handleRenderModeChanged);
+        }
+      };
+    }
+  }, [isInitialized]);
+
+  // Initialize scene when container is ready
+  const initializeScene = async (container, options = {}) => {
+    if (!sceneManagerRef.current || !container) return;
+
+    try {
+      setIsLoading(true);
+      const sceneData = await sceneManagerRef.current.initialize(container, options);
+      setIsInitialized(true);
+      return sceneData;
+    } catch (error) {
+      console.error('Failed to initialize scene:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load model
+  const loadModel = async (source, options = {}) => {
+    if (!sceneManagerRef.current) return;
+    
+    try {
+      setIsLoading(true);
+      const model = await sceneManagerRef.current.loadModel(source, options);
+      return model;
+    } catch (error) {
+      console.error('Failed to load model:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Set render mode
+  const updateRenderMode = (mode) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setRenderMode(mode);
+    }
+  };
+
+  // Clear current model
+  const clearModel = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.clearModel();
+    }
+  };
+
+  // Export model
+  const exportModel = async (format = 'glb') => {
+    if (sceneManagerRef.current) {
+      return await sceneManagerRef.current.exportModel(format);
+    }
+  };
+
+  // Start render loop
+  const startRenderLoop = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.startRenderLoop();
+    }
+  };
+
+  // Get scene data
+  const getSceneData = () => {
+    if (sceneManagerRef.current) {
+      return {
+        scene: sceneManagerRef.current.scene,
+        camera: sceneManagerRef.current.camera,
+        renderer: sceneManagerRef.current.renderer,
+        controls: sceneManagerRef.current.controls
+      };
+    }
+    return null;
+  };
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (sceneManagerRef.current) {
+        sceneManagerRef.current.dispose();
       }
-    }
-  }, [manifest])
+    };
+  }, []);
 
-  const showEnvironmentModels = (display) => {
-
-    if (display){
-        scene.add(sceneElements);
-    }
-    else{
-        scene.remove(sceneElements);
-    }
-
-  }
-
-  const moveCamera = (value) => {
-    if (!controls) return
-    gsap.to(controls.target, {
-      x: value.targetX ?? 0,
-      y: value.targetY ?? 0,
-      z: value.targetZ ?? 0,
-      duration: 1,
-    })
-
-    gsap
-      .fromTo(
-        controls,
-        {
-          maxDistance: controls.getDistance(),
-          minDistance: controls.getDistance(),
-          minPolarAngle: controls.getPolarAngle(),
-          maxPolarAngle: controls.getPolarAngle(),
-          minAzimuthAngle: controls.getAzimuthalAngle(),
-          maxAzimuthAngle: controls.getAzimuthalAngle(),
-        },
-        {
-          maxDistance: value.distance,
-          minDistance: value.distance,
-          minPolarAngle: Math.PI / 2 - 0.11,
-          maxPolarAngle: Math.PI / 2 - 0.11,
-          minAzimuthAngle: -0.78,
-          maxAzimuthAngle: -0.78,
-          duration: 1,
-        },
-      )
-      .then(() => {
-        controls.minPolarAngle = 0
-        controls.maxPolarAngle = 3.1415
-        controls.minDistance = 0.5
-        controls.maxDistance = 10
-        controls.minAzimuthAngle = Infinity
-        controls.maxAzimuthAngle = Infinity
-      })
-  }
+  const value = {
+    // State
+    isInitialized,
+    currentModel,
+    renderMode,
+    isLoading,
+    
+    // Actions
+    initializeScene,
+    loadModel,
+    updateRenderMode,
+    clearModel,
+    exportModel,
+    startRenderLoop,
+    getSceneData,
+    
+    // Refs
+    containerRef,
+    sceneManager: sceneManagerRef.current
+  };
 
   return (
-    <SceneContext.Provider
-      value={{
-        manifest,
-        setManifest,
-        scene,
-        decalManager,
-        characterManager,
-        loraDataGenerator,
-        spriteAtlasGenerator,
-        thumbnailsGenerator,
-        showEnvironmentModels,
-        debugMode,
-        toggleDebugMode,
-        animationManager,
-        lookAtManager,
-        camera,
-        moveCamera,
-        controls,
-        sceneElements,
-      }}
-    >
-      {props.children}
+    <SceneContext.Provider value={value}>
+      {children}
     </SceneContext.Provider>
-  )
-}
+  );
+};

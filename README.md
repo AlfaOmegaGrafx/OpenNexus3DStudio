@@ -1,62 +1,179 @@
-# Character Studio
+# Open3DStudio
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![Discord](https://img.shields.io/discord/770382203782692945?label=Discord&logo=Discord)](https://discord.gg/8zBvTMb8SU)
-[![Twitter Follow](https://img.shields.io/twitter/follow/m3org)](https://twitter.com/m3org)
+[![Apache2.0 License](https://img.shields.io/badge/license-Apache2.0-green.svg)](LICENSE)
+[![Cross-Platform](https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Web-blue)](#)
 
+**Open3DStudio** is a 3D AIGC application. It works closely with the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
 
-An open, collaborative, and evolving 3D avatar studio for making glTF / VRM avatars with.
+The supported workflows include text-to-3d, image-to-3d, mesh segmentation, texture generation, auto-rigging, part completion etc.
 
-![image](https://github.com/M3-org/CharacterStudio/assets/32600939/fad3002f-78cd-4cd2-8eae-0c1663a86d25)
+## Demo 
+You can have a try on [Vercel Deployment](https://open3dstudio-n5hap1p9y-fishwowaters-projects.vercel.app) or download the shipped applications from [Releases](https://github.com/FishWoWater/Open3DStudio/releases).
 
-:star: **NEW: DOCS!!!** https://m3-org.github.io/characterstudio-docs/ ⭐
+Notice that you need to deploy the API backend on your own machine or server, or try my API endpoint: [http://i-2.gpushare.com:42180](http://i-2.gpushare.com:42180) (it's deployed on a single 3060Ti and ONLY enables the mesh segmentation feature).
 
-# Installation
+## 🚀 Core Principles
+- **All Local**: No data leaves your device. 
+- **Open Source**: Apache2.0 licensed.
+- **Cross-Platform**: Desktop (Windows/MacOS) & Web.
 
-> Note: You need loot-assets imported to public folder for this to work! https://github.com/m3-org/loot-assets
+## 🧩 Supported 3DAIGC Modules
+* Mesh Generation: text / image conditioned
+* Mesh Painting: text / image conditioned 
+* Mesh Segmentation
+* Part Completion
+* Auto Rigging
+
+The available models are up to the API backend, refer to [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) for the example model matrix
+
+## ✨ Applications Features
+- Multiple rendering modes (Solid/Rendered/WireFrame/Skeleton/PartColorize)
+- Task management with progress and history
+- Multi-format support: GLB, OBJ, FBX etc.
+- File uploading: uploading images / meshes for later processing
+- All locally deployed, it's scalable and easy to add a feature/model both at the frontend and backend
+
+## 🛠️ Quick Start
+
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+- For desktop apps: Electron will be installed automatically
+
+### Installation
 
 ```bash
-# Clone the repo and change directory into it
-git clone https://github.com/M3-org/CharacterStudio
-cd CharacterStudio
+# Clone the repository
+git clone https://github.com/FishWoWater/Open3DStudio.git
+cd Open3DStudio
 
-# Install dependencies with legacy peer deps flag to ignore React errors
+# Install dependencies
 npm install
-npm run dev
-
-# Install default assets
-npm run get-assets
 ```
 
----
+### Development
 
-## Load Your Assets
+```bash
+# Web development mode 
+npm run dev
+# Open [http://localhost:3000](http://localhost:3000)
 
-We separate the program from the asset packs. We have some sample assets here: https://github.com/memelotsqui/character-assets
-![Screenshot from 2023-10-17 17-10-38](https://github.com/M3-org/CharacterStudio/assets/32600939/23768dc3-b834-4f70-a986-a4a0141c4014)
+# Desktop development mode
+npm run electron-dev
+# Electron app launches automatically
+```
 
-Refer to docs to add your own 3d models
+### Building
 
-## Features
-- **Personalized Creation**: Point and click to build 3D characters
-    - Drag and drop local 3D files (VRM) and textures
-    - Color picker for adding a personal touch
-    - Export creatoins as glb and VRM + screenshots
-- **Dynamic animation**: Variety of programmable animations
-- **Effortless Optimization** One-click VRM optimizer
-    - Merge skinned meshes + Texture atlassing
-        - Can reduce avatars to a single draw call!
-- **Batch Export**: Randomize or adhere to metadata schemas
-- **Transparent Development**: Open-source MIT licensed codebase
-- **Robust Rendering**: Using Three.js, WebGL, and React
-    - Recently refactored to NOT need React as a dependency
-    - Logic is now all inside `CharacterManager` class
-- **Face auto culling**: Automatically cull undereneath faces with custom layer system
+```bash
+# Build the web app
+npm run build
 
----
+# Build desktop applications
+npm run dist-mac    # macOS
+npm run dist-win    # Windows
+npm run dist-linux  # Linux
+```
 
-## Special Thanks
+### API Backend Setup
 
-Shoutout to [original repo by Webaverse](https://github.com/webaverse/characterstudio)
+1. Clone and setup the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) backend
+2. Start the API server (usually on port 8000)
+3. Update the API endpoint in Open3DStudio if needed
 
-Thanks m00n, memelotsqui, boomboxhead, jin, and many others for contributing
+## 🏗️ Architecture
+
+### Frontend
+- **React 19** with modern hooks
+- **Three.js** for 3D rendering
+- **Zustand** for state management
+- **Vite** for fast development and building
+- **Electron** for desktop applications
+
+### Key Components
+- `Scene3D`: Main 3D viewport with Three.js integration
+- `TaskManager`: Handles AI generation tasks and progress tracking
+- `FileUpload`: Drag & drop file upload with format validation
+- `RenderModeSelector`: Switch between different rendering modes
+- `APIStatus`: Monitor API connection and configure endpoints
+
+### State Management
+- `taskStore`: Manages AI generation tasks, progress, and history
+- `sceneStore`: Handles 3D scene state, models, and rendering modes
+
+## 🎨 Features
+
+### 3D Rendering Modes
+- **Solid**: Standard solid rendering
+- **Rendered**: Realistic materials and lighting
+- **Wireframe**: Wireframe visualization
+- **Skeleton**: Transparent wireframe for structure analysis
+- **Part Colorize**: Different colors for different mesh parts
+
+### File Support
+- **3D Models**: GLB, GLTF, OBJ, FBX, DAE, STL
+- **Images**: JPG, PNG, BMP, TGA (for image-to-3D workflows)
+
+### AI Workflows
+- **Text-to-3D**: Generate 3D models from text descriptions
+- **Image-to-3D**: Convert 2D images to 3D models
+- **Mesh Painting**: Apply textures and materials to 3D models
+- **Mesh Segmentation**: Segment 3D models into parts
+- **Part Completion**: Complete missing parts of 3D models
+- **Auto Rigging**: Automatically rig 3D models for animation
+
+## 🔧 Configuration
+
+### API Endpoint
+The application connects to a 3DAIGC-API backend. You can configure the endpoint in the API Status panel or by setting the `VITE_API_ENDPOINT` environment variable.
+
+### Electron Configuration
+Desktop applications are configured in `package.json` under the `build` section. The main process is in `public/electron.js`.
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+## 📦 Deployment
+
+### Web Deployment
+```bash
+npm run build
+# Deploy the 'build' folder to your hosting service
+```
+
+### Desktop Distribution
+```bash
+# Build for current platform
+npm run dist-mac    # macOS
+npm run dist-win    # Windows  
+npm run dist-linux  # Linux
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+The code and application is licensed under [Apache2.0 License](LICENSE).
+
+## 🙏 Acknowledgments
+
+- [Three.js](https://threejs.org/) for 3D rendering
+- [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) for the backend API
+- [TripoStudio](https://studio.tripo3d.ai/) for inspiration
+- [Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio) for the foundation
