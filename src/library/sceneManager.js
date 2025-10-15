@@ -111,14 +111,18 @@ export class SceneManager {
    * Setup scene lighting
    */
   setupLighting() {
-    // Ambient light - brighter overall illumination
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+    // Enhanced Ambient light - much brighter overall illumination
+    const ambientLight = new THREE.AmbientLight(0x606060, 1.2);
     this.scene.add(ambientLight);
+
+    // Additional soft ambient light for extra brightness
+    const softAmbientLight = new THREE.AmbientLight(0x808080, 0.6);
+    this.scene.add(softAmbientLight);
 
     // 3-Point Lighting Setup
     
     // 1. Key Light (Main light) - Front and slightly to the right
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(5, 8, 3);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
@@ -132,19 +136,24 @@ export class SceneManager {
     this.scene.add(keyLight);
 
     // 2. Fill Light (Softer light) - Front and slightly to the left
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
     fillLight.position.set(-3, 5, 2);
     this.scene.add(fillLight);
 
     // 3. Rim Light (Back light) - Behind the model
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.0);
     rimLight.position.set(-2, 3, -5);
     this.scene.add(rimLight);
 
     // Additional accent light for better illumination
-    const accentLight = new THREE.PointLight(0xffffff, 0.5, 20);
+    const accentLight = new THREE.PointLight(0xffffff, 0.7, 20);
     accentLight.position.set(0, 10, 0);
     this.scene.add(accentLight);
+
+    // Soft hemisphere light for natural ambient lighting
+    const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1d, 0.8);
+    hemisphereLight.position.set(0, 10, 0);
+    this.scene.add(hemisphereLight);
   }
 
   /**
@@ -220,11 +229,24 @@ export class SceneManager {
       // Update materials based on render mode
       this.updateRenderMode(this.renderMode);
 
-              // Ensure model is properly positioned
-              this.ensureModelOnGround();
+      // Ensure model is properly positioned
+      this.ensureModelOnGround();
 
-              this.emit('modelLoaded', { model: this.currentModel });
-              return this.currentModel;
+      // Debug: Log model position and camera position
+      console.log('Model position:', this.currentModel.position);
+      const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
+      console.log('Model bounding box:', boundingBox);
+      console.log('Camera position:', this.camera.position);
+      console.log('Camera target:', this.controls.target);
+
+      // Auto-focus camera on the model
+      this.focusOnModel();
+
+      // Make model more visible with bright material
+      this.makeModelVisible();
+
+      this.emit('modelLoaded', { model: this.currentModel });
+      return this.currentModel;
     } catch (error) {
       console.error('Failed to load model:', error);
       this.emit('modelLoadError', { error });
@@ -267,9 +289,39 @@ export class SceneManager {
     return new Promise((resolve, reject) => {
       this.fbxLoader.load(
         source,
-        (fbx) => resolve(fbx),
+        (fbx) => {
+          console.log('FBX loaded successfully:', fbx);
+          console.log('FBX children count:', fbx.children.length);
+          console.log('FBX type:', fbx.type);
+          console.log('FBX name:', fbx.name);
+          
+          // Check if FBX has any geometry
+          let hasGeometry = false;
+          fbx.traverse((child) => {
+            if (child.geometry) {
+              hasGeometry = true;
+              console.log('Found geometry in child:', child.name, child.type);
+            }
+          });
+          
+          if (!hasGeometry) {
+            console.warn('FBX model has no geometry! Creating fallback geometry...');
+            
+            // Create a simple cube as fallback geometry
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.name = 'FallbackGeometry';
+            fbx.add(cube);
+          }
+          
+          resolve(fbx);
+        },
         (progress) => this.emit('modelLoadingProgress', { progress }),
-        (error) => reject(error)
+        (error) => {
+          console.error('FBX loading error:', error);
+          reject(error);
+        }
       );
     });
   }
@@ -556,11 +608,16 @@ export class SceneManager {
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
-      const targetScale = autoScale ? (2 / maxDim) * scale : scale;
       
-      console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
-      
-      model.scale.setScalar(targetScale);
+      // Check if model has valid dimensions
+      if (maxDim === 0 || !isFinite(maxDim)) {
+        console.warn('Model has invalid or zero dimensions, using default scale');
+        model.scale.setScalar(scale);
+      } else {
+        const targetScale = autoScale ? (2 / maxDim) * scale : scale;
+        console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
+        model.scale.setScalar(targetScale);
+      }
       
       // Rotate model 180 degrees around Y-axis to face the viewport
       model.rotation.y += Math.PI;
@@ -569,13 +626,19 @@ export class SceneManager {
                 // Recalculate bounding box after rotation and scaling
                 const rotatedBox = new THREE.Box3().setFromObject(model);
                 
-                // Position model so feet are at the ground plane (y = 0)
-                const modelBottom = rotatedBox.min.y;
-                
-                // Move the model down so its bottom is at y = 0
-                model.position.y = -modelBottom;
-                model.position.x = 0;
-                model.position.z = 0;
+                // Check if rotated box is valid
+                if (rotatedBox.isEmpty() || !isFinite(rotatedBox.min.y) || !isFinite(rotatedBox.max.y)) {
+                  console.warn('Model has invalid bounding box after processing, using default positioning');
+                  model.position.set(0, 0, 0);
+                } else {
+                  // Position model so feet are at the ground plane (y = 0)
+                  const modelBottom = rotatedBox.min.y;
+                  
+                  // Move the model down so its bottom is at y = 0
+                  model.position.y = -modelBottom;
+                  model.position.x = 0;
+                  model.position.z = 0;
+                }
                 
                 // Update controls target to look at the model center
                 if (this.controls) {
@@ -585,7 +648,7 @@ export class SceneManager {
                 console.log('Model positioning:', {
                   originalBox: { min: box.min, max: box.max },
                   rotatedBox: { min: rotatedBox.min, max: rotatedBox.max },
-                  modelBottom,
+                  modelBottom: rotatedBox.min.y,
                   finalPosition: model.position,
                   scale: model.scale,
                   controlsTarget: this.controls ? this.controls.target : 'no controls'
@@ -607,6 +670,13 @@ export class SceneManager {
     
     // Get the current bounding box
     const box = new THREE.Box3().setFromObject(this.currentModel);
+    
+    // Check if bounding box is valid
+    if (box.isEmpty() || !isFinite(box.min.y) || !isFinite(box.max.y)) {
+      console.warn('Model has invalid bounding box, skipping ground positioning');
+      return;
+    }
+    
     const modelBottom = box.min.y;
     
     // If the model is floating above ground, move it down
@@ -635,6 +705,10 @@ export class SceneManager {
 
       const boneHelpers = [];
       const boneConnections = [];
+      
+      // Initialize skeleton selection state
+      this.selectedBone = null;
+      this.boneHelpers = [];
 
       // Create bone visualization for VRM models
       if (this.currentVRM && this.currentVRM.humanoid) {
@@ -800,6 +874,9 @@ export class SceneManager {
       this.boneHelpers = boneHelpers;
       this.boneConnections = boneConnections;
       console.log('Created bone visualization with', boneHelpers.length, 'bones and', boneConnections.length, 'connections');
+      
+      // Setup mouse interaction for skeleton selection
+      this.setupSkeletonMouseInteraction();
       
       // If no bones were found, create a simple fallback visualization
       if (boneHelpers.length === 0) {
@@ -1039,9 +1116,255 @@ export class SceneManager {
         });
         this.boneConnections = [];
       }
+      
+      // Clear selection state
+      this.selectedBone = null;
     } catch (error) {
       console.warn('Error in clearBoneVisualization:', error);
     }
+  }
+
+  /**
+   * Setup mouse interaction for skeleton selection
+   */
+  setupSkeletonMouseInteraction() {
+    if (!this.container || !this.raycaster) return;
+    
+    // Remove existing click listener if any
+    if (this.skeletonClickHandler) {
+      this.container.removeEventListener('click', this.skeletonClickHandler);
+    }
+    
+    // Create new click handler
+    this.skeletonClickHandler = (event) => {
+      this.handleSkeletonClick(event);
+    };
+    
+    // Add click listener
+    this.container.addEventListener('click', this.skeletonClickHandler);
+    
+    console.log('Skeleton mouse interaction setup complete');
+  }
+
+  /**
+   * Handle mouse click for skeleton selection
+   */
+  handleSkeletonClick(event) {
+    if (!this.boneHelpers || this.boneHelpers.length === 0) {
+      console.log('No bone helpers available for selection');
+      return;
+    }
+    
+    // Only handle clicks in skeleton mode
+    if (this.renderMode !== 'skeleton') {
+      console.log('Not in skeleton mode, ignoring click');
+      return;
+    }
+    
+    const rect = this.container.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update raycaster
+    this.raycaster.setFromCamera(mouse, this.camera);
+    
+    // Intersect with bone helpers
+    const intersects = this.raycaster.intersectObjects(this.boneHelpers);
+    
+    console.log('Skeleton click - intersects:', intersects.length);
+    
+    if (intersects.length > 0) {
+      const selectedHelper = intersects[0].object;
+      const boneName = selectedHelper.userData.boneName;
+      
+      console.log('Selected bone:', boneName);
+      
+      // Toggle selection
+      if (this.selectedBone === boneName) {
+        this.deselectBone();
+      } else {
+        this.selectBone(boneName);
+      }
+    }
+  }
+
+  /**
+   * Select a bone by name
+   */
+  selectBone(boneName) {
+    console.log('Attempting to select bone:', boneName);
+    
+    // Deselect previous bone
+    if (this.selectedBone) {
+      this.deselectBone();
+    }
+    
+    // Find and highlight the selected bone
+    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+    if (helper) {
+      // Change color to green for selected bone
+      helper.material.color.setHex(0x00ff00);
+      this.selectedBone = boneName;
+      
+      console.log('Bone selected successfully:', boneName);
+      
+      // Emit selection event
+      this.emit('boneSelected', { boneName, helper });
+    } else {
+      console.warn('Bone helper not found for:', boneName);
+    }
+  }
+
+  /**
+   * Deselect current bone
+   */
+  deselectBone() {
+    if (this.selectedBone) {
+      const helper = this.boneHelpers.find(h => h.userData.boneName === this.selectedBone);
+      if (helper) {
+        // Restore original color
+        helper.material.color.setHex(0xff0000); // Red for unselected
+        console.log('Bone deselected:', this.selectedBone);
+        
+        // Emit deselection event
+        this.emit('boneDeselected', { boneName: this.selectedBone, helper });
+      } else {
+        console.warn('Bone helper not found for deselection:', this.selectedBone);
+      }
+      
+      this.selectedBone = null;
+    }
+  }
+
+  /**
+   * Highlight bone by name (called from bone hierarchy panel)
+   */
+  highlightBone(boneName) {
+    console.log('Highlighting bone:', boneName);
+    
+    if (!boneName) {
+      this.deselectBone();
+      return;
+    }
+    
+    // Ensure we're in skeleton mode
+    if (this.renderMode !== 'skeleton') {
+      console.log('Switching to skeleton mode for bone highlighting');
+      this.setRenderMode('skeleton');
+    }
+    
+    // Find the bone helper
+    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+    if (helper) {
+      console.log('Found bone helper, zooming and selecting');
+      // Zoom to the bone
+      this.zoomToBone(helper);
+      
+      // Select the bone
+      this.selectBone(boneName);
+    } else {
+      console.warn('Bone helper not found for highlighting:', boneName);
+    }
+  }
+
+  /**
+   * Zoom camera to a specific bone
+   */
+  zoomToBone(boneHelper) {
+    if (!this.camera || !this.controls || !boneHelper) return;
+    
+    const bonePosition = boneHelper.position.clone();
+    
+    // Calculate distance for good viewing angle
+    const distance = 0.5; // Adjust this value for closer/farther zoom
+    
+    // Set camera position relative to bone
+    const cameraOffset = new THREE.Vector3(0, 0.2, distance);
+    const newCameraPosition = bonePosition.clone().add(cameraOffset);
+    
+    // Animate camera to new position
+    if (this.controls.target) {
+      this.controls.target.copy(bonePosition);
+    }
+    
+    // Update camera position
+    this.camera.position.copy(newCameraPosition);
+    
+    // Update controls
+    this.controls.update();
+    
+    console.log('Zoomed to bone:', boneHelper.userData.boneName);
+  }
+
+  /**
+   * Focus camera on the current model
+   */
+  focusOnModel() {
+    if (!this.currentModel || !this.camera || !this.controls) return;
+
+    console.log('Focusing camera on model...');
+    
+    // Get model bounding box
+    const box = new THREE.Box3().setFromObject(this.currentModel);
+    
+    // Check if bounding box is valid
+    if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) {
+      console.warn('Model has invalid bounding box, using default camera position');
+      // Use default camera position
+      this.camera.position.set(0, 1.5, 3);
+      this.controls.target.set(0, 1, 0);
+      this.controls.update();
+      return;
+    }
+    
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    console.log('Model center:', center);
+    console.log('Model size:', size);
+    console.log('Max dimension:', maxDim);
+
+    // Use default distance if model has no size
+    const distance = maxDim > 0 ? maxDim * 2 : 3;
+    const cameraPosition = center.clone();
+    cameraPosition.y += distance * 0.5; // Above the model
+    cameraPosition.z += distance; // Behind the model
+
+    // Set camera position and target
+    this.camera.position.copy(cameraPosition);
+    this.controls.target.copy(center);
+    this.controls.update();
+
+    console.log('Camera focused on model at:', cameraPosition);
+    console.log('Camera looking at:', center);
+  }
+
+  /**
+   * Make model more visible with bright material
+   */
+  makeModelVisible() {
+    if (!this.currentModel) return;
+
+    console.log('Making model visible...');
+    
+    // Traverse all meshes and apply bright material
+    this.currentModel.traverse((child) => {
+      if (child.isMesh) {
+        // Create a bright, visible material
+        const material = new THREE.MeshLambertMaterial({
+          color: 0x00ff00, // Bright green
+          transparent: false,
+          opacity: 1.0
+        });
+        
+        child.material = material;
+        console.log('Applied bright material to mesh:', child.name || 'unnamed');
+      }
+    });
+
+    console.log('Model visibility enhanced');
   }
 
   /**

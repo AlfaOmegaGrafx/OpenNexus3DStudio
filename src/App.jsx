@@ -57,6 +57,32 @@ function AppContent() {
     setIsElectron(!!window.electronAPI);
   }, []);
 
+  // Handle task completion and auto-load generated models
+  useEffect(() => {
+    const handleTaskCompleted = (event) => {
+      const { taskId, result } = event.detail;
+      console.log('App: Task completed, loading model:', result);
+      
+      if (result && result.modelUrl) {
+        // Load the generated model into the viewport
+        const modelUrl = result.modelUrl.startsWith('/') ? 
+          `http://localhost:8000${result.modelUrl}` : 
+          result.modelUrl;
+        
+        console.log('App: Loading model from URL:', modelUrl);
+        loadModel(modelUrl).catch(error => {
+          console.error('App: Failed to load generated model:', error);
+        });
+      }
+    };
+
+    window.addEventListener('taskCompleted', handleTaskCompleted);
+    
+    return () => {
+      window.removeEventListener('taskCompleted', handleTaskCompleted);
+    };
+  }, [loadModel]);
+
   // Handle render mode changes with state tracking
   const handleRenderModeChange = useCallback((mode) => {
     console.log('Render mode change requested:', mode);
@@ -117,12 +143,14 @@ function AppContent() {
 
   // Handle AI generation tasks
   const handleAITask = useCallback(async (taskType, prompt, imageFile = null) => {
+    console.log('App: handleAITask called with:', { taskType, prompt, imageFile });
     try {
-      await createAndStartTask({
+      const result = await createAndStartTask({
         type: taskType,
         prompt,
         imageFile
       });
+      console.log('App: createAndStartTask result:', result);
     } catch (error) {
       console.error(`Error in ${taskType}:`, error);
     }
@@ -292,6 +320,7 @@ function AppContent() {
           <div style={{ background: '#333', padding: '10px', margin: '10px 0', borderRadius: '4px', fontSize: '12px' }}>
             <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
             <div>Tasks: {tasks.length}</div>
+            <div>Tasks: {JSON.stringify(tasks.map(t => ({ id: t.id, status: t.status, name: t.name })))}</div>
             <div>API Endpoint: {apiEndpoint}</div>
             <button 
               onClick={forceConnectionCheck}

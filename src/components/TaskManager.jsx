@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { useTask } from '../context/TaskContext';
 
 const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
+  console.log('TaskManager: Component rendered with props:', { 
+    tasksLength: tasks?.length, 
+    onAITask: !!onAITask, 
+    isApiConnected 
+  });
+  
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskType, setNewTaskType] = useState('text-to-3d');
   const [newTaskPrompt, setNewTaskPrompt] = useState('');
@@ -11,8 +17,17 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const handleSubmitTask = (e) => {
     e.preventDefault();
-    if (!newTaskPrompt.trim()) return;
+    console.log('TaskManager: handleSubmitTask called');
+    console.log('TaskManager: newTaskPrompt:', newTaskPrompt);
+    console.log('TaskManager: newTaskType:', newTaskType);
+    console.log('TaskManager: newTaskImage:', newTaskImage);
+    
+    if (!newTaskPrompt.trim()) {
+      console.log('TaskManager: No prompt provided, returning');
+      return;
+    }
 
+    console.log('TaskManager: Calling onAITask');
     onAITask(newTaskType, newTaskPrompt, newTaskImage);
     setNewTaskPrompt('');
     setNewTaskImage(null);
@@ -46,7 +61,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           <div className="flex gap-2">
             <button 
               className="btn btn-primary"
-              onClick={() => setShowNewTask(!showNewTask)}
+              onClick={() => {
+                console.log('TaskManager: New Task button clicked');
+                console.log('TaskManager: isApiConnected:', isApiConnected);
+                setShowNewTask(!showNewTask);
+              }}
               disabled={!isApiConnected}
             >
               New Task
@@ -109,7 +128,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
             )}
 
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary">
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                onClick={() => console.log('TaskManager: Submit button clicked')}
+              >
                 Start Task
               </button>
               <button 

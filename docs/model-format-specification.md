@@ -260,3 +260,4 @@ model.glb
 
 This specification ensures seamless model transfer between Open3DStudio and CharacterStudio while maintaining compatibility and performance.
 
+
