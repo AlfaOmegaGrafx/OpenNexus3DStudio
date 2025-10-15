@@ -1,225 +1,334 @@
-import React, { Fragment, useContext, useEffect, useState } from "react"
-import * as THREE from "three"
+import React, { useState, useEffect, useCallback } from 'react';
+import { SceneProvider, useScene } from './context/SceneContext';
+import { TaskProvider, useTask } from './context/TaskContext';
+import Scene3D from './components/Scene3D';
+import TaskManager from './components/TaskManager';
+import CombinedImport from './components/CombinedImport';
+import RenderModeSelector from './components/RenderModeSelector';
+import APIStatus from './components/APIStatus';
+import GLBExport from './components/GLBExport';
+import VRMExport from './components/VRMExport';
+import BlendShapeController from './components/BlendShapeController';
+import TaskProgressBar from './components/TaskProgressBar';
+import './App.css';
 
-import { LanguageContext } from "./context/LanguageContext"
-import { SceneContext } from "./context/SceneContext"
-import { ViewContext, ViewMode } from "./context/ViewContext"
-import { EffectManager } from "./library/effectManager"
-//import { AnimationManager } from "./library/animationManager"
-import MessageWindow from "./components/MessageWindow"
-
-import Background from "./components/Background"
-
-import Appearance from "./pages/Appearance"
-import BatchDownload from "./pages/BatchDownload"
-import BatchManifest from "./pages/BatchManifest"
-import Claim from "./pages/Claim"
-import Create from "./pages/Create"
-import Landing from "./pages/Landing"
-import Load from "./pages/Load"
-import Mint from "./pages/Mint"
-import Optimizer from "./pages/Optimizer"
-import Save from "./pages/Save"
-import Wallet from "./pages/Wallet"
-
-// dynamically import the manifest
-const assetImportPath = import.meta.env.VITE_ASSET_PATH + "/manifest.json"
-//const assetImportPath = "./manifest.json"
-
-const cameraDistanceOther = 6
-const centerCameraTargetOther = new THREE.Vector3(0, 0.8, 0)
-const centerCameraPositionOther = new THREE.Vector3(
-  -2.2367993753934425,
-  1.1512971720174363,
-  2.2612065299409223,
-) // note: get from `moveCamera({ targetY: 0.8, distance: 3.2 })`
-async function fetchManifest(location) {
-  try {
-    const response = await fetch(location);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch manifest. Status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error fetching manifest: ${error.message}`);
-    return [];
-  }
-}
-
-
-async function fetchAll() {
-  const initialManifest = await fetchManifest(assetImportPath)
-  const effectManager = new EffectManager()
-
-  return {
-    initialManifest,
-    effectManager,
-  }
-}
-
-const fetchData = () => {
-  let status, result
-
-  const manifestPromise = fetchAll()
-  // const modelPromise = fetchModel()
-  const suspender = manifestPromise.then(
-    (r) => {
-      status = "success"
-      result = r
-    },
-    (e) => {
-      status = "error"
-      result = e
-    },
-  )
-
-  return {
-    read() {
-      if (status === "error") {
-        throw result
-      } else if (status === "success") {
-        return result
-      }
-      throw suspender
-    },
-  }
-}
-
-const resource = fetchData()
-
-export default function App() {
+function AppContent() {
+  const [isElectron, setIsElectron] = useState(false);
+  const [apiEndpoint, setApiEndpoint] = useState('http://localhost:8000');
+  const [skeletonActive, setSkeletonActive] = useState(false);
+  
+  // Track render mode states
+  const [renderModeStates, setRenderModeStates] = useState({
+    solid: true, // Start with solid mode active
+    rendered: false,
+    wireframe: false,
+    skeleton: false,
+    partColorize: false
+  });
+  
+  const { 
+    isInitialized,
+    currentModel,
+    renderMode,
+    isLoading: sceneLoading,
+    loadModel,
+    updateRenderMode,
+    clearModel,
+    exportModel,
+    startRenderLoop,
+    getSceneData,
+    sceneManager
+  } = useScene();
+  
   const {
-    initialManifest,
-    effectManager,
-  } = resource.read()
-  const [hideUi, setHideUi] = useState(false)
-  const {
-    camera,
-    controls,
-    scene,
-    moveCamera,
-    setManifest,
-    lookAtManager,
-    showEnvironmentModels
-  } = useContext(SceneContext)
-  const { viewMode } = useContext(ViewContext)
+    isConnected,
+    tasks,
+    isLoading: taskLoading,
+    checkConnection,
+    forceConnectionCheck,
+    setApiEndpoint: setTaskApiEndpoint,
+    createAndStartTask,
+    removeTask,
+    clearCompletedTasks
+  } = useTask();
 
-  effectManager.camera = camera
-  effectManager.scene = scene
+  // Check if running in Electron
+  useEffect(() => {
+    setIsElectron(!!window.electronAPI);
+  }, []);
 
-  const updateCameraPosition = () => {
-    if (!effectManager.camera) return
-
-      moveCamera({
-        // center
-        targetX: 0,
-        targetY: centerCameraTargetOther.y,
-        targetZ: 0,
-        distance: cameraDistanceOther,
-      })
-
-    if (controls) {
-      if (
-        [ViewMode.APPEARANCE, ViewMode.SAVE, ViewMode.OPTIMIZER, ViewMode.BATCHDOWNLOAD, ViewMode.BATCHMANIFEST].includes(viewMode)
-      ) {
-        controls.enabled = true
+  // Handle render mode changes with state tracking
+  const handleRenderModeChange = useCallback((mode) => {
+    console.log('Render mode change requested:', mode);
+    
+    // Update render mode states - toggle the selected mode
+    setRenderModeStates(prev => {
+      const newStates = { ...prev };
+      
+      // If clicking the same mode, toggle it off
+      if (prev[mode]) {
+        newStates[mode] = false;
+        // If toggling off, switch to solid mode
+        updateRenderMode('solid');
+        newStates.solid = true;
       } else {
-        controls.enabled = false
+        // Turn off all other modes and turn on the selected one
+        Object.keys(newStates).forEach(key => {
+          newStates[key] = key === mode;
+        });
+        updateRenderMode(mode);
+      }
+      
+      return newStates;
+    });
+  }, [updateRenderMode]);
+
+  // Sync API endpoint with TaskContext
+  useEffect(() => {
+    setTaskApiEndpoint(apiEndpoint);
+  }, [apiEndpoint, setTaskApiEndpoint]);
+
+  // Check API connection
+  useEffect(() => {
+    const checkApiConnection = async () => {
+      await checkConnection();
+    };
+
+    checkApiConnection();
+    const interval = setInterval(checkApiConnection, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [checkConnection]);
+
+  // Handle file loading
+  const handleFileLoad = useCallback(async (file) => {
+    try {
+      await loadModel(file);
+    } catch (error) {
+      console.error('Error loading file:', error);
+      
+      // Show user-friendly error message
+      if (error.message.includes('Unsupported file format')) {
+        alert(`❌ ${error.message}\n\nPlease try uploading a supported 3D model file (.glb, .gltf, .obj, .fbx, or .vrm)`);
+      } else {
+        alert(`❌ Failed to load file: ${error.message}`);
       }
     }
-  }
+  }, [loadModel]);
 
-  const [confirmDialogWindow, setConfirmDialogWindow] = useState(false)
-  const [confirmDialogText, setConfirmDialogText] = useState("")
-  const [confirmDialogCallback, setConfirmDialogCallback] = useState([])
-
-  const confirmDialog = (msg, callback) => {
-    setConfirmDialogText(msg)
-    setConfirmDialogWindow(true)
-    setConfirmDialogCallback([callback])
-  }
-
-  // map current app mode to a page
-  const pages = {
-    [ViewMode.LANDING]: <Landing />,
-    [ViewMode.APPEARANCE]: (
-      <Appearance
-        confirmDialog={confirmDialog}
-      />
-    ),
-    [ViewMode.OPTIMIZER]:<Optimizer/>,
-    [ViewMode.CREATE]: <Create />,
-    [ViewMode.WALLET]: <Wallet />,
-    [ViewMode.CLAIM]: <Claim />,
-    [ViewMode.BATCHMANIFEST]: <BatchManifest />,
-    [ViewMode.BATCHDOWNLOAD]: <BatchDownload />,
-    [ViewMode.LOAD]: <Load />,
-    [ViewMode.MINT]: <Mint />,
-    [ViewMode.SAVE]: <Save />,
-  }
-
-  let lastTap = 0
-  useEffect(() => {
-    const handleTap = (e) => {
-      const now = new Date().getTime()
-      const timesince = now - lastTap
-      if (timesince < 300 && timesince > 10) {
-        const tgt = e.target
-        if (tgt.id == "editor-scene") setHideUi(!hideUi)
-      }
-      lastTap = now
+  // Handle AI generation tasks
+  const handleAITask = useCallback(async (taskType, prompt, imageFile = null) => {
+    try {
+      await createAndStartTask({
+        type: taskType,
+        prompt,
+        imageFile
+      });
+    } catch (error) {
+      console.error(`Error in ${taskType}:`, error);
     }
-    window.addEventListener("touchend", handleTap)
-    window.addEventListener("click", handleTap)
-    return () => {
-      window.removeEventListener("touchend", handleTap)
-      window.removeEventListener("click", handleTap)
-    }
-  }, [hideUi])
+  }, [createAndStartTask]);
 
+  // Handle menu events from Electron
   useEffect(() => {
-    if (lookAtManager != null){
-      updateCameraPosition()
-      lookAtManager.enabled = true
-      if ([ViewMode.LANDING, ViewMode.CREATE, ViewMode.CLAIM, ViewMode.LOAD, ViewMode.CLAIM, ViewMode.CLAIM].includes(viewMode))
-        showEnvironmentModels(false)
-      else
-        showEnvironmentModels(true)
-      window.addEventListener("resize", updateCameraPosition)
+    if (isElectron && window.electronAPI) {
+      const handleNewProject = () => {
+        clearModel();
+      };
+
+      const handleOpen = async () => {
+        const result = await window.electronAPI.openFileDialog();
+        if (!result.canceled && result.filePaths.length > 0) {
+          // Handle file opening logic here
+          console.log('Opening file:', result.filePaths[0]);
+        }
+      };
+
+      const handleSave = () => {
+        // Handle save logic here
+        console.log('Saving project');
+      };
+
+      window.electronAPI.onMenuNewProject(handleNewProject);
+      window.electronAPI.onMenuOpen(handleOpen);
+      window.electronAPI.onMenuSave(handleSave);
+
       return () => {
-        window.removeEventListener("resize", updateCameraPosition)
-      }
+        window.electronAPI.removeAllListeners('menu-new-project');
+        window.electronAPI.removeAllListeners('menu-open');
+        window.electronAPI.removeAllListeners('menu-save');
+      };
     }
-    
+  }, [isElectron, clearModel]);
 
-  }, [viewMode, lookAtManager])
-
-  useEffect(() => {
-    setManifest(initialManifest)
-  }, [initialManifest])
-
-  // Translate hook
-  const {t} = useContext(LanguageContext);
+  // Check if there are any running tasks
+  const hasRunningTasks = tasks.some(task => task.status === 'running');
 
   return (
-    <Fragment>
-      
-      <div className="generalTitle">Character Studio</div>
+    <div className="app">
+      <TaskProgressBar tasks={tasks} />
+      <header className="app-header">
+                <h1>Open3DStudio</h1>
+        <div className="header-controls">
+          <APIStatus 
+            endpoint={apiEndpoint} 
+            isConnected={isConnected}
+            onEndpointChange={setApiEndpoint}
+          />
+          <RenderModeSelector 
+            currentMode={renderMode}
+            onModeChange={handleRenderModeChange}
+            renderModeStates={renderModeStates}
+            skeletonActive={skeletonActive}
+            onSkeletonClick={() => {
+              console.log('Skeleton button clicked, current skeletonActive:', skeletonActive);
+              const newSkeletonActive = !skeletonActive;
+              setSkeletonActive(newSkeletonActive);
+              
+              if (newSkeletonActive) {
+                // SKELETON ON: Activate skeleton mode
+                console.log('Activating skeleton mode');
+                
+                // 1. Set render mode to skeleton (direct call, not through handleRenderModeChange)
+                updateRenderMode('skeleton');
+                
+                // 2. Update render mode states
+                setRenderModeStates(prev => {
+                  const newStates = { ...prev };
+                  Object.keys(newStates).forEach(key => {
+                    newStates[key] = key === 'skeleton';
+                  });
+                  return newStates;
+                });
+                
+                // 3. Control panels via blendShapeControls
+                if (window.blendShapeControls) {
+                  console.log('Skeleton ON - hiding blend shapes, showing bone structure');
+                  window.blendShapeControls.setBlendShapesVisible(false); // Collapse blend shapes
+                  window.blendShapeControls.setBonePanelVisible(true);   // Expand bone structure
+                  
+                  // 4. Auto-scroll to bone structure panel
+                  setTimeout(() => {
+                    const bonePanel = document.querySelector('.bone-structure-panel');
+                    if (bonePanel) {
+                      bonePanel.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start',
+                        inline: 'nearest'
+                      });
+                      console.log('Scrolled to bone structure panel');
+                    } else {
+                      console.log('Bone structure panel not found for scrolling');
+                    }
+                  }, 100); // Small delay to ensure panel is rendered
+                } else {
+                  console.log('window.blendShapeControls not available');
+                }
+              } else {
+                // SKELETON OFF: Return to normal mode
+                console.log('Deactivating skeleton mode');
+                
+                // 1. Set render mode back to solid (direct call, not through handleRenderModeChange)
+                updateRenderMode('solid');
+                
+                // 2. Update render mode states
+                setRenderModeStates(prev => {
+                  const newStates = { ...prev };
+                  Object.keys(newStates).forEach(key => {
+                    newStates[key] = key === 'solid';
+                  });
+                  return newStates;
+                });
+                
+                // 3. Control panels via blendShapeControls
+                if (window.blendShapeControls) {
+                  console.log('Skeleton OFF - showing blend shapes, hiding bone structure');
+                  window.blendShapeControls.setBlendShapesVisible(true);  // Expand blend shapes
+                  window.blendShapeControls.setBonePanelVisible(false);  // Collapse bone structure
+                  
+                  // 4. Auto-scroll to blend shapes panel
+                  setTimeout(() => {
+                    const blendShapesPanel = document.querySelector('.blend-shape-controller');
+                    if (blendShapesPanel) {
+                      blendShapesPanel.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start',
+                        inline: 'nearest'
+                      });
+                      console.log('Scrolled to blend shapes panel');
+                    } else {
+                      console.log('Blend shapes panel not found for scrolling');
+                    }
+                  }, 100); // Small delay to ensure panel is rendered
+                } else {
+                  console.log('window.blendShapeControls not available');
+                }
+              }
+            }}
+          />
+        </div>
+      </header>
 
-      {/* <LanguageSwitch /> */}
-      <MessageWindow
-        confirmDialogText = {confirmDialogText}
-        confirmDialogCallback = {confirmDialogCallback}
-        confirmDialogWindow = {confirmDialogWindow}
-        setConfirmDialogWindow = {setConfirmDialogWindow}
-      />
-      <Background />
-      
-      {pages[viewMode]}
-      
-    </Fragment>
-  )
+      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''}`}>
+        <div className="sidebar">
+          <CombinedImport onFileLoad={handleFileLoad} />
+          <BlendShapeController 
+            sceneManager={sceneManager}
+            currentModel={currentModel}
+            isVisible={true}
+            onToggle={(controls) => {
+              // Store the controls for use by skeleton button
+              window.blendShapeControls = controls;
+            }}
+            isActive={skeletonActive}
+          />
+          <GLBExport />
+          <VRMExport />
+          <TaskManager 
+            tasks={tasks}
+            onAITask={handleAITask}
+            isApiConnected={isConnected}
+          />
+          {/* Debug info */}
+          <div style={{ background: '#333', padding: '10px', margin: '10px 0', borderRadius: '4px', fontSize: '12px' }}>
+            <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
+            <div>Tasks: {tasks.length}</div>
+            <div>API Endpoint: {apiEndpoint}</div>
+            <button 
+              onClick={forceConnectionCheck}
+              style={{ 
+                background: '#007bff', 
+                color: 'white', 
+                border: 'none', 
+                padding: '5px 10px', 
+                borderRadius: '3px', 
+                cursor: 'pointer',
+                marginTop: '5px'
+              }}
+            >
+              Force Check Connection
+            </button>
+          </div>
+        </div>
+
+        <div className="main-viewport">
+          <Scene3D 
+            model={currentModel}
+            renderMode={renderMode}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
+
+function App() {
+  return (
+    <SceneProvider>
+      <TaskProvider>
+        <AppContent />
+      </TaskProvider>
+    </SceneProvider>
+  );
+}
+
+export default App;

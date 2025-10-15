@@ -2,19 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="src/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="HandheldFriendly" content="true" />
-    <title>Character Studio</title>
-
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open3DStudio</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      }
+      #root {
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
   </head>
   <body>
-    <canvas id="editor-scene" style="position: fixed; top: 0; left: 0;" width="100%" height="100%"></canvas>
-    <div id="root" style="overflow: hidden">
-    </div>
-
-    <link rel="stylesheet" href="public/style.css" />
-    <script src="ktx2/libktx.js"></script>
-    <script type="module" src="src/Main.jsx"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
