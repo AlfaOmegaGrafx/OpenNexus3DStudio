@@ -26,7 +26,10 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + file.originalname);
   }
 });
+
+// Create different multer instances for different use cases
 const upload = multer({ storage });
+const uploadNone = multer();
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -205,8 +208,12 @@ app.get('/tasks/:taskId/result', (req, res) => {
 });
 
 // Generate endpoints that TaskManager expects
-app.post('/generate/text-to-3d', (req, res) => {
+app.post('/generate/text-to-3d', uploadNone.none(), (req, res) => {
   let prompt, options;
+  
+  console.log('Text-to-3D request received');
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('Request body:', req.body);
   
   // Handle both JSON and form data
   if (req.headers['content-type']?.includes('application/json')) {
@@ -218,9 +225,13 @@ app.post('/generate/text-to-3d', (req, res) => {
     options = req.body.options ? JSON.parse(req.body.options) : {};
   }
   
+  // Fallback if prompt is still undefined
+  if (!prompt) {
+    prompt = 'A 3D model';
+    console.log('No prompt provided, using fallback');
+  }
+  
   console.log(`Text-to-3D generation request: "${prompt}"`);
-  console.log('Request body:', req.body);
-  console.log('Content-Type:', req.headers['content-type']);
   
   // Simulate processing time
   setTimeout(() => {
@@ -228,7 +239,7 @@ app.post('/generate/text-to-3d', (req, res) => {
       success: true,
       taskId: `text-to-3d_${Date.now()}`,
       result: {
-        modelUrl: '/mock-models/text-to-3d-result.glb',
+        modelUrl: '/mock-models/text-to-3d-result.fbx',
         thumbnailUrl: '/mock-models/text-to-3d-thumbnail.jpg',
         metadata: {
           prompt: prompt,
@@ -310,7 +321,7 @@ app.post('/generate/mesh-painting', upload.single('image'), (req, res) => {
   }, 2500);
 });
 
-app.post('/generate/mesh-segmentation', (req, res) => {
+app.post('/generate/mesh-segmentation', uploadNone.none(), (req, res) => {
   let options;
   
   // Handle both JSON and form data
@@ -342,7 +353,7 @@ app.post('/generate/mesh-segmentation', (req, res) => {
   }, 1500);
 });
 
-app.post('/generate/part-completion', (req, res) => {
+app.post('/generate/part-completion', uploadNone.none(), (req, res) => {
   let prompt, options;
   
   // Handle both JSON and form data
@@ -375,7 +386,7 @@ app.post('/generate/part-completion', (req, res) => {
   }, 4000);
 });
 
-app.post('/generate/auto-rigging', (req, res) => {
+app.post('/generate/auto-rigging', uploadNone.none(), (req, res) => {
   let options;
   
   // Handle both JSON and form data

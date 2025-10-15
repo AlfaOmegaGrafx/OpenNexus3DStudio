@@ -12,17 +12,25 @@ export const useTask = () => {
 };
 
 export const TaskProvider = ({ children }) => {
+  console.log('TaskProvider: Component rendered');
   const taskManagerRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  console.log('TaskProvider: State values:', { isConnected, tasksLength: tasks.length, isLoading });
 
   // Initialize task manager
   useEffect(() => {
+    console.log('TaskContext: useEffect called, taskManagerRef.current:', taskManagerRef.current);
+    console.log('TaskContext: useEffect dependencies:', []);
     if (!taskManagerRef.current) {
+      console.log('TaskContext: Creating new TaskManager instance');
       taskManagerRef.current = new TaskManager();
       
       // Setup event listeners
+      console.log('TaskContext: Setting up event listeners');
+      console.log('TaskContext: TaskManager instance:', taskManagerRef.current);
       taskManagerRef.current.on('connectionStatusChanged', (data) => {
         console.log('TaskContext: Connection status changed:', data);
         setIsConnected(data.connected);
@@ -35,10 +43,41 @@ export const TaskProvider = ({ children }) => {
       });
 
       taskManagerRef.current.on('taskCreated', (data) => {
-        setTasks(prev => [...prev, data.task]);
+        console.log('TaskContext: taskCreated event received:', data);
+        console.log('TaskContext: Task created:', data.task);
+        setTasks(prev => {
+          const newTasks = [...prev, data.task];
+          console.log('TaskContext: Updated tasks array:', newTasks);
+          return newTasks;
+        });
+      });
+      
+      // Debug: Check if listeners are registered
+      console.log('TaskContext: Event listeners registered. Count for taskCreated:', taskManagerRef.current.listenerCount('taskCreated'));
+
+      taskManagerRef.current.on('taskStarted', (data) => {
+        console.log('TaskContext: Task started:', data.task);
+        setTasks(prev => prev.map(task => 
+          task.id === data.task.id ? data.task : task
+        ));
       });
 
       taskManagerRef.current.on('taskUpdated', (data) => {
+        console.log('TaskContext: Task updated:', data.task);
+        setTasks(prev => prev.map(task => 
+          task.id === data.task.id ? data.task : task
+        ));
+      });
+
+      taskManagerRef.current.on('taskCompleted', (data) => {
+        console.log('TaskContext: Task completed:', data.task);
+        setTasks(prev => prev.map(task => 
+          task.id === data.task.id ? data.task : task
+        ));
+      });
+
+      taskManagerRef.current.on('taskFailed', (data) => {
+        console.log('TaskContext: Task failed:', data.task);
         setTasks(prev => prev.map(task => 
           task.id === data.task.id ? data.task : task
         ));
@@ -56,7 +95,7 @@ export const TaskProvider = ({ children }) => {
         setTasks([]);
       });
     }
-  }, []);
+  }, []); // Empty dependency array to run only once
 
   // Periodic connection check
   useEffect(() => {
@@ -100,8 +139,13 @@ export const TaskProvider = ({ children }) => {
 
   // Create task
   const createTask = (taskData) => {
+    console.log('TaskContext: createTask called with:', taskData);
     if (taskManagerRef.current) {
-      return taskManagerRef.current.createTask(taskData);
+      const task = taskManagerRef.current.createTask(taskData);
+      console.log('TaskContext: createTask returned:', task);
+      return task;
+    } else {
+      console.error('TaskContext: taskManagerRef.current is null');
     }
   };
 
@@ -110,8 +154,35 @@ export const TaskProvider = ({ children }) => {
     if (taskManagerRef.current) {
       try {
         setIsLoading(true);
+        
+        // Update task status to running
+        setTasks(prev => prev.map(task => 
+          task.id === taskId ? { ...task, status: 'running', progress: 0 } : task
+        ));
+        
         const result = await taskManagerRef.current.startTask(taskId);
+        
+        // Update task status to completed
+        setTasks(prev => prev.map(task => 
+          task.id === taskId ? { ...task, status: 'completed', progress: 100, result } : task
+        ));
+        
+        // Auto-load the generated model if it has a modelUrl
+        if (result && result.result && result.result.modelUrl) {
+          console.log('TaskContext: Auto-loading generated model:', result.result.modelUrl);
+          // Emit an event to load the model (we'll handle this in App.jsx)
+          window.dispatchEvent(new CustomEvent('taskCompleted', { 
+            detail: { taskId, result: result.result } 
+          }));
+        }
+        
         return result;
+      } catch (error) {
+        // Update task status to failed
+        setTasks(prev => prev.map(task => 
+          task.id === taskId ? { ...task, status: 'failed', error: error.message } : task
+        ));
+        throw error;
       } finally {
         setIsLoading(false);
       }
@@ -120,9 +191,22 @@ export const TaskProvider = ({ children }) => {
 
   // Create and start task in one call
   const createAndStartTask = async (taskData) => {
+    console.log('TaskContext: Creating task with data:', taskData);
     const task = createTask(taskData);
+    console.log('TaskContext: Created task:', task);
     if (task) {
+      // Directly update the tasks state since events aren't working
+      console.log('TaskContext: Directly updating tasks state');
+      setTasks(prev => {
+        const newTasks = [...prev, task];
+        console.log('TaskContext: Updated tasks array directly:', newTasks);
+        return newTasks;
+      });
+      
+      console.log('TaskContext: Starting task:', task.id);
       return await startTask(task.id);
+    } else {
+      console.error('TaskContext: Failed to create task');
     }
   };
 
@@ -190,6 +274,17 @@ export const TaskProvider = ({ children }) => {
   useEffect(() => {
     return () => {
       if (taskManagerRef.current) {
+        // Remove all event listeners
+        taskManagerRef.current.off('connectionStatusChanged');
+        taskManagerRef.current.off('taskCreated');
+        taskManagerRef.current.off('taskStarted');
+        taskManagerRef.current.off('taskUpdated');
+        taskManagerRef.current.off('taskCompleted');
+        taskManagerRef.current.off('taskFailed');
+        taskManagerRef.current.off('taskRemoved');
+        taskManagerRef.current.off('tasksCleared');
+        taskManagerRef.current.off('allTasksCleared');
+        
         taskManagerRef.current.dispose();
       }
     };

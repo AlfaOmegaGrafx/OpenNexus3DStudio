@@ -76,17 +76,45 @@ const VRMExport = () => {
   };
 
   const handleFilenameChange = (e) => {
+    const input = e.target;
+    const cursorPosition = input.selectionStart;
     const filename = e.target.value;
+    
+    // Find the position of the last period
+    const lastPeriodIndex = filename.lastIndexOf('.');
+    
+    // If there's a period and cursor is after it, prevent the change
+    if (lastPeriodIndex !== -1 && cursorPosition > lastPeriodIndex) {
+      // Reset to previous value to prevent editing past the period
+      input.value = exportOptions.filename;
+      input.setSelectionRange(cursorPosition, cursorPosition);
+      return;
+    }
+    
+    // Ensure filename ends with .vrm
+    let newFilename = filename;
     if (!filename.endsWith('.vrm')) {
-      setExportOptions(prev => ({
-        ...prev,
-        filename: filename + '.vrm'
-      }));
-    } else {
-      setExportOptions(prev => ({
-        ...prev,
-        filename
-      }));
+      newFilename = filename + '.vrm';
+    }
+    
+    setExportOptions(prev => ({
+      ...prev,
+      filename: newFilename
+    }));
+  };
+
+  const handleFilenameKeyDown = (e) => {
+    const input = e.target;
+    const cursorPosition = input.selectionStart;
+    const filename = input.value;
+    const lastPeriodIndex = filename.lastIndexOf('.');
+    
+    // Prevent cursor movement past the period
+    if (lastPeriodIndex !== -1 && cursorPosition > lastPeriodIndex) {
+      if (e.key === 'ArrowRight' || e.key === 'End') {
+        e.preventDefault();
+        input.setSelectionRange(lastPeriodIndex, lastPeriodIndex);
+      }
     }
   };
 
@@ -121,6 +149,7 @@ const VRMExport = () => {
                   type="text"
                   value={exportOptions.filename}
                   onChange={handleFilenameChange}
+                  onKeyDown={handleFilenameKeyDown}
                   className="input w-full"
                   placeholder="export.vrm"
                 />

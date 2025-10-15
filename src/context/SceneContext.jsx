@@ -44,9 +44,21 @@ export const SceneProvider = ({ children }) => {
         requestAnimationFrame(() => setRenderMode(data.mode));
       };
 
+      const handleBoneSelected = (data) => {
+        console.log('Bone selected:', data.boneName);
+        // You can add additional handling here if needed
+      };
+
+      const handleBoneDeselected = (data) => {
+        console.log('Bone deselected:', data.boneName);
+        // You can add additional handling here if needed
+      };
+
       sceneManagerRef.current.on('modelLoaded', handleModelLoaded);
       sceneManagerRef.current.on('modelCleared', handleModelCleared);
       sceneManagerRef.current.on('renderModeChanged', handleRenderModeChanged);
+      sceneManagerRef.current.on('boneSelected', handleBoneSelected);
+      sceneManagerRef.current.on('boneDeselected', handleBoneDeselected);
 
       // Cleanup function
       return () => {
@@ -54,6 +66,8 @@ export const SceneProvider = ({ children }) => {
           sceneManagerRef.current.off('modelLoaded', handleModelLoaded);
           sceneManagerRef.current.off('modelCleared', handleModelCleared);
           sceneManagerRef.current.off('renderModeChanged', handleRenderModeChanged);
+          sceneManagerRef.current.off('boneSelected', handleBoneSelected);
+          sceneManagerRef.current.off('boneDeselected', handleBoneDeselected);
         }
       };
     }

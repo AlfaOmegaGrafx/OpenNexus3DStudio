@@ -105,11 +105,16 @@ const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, is
             if (selectedBone === bone.name) {
               setSelectedBone(null);
               if (sceneManager && sceneManager.highlightBone) {
-                sceneManager.highlightBone(bone.name); // This will deselect
+                sceneManager.highlightBone(null); // This will deselect
               }
             } else {
               setSelectedBone(bone.name);
               if (sceneManager && sceneManager.highlightBone) {
+                // First ensure we're in skeleton mode
+                if (sceneManager.setRenderMode) {
+                  sceneManager.setRenderMode('skeleton');
+                }
+                // Then highlight the bone
                 sceneManager.highlightBone(bone.name);
               }
             }

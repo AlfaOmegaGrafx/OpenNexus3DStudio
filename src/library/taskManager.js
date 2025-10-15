@@ -56,6 +56,8 @@ export class TaskManager {
    * @param {Object} taskData - Task configuration
    */
   createTask(taskData) {
+    console.log('TaskManager: Creating task with data:', taskData);
+    
     const {
       type,
       prompt,
@@ -84,7 +86,11 @@ export class TaskManager {
     };
 
     this.tasks.set(taskId, task);
+    console.log('TaskManager: Task created and stored:', task);
+    console.log('TaskManager: About to emit taskCreated event');
     this.emit('taskCreated', { task });
+    console.log('TaskManager: TaskCreated event emitted');
+    console.log('TaskManager: Event listeners count:', this.listenerCount('taskCreated'));
     
     return task;
   }
@@ -380,6 +386,10 @@ export class TaskManager {
     if (this.eventListeners.has(event)) {
       this.eventListeners.get(event).forEach(callback => callback(data));
     }
+  }
+
+  listenerCount(event) {
+    return this.eventListeners.has(event) ? this.eventListeners.get(event).length : 0;
   }
 
   /**
