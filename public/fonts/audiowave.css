@@ -5,21 +5,21 @@
   font-size: 1.2em;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: #ff6b35;
+  color: #4eb0c0;
   text-shadow: 
-    2px 2px 0px #ff4500,
-    4px 4px 0px #ff2500,
-    6px 6px 0px #cc0000,
-    8px 8px 0px #990000;
+    2px 2px 0px #3a7484,
+    4px 4px 0px #2c5a66,
+    6px 6px 0px #1e4048,
+    8px 8px 0px #0f2024;
   display: inline-block;
   transform: perspective(500px) rotateX(15deg) scale(1.1);
-  margin-left: 8px;
+  margin-left: 20px;
   position: relative;
-  background: linear-gradient(45deg, #ff6b35, #ff8c42);
+  background: linear-gradient(45deg, #4eb0c0, #3a7484);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(255, 107, 53, 0.6));
+  filter: drop-shadow(0 0 8px rgba(78, 176, 192, 0.6));
 }
 
 .audiowave-text::before {
@@ -29,7 +29,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, #ff6b35, #ff8c42);
+  background: linear-gradient(45deg, #4eb0c0, #3a7484);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
