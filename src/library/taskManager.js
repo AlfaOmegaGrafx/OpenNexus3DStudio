@@ -27,17 +27,53 @@ export class TaskManager {
    */
   async checkConnection() {
     try {
-      console.log(`Checking API connection to: ${this.apiEndpoint}/health`);
-      const response = await axios.get(`${this.apiEndpoint}/health`, { timeout: 5000 });
-      console.log('API response:', response.data);
+      console.log(`🔗 Checking API connection to: ${this.apiEndpoint}/health`);
+      const startTime = Date.now();
+      
+      const response = await axios.get(`${this.apiEndpoint}/health`, { 
+        timeout: 5000,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const responseTime = Date.now() - startTime;
+      console.log(`✅ API response received in ${responseTime}ms:`, response.data);
+      console.log(`📊 API Status: ${response.status} | Headers:`, response.headers);
+      
       this.isConnected = response.status === 200;
-      this.emit('connectionStatusChanged', { connected: this.isConnected });
-      console.log('API connection status:', this.isConnected);
+      this.emit('connectionStatusChanged', { 
+        connected: this.isConnected, 
+        responseTime,
+        endpoint: this.apiEndpoint,
+        status: response.status,
+        data: response.data
+      });
+      
+      console.log(`🎯 API connection status: ${this.isConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
       return this.isConnected;
     } catch (error) {
-      console.error('API connection failed:', error.message);
+      console.error('❌ API connection failed:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        endpoint: this.apiEndpoint,
+        timeout: error.code === 'ECONNABORTED'
+      });
+      
       this.isConnected = false;
-      this.emit('connectionStatusChanged', { connected: false, error });
+      this.emit('connectionStatusChanged', { 
+        connected: false, 
+        error: {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          timeout: error.code === 'ECONNABORTED'
+        },
+        endpoint: this.apiEndpoint
+      });
       return false;
     }
   }

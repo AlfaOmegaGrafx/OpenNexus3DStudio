@@ -280,9 +280,68 @@ export class VRMLoader {
             isVRMMaterial: true,
             processed: true
           };
+          
+          // Enhanced VRM material processing for textures and shaders
+          this.processVRMMaterial(child.material);
         }
       });
     }
+  }
+  
+  /**
+   * Process VRM material for proper texture and shader handling
+   * @param {Object} material - Material object
+   */
+  processVRMMaterial(material) {
+    if (!material) return;
+    
+    console.log(`🔧 Processing VRM material: ${material.type}`);
+    
+    // Ensure material properties are properly set
+    if (material.map) {
+      material.map.needsUpdate = true;
+      material.map.flipY = false; // VRM textures should not be flipped
+      console.log(`📷 Texture map processed: ${material.map.image?.src || 'embedded'}`);
+    }
+    
+    if (material.normalMap) {
+      material.normalMap.needsUpdate = true;
+      material.normalMap.flipY = false;
+      console.log(`📷 Normal map processed: ${material.normalMap.image?.src || 'embedded'}`);
+    }
+    
+    if (material.roughnessMap) {
+      material.roughnessMap.needsUpdate = true;
+      material.roughnessMap.flipY = false;
+      console.log(`📷 Roughness map processed: ${material.roughnessMap.image?.src || 'embedded'}`);
+    }
+    
+    if (material.metalnessMap) {
+      material.metalnessMap.needsUpdate = true;
+      material.metalnessMap.flipY = false;
+      console.log(`📷 Metalness map processed: ${material.metalnessMap.image?.src || 'embedded'}`);
+    }
+    
+    if (material.emissiveMap) {
+      material.emissiveMap.needsUpdate = true;
+      material.emissiveMap.flipY = false;
+      console.log(`📷 Emissive map processed: ${material.emissiveMap.image?.src || 'embedded'}`);
+    }
+    
+    // Ensure material needs update for proper rendering
+    material.needsUpdate = true;
+    
+    // Set proper material properties for VRM
+    if (material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial') {
+      // Ensure proper material settings for VRM
+      material.envMapIntensity = material.envMapIntensity || 1.0;
+      material.roughness = material.roughness || 0.5;
+      material.metalness = material.metalness || 0.0;
+      material.emissive = material.emissive || new THREE.Color(0x000000);
+      material.emissiveIntensity = material.emissiveIntensity || 1.0;
+    }
+    
+    console.log(`✅ VRM material processed successfully: ${material.type}`);
   }
 
   /**
