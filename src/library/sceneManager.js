@@ -1645,7 +1645,7 @@ export class SceneManager {
   }
 
   /**
-   * Zoom camera to a specific bone
+   * Zoom camera to a specific bone with smooth animation
    */
   zoomToBone(boneHelper) {
     if (!this.camera || !this.controls || !boneHelper) return;
@@ -1657,20 +1657,46 @@ export class SceneManager {
     
     // Set camera position relative to bone
     const cameraOffset = new THREE.Vector3(0, 0.2, distance);
-    const newCameraPosition = bonePosition.clone().add(cameraOffset);
+    const targetCameraPosition = bonePosition.clone().add(cameraOffset);
+    const targetLookAt = bonePosition.clone();
     
-    // Animate camera to new position
-    if (this.controls.target) {
-      this.controls.target.copy(bonePosition);
-    }
+    // Store starting positions for animation
+    const startCameraPosition = this.camera.position.clone();
+    const startLookAt = this.controls.target ? this.controls.target.clone() : new THREE.Vector3();
     
-    // Update camera position
-    this.camera.position.copy(newCameraPosition);
+    // Animation parameters
+    const duration = 1000; // 1 second animation
+    const startTime = performance.now();
     
-    // Update controls
-    this.controls.update();
+    // Animation function
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing function (ease-out)
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      // Interpolate camera position
+      this.camera.position.lerpVectors(startCameraPosition, targetCameraPosition, easeOut);
+      
+      // Interpolate look-at target
+      if (this.controls.target) {
+        this.controls.target.lerpVectors(startLookAt, targetLookAt, easeOut);
+      }
+      
+      // Update controls
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        console.log('Animated zoom to bone:', boneHelper.userData.boneName);
+      }
+    };
     
-    console.log('Zoomed to bone:', boneHelper.userData.boneName);
+    // Start animation
+    requestAnimationFrame(animate);
   }
 
   /**
