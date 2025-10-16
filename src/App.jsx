@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
+import { AudioProvider } from './context/AudioContext';
+import { SoundProvider } from './context/SoundContext';
 import Scene3D from './components/Scene3D';
 import TaskManager from './components/TaskManager';
 import CombinedImport from './components/CombinedImport';
@@ -10,6 +12,7 @@ import GLBExport from './components/GLBExport';
 import VRMExport from './components/VRMExport';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
+import GlobalAudioControl from './components/GlobalAudioControl';
 import './App.css';
 
 function AppContent() {
@@ -346,17 +349,24 @@ function AppContent() {
           />
         </div>
       </div>
+      
+      {/* Global Audio Control */}
+      <GlobalAudioControl />
     </div>
   );
 }
 
 function App() {
   return (
-    <SceneProvider>
-      <TaskProvider>
-        <AppContent />
-      </TaskProvider>
-    </SceneProvider>
+    <AudioProvider>
+      <SoundProvider>
+        <SceneProvider>
+          <TaskProvider>
+            <AppContent />
+          </TaskProvider>
+        </SceneProvider>
+      </SoundProvider>
+    </AudioProvider>
   );
 }
 
