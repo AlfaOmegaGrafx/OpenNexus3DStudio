@@ -245,9 +245,6 @@ export class SceneManager {
       // Auto-focus camera on the model
       this.focusOnModel();
 
-      // Make model more visible with bright material
-      this.makeModelVisible();
-
       this.emit('modelLoaded', { model: this.currentModel });
       return this.currentModel;
     } catch (error) {
@@ -1720,31 +1717,6 @@ export class SceneManager {
     console.log('Camera looking at:', center);
   }
 
-  /**
-   * Make model more visible with bright material
-   */
-  makeModelVisible() {
-    if (!this.currentModel) return;
-
-    console.log('Making model visible...');
-    
-    // Traverse all meshes and apply bright material
-    this.currentModel.traverse((child) => {
-      if (child.isMesh) {
-        // Create a bright, visible material
-        const material = new THREE.MeshLambertMaterial({
-          color: 0x00ff00, // Bright green
-          transparent: false,
-          opacity: 1.0
-        });
-        
-        child.material = material;
-        console.log('Applied bright material to mesh:', child.name || 'unnamed');
-      }
-    });
-
-    console.log('Model visibility enhanced');
-  }
 
   /**
    * Set render mode
