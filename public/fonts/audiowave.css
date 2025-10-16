@@ -1,24 +1,19 @@
-/* Audiowide font styling - matching main title */
+/* Audiowide font styling - flat and constrained */
 .audiowave-text {
   font-family: "Audiowide", sans-serif;
   font-weight: 400;
   font-style: normal;
   font-size: 2rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   color: #ffffff;
-  text-shadow: 
-    2px 2px 0px #cccccc,
-    4px 4px 0px #999999;
   display: inline-block;
-  transform: perspective(400px) rotateX(5deg) scale(1.05);
   margin-left: 12px;
   position: relative;
-  background: linear-gradient(135deg, #ffffff, #f0f0f0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: contrast(1.2) brightness(1.1);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
