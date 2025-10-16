@@ -18,8 +18,8 @@ export class SceneManager {
     this.camera = null;
     this.renderer = null;
     this.controls = null;
-    this.currentModel = null;
-    this.renderMode = 'solid';
+      this.currentModel = null;
+      this.renderMode = 'solid';
       this.isInitialized = false;
       this.selectedBoneName = null;
       
@@ -1272,9 +1272,6 @@ export class SceneManager {
       } else {
         console.log('Bones found, skipping fallback visualization');
       }
-      
-      // Setup mouse interaction for skeleton selection
-      this.setupSkeletonMouseInteraction();
     } catch (error) {
       console.error('Error in createBoneVisualization:', error);
       // Clear any partial bone visualization on error
@@ -1529,9 +1526,9 @@ export class SceneManager {
         this.container.removeEventListener('click', this.skeletonClickHandler);
         this.skeletonClickHandler = null;
       }
-      if (this.skeletonRightClickHandler) {
-        this.container.removeEventListener('contextmenu', this.skeletonRightClickHandler);
-        this.skeletonRightClickHandler = null;
+      if (this.skeletonDoubleClickHandler) {
+        this.container.removeEventListener('dblclick', this.skeletonDoubleClickHandler);
+        this.skeletonDoubleClickHandler = null;
       }
       if (this.skeletonMouseDownHandler) {
         this.container.removeEventListener('mousedown', this.skeletonMouseDownHandler);
@@ -1563,8 +1560,8 @@ export class SceneManager {
     if (this.skeletonClickHandler) {
       this.container.removeEventListener('click', this.skeletonClickHandler);
     }
-    if (this.skeletonRightClickHandler) {
-      this.container.removeEventListener('contextmenu', this.skeletonRightClickHandler);
+    if (this.skeletonDoubleClickHandler) {
+      this.container.removeEventListener('dblclick', this.skeletonDoubleClickHandler);
     }
     if (this.skeletonMouseDownHandler) {
       this.container.removeEventListener('mousedown', this.skeletonMouseDownHandler);
@@ -1581,8 +1578,8 @@ export class SceneManager {
       this.handleSkeletonClick(event);
     };
     
-    this.skeletonRightClickHandler = (event) => {
-      this.handleSkeletonRightClick(event);
+    this.skeletonDoubleClickHandler = (event) => {
+      this.handleSkeletonDoubleClick(event);
     };
     
     this.skeletonMouseDownHandler = (event) => {
@@ -1599,7 +1596,7 @@ export class SceneManager {
     
     // Add event listeners
     this.container.addEventListener('click', this.skeletonClickHandler);
-    this.container.addEventListener('contextmenu', this.skeletonRightClickHandler);
+    this.container.addEventListener('dblclick', this.skeletonDoubleClickHandler);
     this.container.addEventListener('mousedown', this.skeletonMouseDownHandler);
     this.container.addEventListener('mousemove', this.skeletonMouseMoveHandler);
     this.container.addEventListener('mouseup', this.skeletonMouseUpHandler);
@@ -1654,47 +1651,13 @@ export class SceneManager {
   }
 
   /**
-   * Handle right-click for skeleton selection
+   * Handle double-click for bounding box selection
    */
-  handleSkeletonRightClick(event) {
-    event.preventDefault(); // Prevent context menu
+  handleSkeletonDoubleClick(event) {
+    if (this.renderMode !== 'skeleton') return;
     
-    if (!this.boneHelpers || this.boneHelpers.length === 0) {
-      console.log('No bone helpers available for selection');
-      return;
-    }
-    
-    // Only handle in skeleton mode
-    if (this.renderMode !== 'skeleton') {
-      console.log('Not in skeleton mode, ignoring right-click');
-      return;
-    }
-    
-    const rect = this.container.getBoundingClientRect();
-    const mouse = new THREE.Vector2();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    // Update raycaster
-    this.raycaster.setFromCamera(mouse, this.camera);
-    
-    // Intersect with bone helpers
-    const intersects = this.raycaster.intersectObjects(this.boneHelpers);
-    
-    if (intersects.length > 0) {
-      // Right-click on bone: add/subtract from selection
-      const selectedHelper = intersects[0].object;
-      const boneName = selectedHelper.userData.boneName;
-      
-      if (this.selectedBones.has(boneName)) {
-        this.removeBoneFromSelection(boneName);
-      } else {
-        this.addBoneToSelection(boneName);
-      }
-    } else {
-      // Right-click outside model: deselect all
-      this.deselectAllBones();
-    }
+    // Start bounding box selection on double-click
+    this.startBoundingBoxSelection(event);
   }
 
   /**
@@ -1703,9 +1666,9 @@ export class SceneManager {
   handleSkeletonMouseDown(event) {
     if (this.renderMode !== 'skeleton') return;
     
-    // Start bounding box selection on left-click drag
-    if (event.button === 0) {
-      this.startBoundingBoxSelection(event);
+    // Start bounding box selection on double-click drag
+    if (event.button === 0 && this.boundingBoxSelection.isActive) {
+      // Continue with existing bounding box
     }
   }
 
