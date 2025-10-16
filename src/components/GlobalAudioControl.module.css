@@ -69,6 +69,8 @@
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
+  border: 2px solid #ffffff;
+  opacity: 1;
 }
 
 .volumeSlider::-webkit-slider-thumb:hover {
@@ -82,9 +84,10 @@
   border-radius: 50%;
   background: linear-gradient(135deg, #4eb0c0, #3a7484);
   cursor: pointer;
-  border: none;
+  border: 2px solid #ffffff;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
+  opacity: 1;
 }
 
 .volumeSlider::-moz-range-thumb:hover {
@@ -100,8 +103,9 @@
   left: 0;
   height: 100%;
   width: var(--volume-percentage, 50%);
-  background: linear-gradient(90deg, #4eb0c0, #3a7484);
+  background: linear-gradient(90deg, rgba(78, 176, 192, 0.3), rgba(58, 116, 132, 0.3));
   border-radius: 3px;
   pointer-events: none;
   transition: width 0.1s ease;
+  z-index: 1;
 }
