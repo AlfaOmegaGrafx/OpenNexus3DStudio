@@ -14,7 +14,7 @@ import colorPickerIcon from '../images/color-palette.png';
 import randomizeIcon from '../images/randomize.png';
 import cancelIcon from '../images/cancel.png';
 
-const AppearanceSimple = () => {
+const AppearanceSimple = ({ onNavigate }) => {
   const [selectedTrait, setSelectedTrait] = useState(null);
   const [selectedColor, setSelectedColor] = useState('#ffffff');
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -100,8 +100,18 @@ const AppearanceSimple = () => {
 
       {/* Bottom controls */}
       <div className={styles.buttonContainer}>
-        <button className={styles.buttonLeft}>Back</button>
-        <button className={styles.buttonRight}>Next</button>
+        <button 
+          className={styles.buttonLeft}
+          onClick={() => onNavigate && onNavigate('back')}
+        >
+          Back
+        </button>
+        <button 
+          className={styles.buttonRight}
+          onClick={() => onNavigate && onNavigate('next')}
+        >
+          Next
+        </button>
       </div>
     </div>
   );

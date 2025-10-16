@@ -6,7 +6,7 @@ import infinityIcon from '../images/randomize.png';
 import ethereumIcon from '/ui/mint/ethereum.png';
 import backButtonIcon from '/ui/backButton_white.png';
 
-const MintSimple = () => {
+const MintSimple = ({ onNavigate }) => {
   const [minting, setMinting] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -66,12 +66,21 @@ const MintSimple = () => {
         )}
       </div>
 
-      <div className={styles.bottomContainer}>
-        <button className={styles.buttonLeft}>
-          <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
-          Back
-        </button>
-      </div>
+              <div className={styles.bottomContainer}>
+                <button 
+                  className={styles.buttonLeft}
+                  onClick={() => onNavigate && onNavigate('back')}
+                >
+                  <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
+                  Back
+                </button>
+                <button 
+                  className={styles.buttonRight}
+                  onClick={() => onNavigate && onNavigate('next')}
+                >
+                  Next
+                </button>
+              </div>
     </div>
   );
 };

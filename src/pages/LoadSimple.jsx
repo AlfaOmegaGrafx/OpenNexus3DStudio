@@ -6,7 +6,7 @@ import walletIcon from '../images/wallet.png';
 import backButtonIcon from '/ui/backButton_white.png';
 import loadingIcon from '/ui/loading.svg';
 
-const LoadSimple = () => {
+const LoadSimple = ({ onNavigate }) => {
   const [characters, setCharacters] = useState([
     { id: 1, name: 'Character 1', thumbnail: loadingIcon, rarity: 'Common' },
     { id: 2, name: 'Character 2', thumbnail: loadingIcon, rarity: 'Rare' },
@@ -84,19 +84,22 @@ const LoadSimple = () => {
         </div>
       )}
 
-      <div className={styles.buttonContainer}>
-        <button className={styles.buttonLeft}>
-          <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
-          Back
-        </button>
-        <button 
-          className={styles.buttonRight}
-          onClick={handleLoadCharacter}
-          disabled={!selectedCharacter}
-        >
-          Load Character
-        </button>
-      </div>
+              <div className={styles.buttonContainer}>
+                <button 
+                  className={styles.buttonLeft}
+                  onClick={() => onNavigate && onNavigate('back')}
+                >
+                  <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
+                  Back
+                </button>
+                <button 
+                  className={styles.buttonRight}
+                  onClick={handleLoadCharacter}
+                  disabled={!selectedCharacter}
+                >
+                  Load Character
+                </button>
+              </div>
     </div>
   );
 };
