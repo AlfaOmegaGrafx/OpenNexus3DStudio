@@ -13,12 +13,20 @@ import VRMExport from './components/VRMExport';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
+
+// Import CharacterStudio pages (simplified versions)
+import AppearanceSimple from './pages/AppearanceSimple';
+import SaveSimple from './pages/SaveSimple';
+import MintSimple from './pages/MintSimple';
+import LoadSimple from './pages/LoadSimple';
 import './App.css';
 
 function AppContent() {
   const [isElectron, setIsElectron] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState('http://localhost:8000');
   const [skeletonActive, setSkeletonActive] = useState(false);
+  const [currentPanel, setCurrentPanel] = useState('none'); // Panel state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   
   // Track render mode states
   const [renderModeStates, setRenderModeStates] = useState({
@@ -201,19 +209,97 @@ function AppContent() {
         <div className="title-container">
           <h1 className="main-title">Open3DStudio:</h1>
           <div className="audiowave-text">SPACE-TIME EDITION</div>
+          <div className="title-volume-control">
+            <GlobalAudioControl />
+          </div>
         </div>
         <div className="header-controls">
-          <APIStatus 
-            endpoint={apiEndpoint} 
-            isConnected={isConnected}
-            onEndpointChange={setApiEndpoint}
-          />
-          <RenderModeSelector 
-            currentMode={renderMode}
-            onModeChange={handleRenderModeChange}
-            renderModeStates={renderModeStates}
-            skeletonActive={skeletonActive}
-            onSkeletonClick={() => {
+          {/* File Operations */}
+          <div className="header-section">
+            <div className="header-section-title">File</div>
+            <div className="header-controls-group">
+              <button 
+                className="header-btn"
+                onClick={() => document.querySelector('input[type="file"]')?.click()}
+                title="Import File"
+              >
+                📁 Import
+              </button>
+              <button 
+                className="header-btn"
+                onClick={() => {
+                  if (currentModel) {
+                    exportModel('glb', { filename: 'export.glb' });
+                  } else {
+                    alert('No model to export');
+                  }
+                }}
+                title="Export GLB"
+              >
+                📤 Export
+              </button>
+            </div>
+          </div>
+
+          {/* AI Tasks */}
+          <div className="header-section">
+            <div className="header-section-title">AI</div>
+            <div className="header-controls-group">
+              <button 
+                className="header-btn"
+                onClick={() => {
+                  const userPrompt = window.prompt('Enter text-to-3D prompt:');
+                  if (userPrompt) {
+                    handleAITask('text-to-3d', userPrompt);
+                  }
+                }}
+                disabled={!isConnected}
+                title="Text to 3D"
+              >
+                ✨ Text-3D
+              </button>
+              <button 
+                className="header-btn"
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/*';
+                  input.onchange = (e) => {
+                    if (e.target.files[0]) {
+                      handleAITask('image-to-3d', 'Convert image to 3D', e.target.files[0]);
+                    }
+                  };
+                  input.click();
+                }}
+                disabled={!isConnected}
+                title="Image to 3D"
+              >
+                🖼️ Image-3D
+              </button>
+            </div>
+          </div>
+
+          {/* Render Modes */}
+          <div className="header-section">
+            <div className="header-section-title">Render</div>
+            <div className="header-controls-group">
+              <button 
+                className={`header-btn ${renderModeStates.solid ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('solid')}
+                title="Solid Mode"
+              >
+                🔲 Solid
+              </button>
+              <button 
+                className={`header-btn ${renderModeStates.wireframe ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('wireframe')}
+                title="Wireframe Mode"
+              >
+                📐 Wire
+              </button>
+              <button 
+                className={`header-btn ${renderModeStates.skeleton ? 'active' : ''}`}
+                onClick={() => {
               console.log('Skeleton button clicked, current skeletonActive:', skeletonActive);
               const newSkeletonActive = !skeletonActive;
               setSkeletonActive(newSkeletonActive);
@@ -298,12 +384,159 @@ function AppContent() {
                 }
               }
             }}
-          />
+                title="Skeleton Mode"
+              >
+                🦴 Skeleton
+              </button>
+            </div>
+          </div>
+
+          {/* Audio Controls */}
+          <div className="header-section">
+            <div className="header-section-title">Audio</div>
+            <div className="header-controls-group">
+              <GlobalAudioControl />
+            </div>
+          </div>
+
+          {/* Task Status */}
+          <div className="header-section">
+            <div className="header-section-title">Tasks</div>
+            <div className="header-controls-group">
+              <div className="task-status-compact">
+                <div className="task-count">
+                  {tasks.length > 0 && (
+                    <span className="task-badge">
+                      {tasks.filter(t => t.status === 'running').length} running
+                    </span>
+                  )}
+                </div>
+                <button 
+                  className="header-btn"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = (e) => {
+                      if (e.target.files[0]) {
+                        handleAITask('mesh-painting', 'Paint mesh', e.target.files[0]);
+                      }
+                    };
+                    input.click();
+                  }}
+                  disabled={!isConnected}
+                  title="Mesh Painting"
+                >
+                  🎨 Paint
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* CharacterStudio Panels */}
+          <div className="header-section">
+            <div className="header-section-title">Studio</div>
+            <div className="header-controls-group">
+              <button 
+                className={`header-btn ${currentPanel === 'appearance' ? 'active' : ''}`}
+                onClick={() => setCurrentPanel(currentPanel === 'appearance' ? 'none' : 'appearance')}
+                title="Character Appearance"
+              >
+                👤 Appearance
+              </button>
+              <button 
+                className={`header-btn ${currentPanel === 'save' ? 'active' : ''}`}
+                onClick={() => setCurrentPanel(currentPanel === 'save' ? 'none' : 'save')}
+                title="Save Character"
+              >
+                💾 Save
+              </button>
+              <button 
+                className={`header-btn ${currentPanel === 'mint' ? 'active' : ''}`}
+                onClick={() => setCurrentPanel(currentPanel === 'mint' ? 'none' : 'mint')}
+                title="Mint Character"
+              >
+                🪙 Mint
+              </button>
+              <button 
+                className={`header-btn ${currentPanel === 'load' ? 'active' : ''}`}
+                onClick={() => setCurrentPanel(currentPanel === 'load' ? 'none' : 'load')}
+                title="Load Character"
+              >
+                📁 Load
+              </button>
+            </div>
+          </div>
+
+          {/* API Status */}
+          <div className="header-section">
+            <div className="header-section-title">API</div>
+            <div className="header-controls-group">
+              <div className="api-status-compact">
+                <div 
+                  className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}
+                />
+                <span className="status-text">
+                  {isConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
       <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''}`}>
-        <div className="sidebar">
+        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          {/* Hamburger Menu Button */}
+          <button 
+            className="hamburger-menu"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          >
+            <div className="hamburger-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </button>
+
+          {/* Collapsed Sidebar Icons */}
+          {sidebarCollapsed && (
+            <div className="collapsed-sidebar-icons">
+              <button 
+                className="sidebar-icon"
+                onClick={() => setCurrentPanel('appearance')}
+                title="Character Appearance"
+              >
+                👤
+              </button>
+              <button 
+                className="sidebar-icon"
+                onClick={() => setCurrentPanel('save')}
+                title="Save Character"
+              >
+                💾
+              </button>
+              <button 
+                className="sidebar-icon"
+                onClick={() => setCurrentPanel('mint')}
+                title="Mint Character"
+              >
+                🪙
+              </button>
+              <button 
+                className="sidebar-icon"
+                onClick={() => setCurrentPanel('load')}
+                title="Load Character"
+              >
+                📁
+              </button>
+            </div>
+          )}
+
+          {/* Full Sidebar Content */}
+          {!sidebarCollapsed && (
+            <>
           <CombinedImport onFileLoad={handleFileLoad} />
           <BlendShapeController 
             sceneManager={sceneManager}
@@ -343,6 +576,8 @@ function AppContent() {
               Force Check Connection
             </button>
           </div>
+            </>
+          )}
         </div>
 
         <div className="main-viewport">
@@ -351,10 +586,34 @@ function AppContent() {
             renderMode={renderMode}
           />
         </div>
+
+        {/* CharacterStudio Panel System */}
+        {currentPanel !== 'none' && (
+          <div className="character-studio-panel">
+            <div className="panel-header">
+              <h3 className="panel-title">
+                {currentPanel === 'appearance' && 'Character Appearance'}
+                {currentPanel === 'save' && 'Save Character'}
+                {currentPanel === 'mint' && 'Mint Character'}
+                {currentPanel === 'load' && 'Load Character'}
+              </h3>
+              <button 
+                className="panel-close-btn"
+                onClick={() => setCurrentPanel('none')}
+                title="Close Panel"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="panel-content">
+              {currentPanel === 'appearance' && <AppearanceSimple />}
+              {currentPanel === 'save' && <SaveSimple />}
+              {currentPanel === 'mint' && <MintSimple />}
+              {currentPanel === 'load' && <LoadSimple />}
+            </div>
+          </div>
+        )}
       </div>
-      
-      {/* Global Audio Control */}
-      <GlobalAudioControl />
     </div>
   );
 }

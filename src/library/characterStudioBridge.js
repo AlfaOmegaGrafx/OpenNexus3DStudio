@@ -9,9 +9,12 @@ import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 export class CharacterStudioBridge {
   constructor() {
     this.gltfLoader = new GLTFLoader();
-    this.gltfLoader.register((parser) => {
-      return new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true });
-    });
+    // Register VRM loader plugin if available
+    if (this.gltfLoader.register) {
+      this.gltfLoader.register((parser) => {
+        return new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true });
+      });
+    }
     
     this.eventListeners = new Map();
   }
