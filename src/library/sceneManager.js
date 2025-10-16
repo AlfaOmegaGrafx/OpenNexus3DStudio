@@ -23,6 +23,17 @@ export class SceneManager {
     this.isInitialized = false;
     this.selectedBoneName = null;
     
+    // Multi-selection support
+    this.selectedBones = new Set();
+    this.boundingBoxSelection = {
+      isActive: false,
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+      boxElement: null
+    };
+    
     // Loaders
     this.gltfLoader = new GLTFLoader();
     this.objLoader = new OBJLoader();
@@ -1506,18 +1517,50 @@ export class SceneManager {
   setupSkeletonMouseInteraction() {
     if (!this.container || !this.raycaster) return;
     
-    // Remove existing click listener if any
+    // Remove existing listeners if any
     if (this.skeletonClickHandler) {
       this.container.removeEventListener('click', this.skeletonClickHandler);
     }
+    if (this.skeletonRightClickHandler) {
+      this.container.removeEventListener('contextmenu', this.skeletonRightClickHandler);
+    }
+    if (this.skeletonMouseDownHandler) {
+      this.container.removeEventListener('mousedown', this.skeletonMouseDownHandler);
+    }
+    if (this.skeletonMouseMoveHandler) {
+      this.container.removeEventListener('mousemove', this.skeletonMouseMoveHandler);
+    }
+    if (this.skeletonMouseUpHandler) {
+      this.container.removeEventListener('mouseup', this.skeletonMouseUpHandler);
+    }
     
-    // Create new click handler
+    // Create event handlers
     this.skeletonClickHandler = (event) => {
       this.handleSkeletonClick(event);
     };
     
-    // Add click listener
+    this.skeletonRightClickHandler = (event) => {
+      this.handleSkeletonRightClick(event);
+    };
+    
+    this.skeletonMouseDownHandler = (event) => {
+      this.handleSkeletonMouseDown(event);
+    };
+    
+    this.skeletonMouseMoveHandler = (event) => {
+      this.handleSkeletonMouseMove(event);
+    };
+    
+    this.skeletonMouseUpHandler = (event) => {
+      this.handleSkeletonMouseUp(event);
+    };
+    
+    // Add event listeners
     this.container.addEventListener('click', this.skeletonClickHandler);
+    this.container.addEventListener('contextmenu', this.skeletonRightClickHandler);
+    this.container.addEventListener('mousedown', this.skeletonMouseDownHandler);
+    this.container.addEventListener('mousemove', this.skeletonMouseMoveHandler);
+    this.container.addEventListener('mouseup', this.skeletonMouseUpHandler);
     
     console.log('Skeleton mouse interaction setup complete');
   }
@@ -1536,6 +1579,9 @@ export class SceneManager {
       console.log('Not in skeleton mode, ignoring click');
       return;
     }
+    
+    // Skip if right-click (handled separately)
+    if (event.button === 2) return;
     
     const rect = this.container.getBoundingClientRect();
     const mouse = new THREE.Vector2();
@@ -1557,39 +1603,295 @@ export class SceneManager {
       console.log('Selected bone:', boneName);
       
       // Toggle selection
-      if (this.selectedBone === boneName) {
-        this.deselectBone();
+      if (this.selectedBones.has(boneName)) {
+        this.removeBoneFromSelection(boneName);
       } else {
-        this.selectBone(boneName);
+        this.addBoneToSelection(boneName);
       }
     }
   }
 
   /**
-   * Select a bone by name
+   * Handle right-click for skeleton selection
+   */
+  handleSkeletonRightClick(event) {
+    event.preventDefault(); // Prevent context menu
+    
+    if (!this.boneHelpers || this.boneHelpers.length === 0) {
+      console.log('No bone helpers available for selection');
+      return;
+    }
+    
+    // Only handle in skeleton mode
+    if (this.renderMode !== 'skeleton') {
+      console.log('Not in skeleton mode, ignoring right-click');
+      return;
+    }
+    
+    const rect = this.container.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update raycaster
+    this.raycaster.setFromCamera(mouse, this.camera);
+    
+    // Intersect with bone helpers
+    const intersects = this.raycaster.intersectObjects(this.boneHelpers);
+    
+    if (intersects.length > 0) {
+      // Right-click on bone: add/subtract from selection
+      const selectedHelper = intersects[0].object;
+      const boneName = selectedHelper.userData.boneName;
+      
+      if (this.selectedBones.has(boneName)) {
+        this.removeBoneFromSelection(boneName);
+      } else {
+        this.addBoneToSelection(boneName);
+      }
+    } else {
+      // Right-click outside model: deselect all
+      this.deselectAllBones();
+    }
+  }
+
+  /**
+   * Handle mouse down for bounding box selection
+   */
+  handleSkeletonMouseDown(event) {
+    if (this.renderMode !== 'skeleton') return;
+    
+    // Start bounding box selection on right-click drag
+    if (event.button === 2) {
+      event.preventDefault();
+      this.startBoundingBoxSelection(event);
+    }
+  }
+
+  /**
+   * Handle mouse move for bounding box selection
+   */
+  handleSkeletonMouseMove(event) {
+    if (this.renderMode !== 'skeleton') return;
+    
+    if (this.boundingBoxSelection.isActive) {
+      this.updateBoundingBoxSelection(event);
+    }
+  }
+
+  /**
+   * Handle mouse up for bounding box selection
+   */
+  handleSkeletonMouseUp(event) {
+    if (this.renderMode !== 'skeleton') return;
+    
+    if (this.boundingBoxSelection.isActive && event.button === 2) {
+      this.finishBoundingBoxSelection(event);
+    }
+  }
+
+  /**
+   * Start bounding box selection
+   */
+  startBoundingBoxSelection(event) {
+    const rect = this.container.getBoundingClientRect();
+    
+    this.boundingBoxSelection.isActive = true;
+    this.boundingBoxSelection.startX = event.clientX - rect.left;
+    this.boundingBoxSelection.startY = event.clientY - rect.top;
+    this.boundingBoxSelection.endX = this.boundingBoxSelection.startX;
+    this.boundingBoxSelection.endY = this.boundingBoxSelection.startY;
+    
+    // Create visual bounding box element
+    this.createBoundingBoxElement();
+    
+    console.log('Started bounding box selection');
+  }
+
+  /**
+   * Update bounding box selection
+   */
+  updateBoundingBoxSelection(event) {
+    if (!this.boundingBoxSelection.isActive) return;
+    
+    const rect = this.container.getBoundingClientRect();
+    this.boundingBoxSelection.endX = event.clientX - rect.left;
+    this.boundingBoxSelection.endY = event.clientY - rect.top;
+    
+    this.updateBoundingBoxElement();
+  }
+
+  /**
+   * Finish bounding box selection
+   */
+  finishBoundingBoxSelection(event) {
+    if (!this.boundingBoxSelection.isActive) return;
+    
+    const rect = this.container.getBoundingClientRect();
+    this.boundingBoxSelection.endX = event.clientX - rect.left;
+    this.boundingBoxSelection.endY = event.clientY - rect.top;
+    
+    // Select bones within bounding box
+    this.selectBonesInBoundingBox();
+    
+    // Clean up
+    this.boundingBoxSelection.isActive = false;
+    this.removeBoundingBoxElement();
+    
+    console.log('Finished bounding box selection');
+  }
+
+  /**
+   * Create visual bounding box element
+   */
+  createBoundingBoxElement() {
+    if (this.boundingBoxSelection.boxElement) {
+      this.removeBoundingBoxElement();
+    }
+    
+    const box = document.createElement('div');
+    box.style.position = 'absolute';
+    box.style.border = '2px dashed #00ff00';
+    box.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+    box.style.pointerEvents = 'none';
+    box.style.zIndex = '1000';
+    box.style.left = this.boundingBoxSelection.startX + 'px';
+    box.style.top = this.boundingBoxSelection.startY + 'px';
+    box.style.width = '0px';
+    box.style.height = '0px';
+    
+    this.container.appendChild(box);
+    this.boundingBoxSelection.boxElement = box;
+  }
+
+  /**
+   * Update visual bounding box element
+   */
+  updateBoundingBoxElement() {
+    if (!this.boundingBoxSelection.boxElement) return;
+    
+    const startX = Math.min(this.boundingBoxSelection.startX, this.boundingBoxSelection.endX);
+    const startY = Math.min(this.boundingBoxSelection.startY, this.boundingBoxSelection.endY);
+    const width = Math.abs(this.boundingBoxSelection.endX - this.boundingBoxSelection.startX);
+    const height = Math.abs(this.boundingBoxSelection.endY - this.boundingBoxSelection.startY);
+    
+    this.boundingBoxSelection.boxElement.style.left = startX + 'px';
+    this.boundingBoxSelection.boxElement.style.top = startY + 'px';
+    this.boundingBoxSelection.boxElement.style.width = width + 'px';
+    this.boundingBoxSelection.boxElement.style.height = height + 'px';
+  }
+
+  /**
+   * Remove visual bounding box element
+   */
+  removeBoundingBoxElement() {
+    if (this.boundingBoxSelection.boxElement) {
+      this.container.removeChild(this.boundingBoxSelection.boxElement);
+      this.boundingBoxSelection.boxElement = null;
+    }
+  }
+
+  /**
+   * Select bones within bounding box
+   */
+  selectBonesInBoundingBox() {
+    if (!this.boneHelpers || this.boneHelpers.length === 0) return;
+    
+    const rect = this.container.getBoundingClientRect();
+    const startX = Math.min(this.boundingBoxSelection.startX, this.boundingBoxSelection.endX);
+    const startY = Math.min(this.boundingBoxSelection.startY, this.boundingBoxSelection.endY);
+    const endX = Math.max(this.boundingBoxSelection.startX, this.boundingBoxSelection.endX);
+    const endY = Math.max(this.boundingBoxSelection.startY, this.boundingBoxSelection.endY);
+    
+    let selectedCount = 0;
+    
+    this.boneHelpers.forEach(helper => {
+      // Convert 3D position to screen coordinates
+      const screenPosition = new THREE.Vector3();
+      helper.getWorldPosition(screenPosition);
+      screenPosition.project(this.camera);
+      
+      // Convert to screen pixel coordinates
+      const screenX = (screenPosition.x * 0.5 + 0.5) * rect.width;
+      const screenY = (screenPosition.y * -0.5 + 0.5) * rect.height;
+      
+      // Check if within bounding box
+      if (screenX >= startX && screenX <= endX && screenY >= startY && screenY <= endY) {
+        const boneName = helper.userData.boneName;
+        this.addBoneToSelection(boneName);
+        selectedCount++;
+      }
+    });
+    
+    console.log(`Selected ${selectedCount} bones within bounding box`);
+  }
+
+  /**
+   * Add bone to selection
+   */
+  addBoneToSelection(boneName) {
+    if (!this.boneHelpers) return;
+    
+    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+    if (helper) {
+      this.selectedBones.add(boneName);
+      helper.material.color.setHex(0x00ff00); // Green for selected
+      
+      console.log('Added bone to selection:', boneName);
+      this.emit('boneSelected', { boneName, helper, action: 'add' });
+    }
+  }
+
+  /**
+   * Remove bone from selection
+   */
+  removeBoneFromSelection(boneName) {
+    if (!this.boneHelpers) return;
+    
+    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+    if (helper) {
+      this.selectedBones.delete(boneName);
+      helper.material.color.setHex(0xff0000); // Red for unselected
+      
+      console.log('Removed bone from selection:', boneName);
+      this.emit('boneDeselected', { boneName, helper, action: 'remove' });
+    }
+  }
+
+  /**
+   * Deselect all bones
+   */
+  deselectAllBones() {
+    if (!this.boneHelpers) return;
+    
+    this.selectedBones.forEach(boneName => {
+      const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+      if (helper) {
+        helper.material.color.setHex(0xff0000); // Red for unselected
+      }
+    });
+    
+    this.selectedBones.clear();
+    console.log('Deselected all bones');
+    this.emit('allBonesDeselected');
+  }
+
+  /**
+   * Select a bone by name (legacy method for compatibility)
    */
   selectBone(boneName) {
     console.log('Attempting to select bone:', boneName);
     
-    // Deselect previous bone
+    // Clear previous single selection
     if (this.selectedBone) {
       this.deselectBone();
     }
     
-    // Find and highlight the selected bone
-    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
-    if (helper) {
-      // Change color to green for selected bone
-      helper.material.color.setHex(0x00ff00);
-      this.selectedBone = boneName;
-      
-      console.log('Bone selected successfully:', boneName);
-      
-      // Emit selection event
-      this.emit('boneSelected', { boneName, helper });
-    } else {
-      console.warn('Bone helper not found for:', boneName);
-    }
+    // Add to multi-selection
+    this.addBoneToSelection(boneName);
+    this.selectedBone = boneName;
+    
+    console.log('Bone selected successfully:', boneName);
   }
 
   /**
