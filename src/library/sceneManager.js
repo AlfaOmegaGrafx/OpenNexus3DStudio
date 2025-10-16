@@ -228,6 +228,12 @@ export class SceneManager {
 
       // Update materials based on render mode
       this.updateRenderMode(this.renderMode);
+      
+      // Force VRM material restoration if this is a VRM model
+      if (this.currentVRM) {
+        console.log('🎨 Forcing VRM material restoration...');
+        this.forceVRMMaterialRestoration();
+      }
 
       // Ensure model is properly positioned
       this.ensureModelOnGround();
@@ -673,6 +679,64 @@ export class SceneManager {
     material.needsUpdate = true;
     
     console.log(`🔧 VRM Material properties ensured for: ${material.type}`);
+  }
+  
+  /**
+   * Force VRM material restoration for all meshes
+   */
+  forceVRMMaterialRestoration() {
+    if (!this.currentModel) return;
+    
+    console.log('🎨 Forcing VRM material restoration...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Processing mesh: ${child.name}`);
+        
+        // Check if this is a VRM material
+        const isVRMMaterial = child.material.userData?.vrmMaterial || 
+                             child.material.userData?.isVRMMaterial ||
+                             child.material.type === 'VRMMaterial';
+        
+        if (isVRMMaterial) {
+          console.log(`🎨 Found VRM material on: ${child.name}`);
+          
+          // Force material update
+          child.material.needsUpdate = true;
+          
+          // Ensure all textures are properly updated
+          if (child.material.map) {
+            child.material.map.needsUpdate = true;
+            child.material.map.flipY = false;
+          }
+          if (child.material.normalMap) {
+            child.material.normalMap.needsUpdate = true;
+            child.material.normalMap.flipY = false;
+          }
+          if (child.material.roughnessMap) {
+            child.material.roughnessMap.needsUpdate = true;
+            child.material.roughnessMap.flipY = false;
+          }
+          if (child.material.metalnessMap) {
+            child.material.metalnessMap.needsUpdate = true;
+            child.material.metalnessMap.flipY = false;
+          }
+          if (child.material.emissiveMap) {
+            child.material.emissiveMap.needsUpdate = true;
+            child.material.emissiveMap.flipY = false;
+          }
+          
+          // Re-apply VRM material properties
+          this.ensureVRMMaterialProperties(child.material);
+          
+          console.log(`✅ VRM material restored for: ${child.name}`);
+        } else {
+          console.log(`⚠️ Non-VRM material found on: ${child.name} (${child.material.type})`);
+        }
+      }
+    });
+    
+    console.log('✅ VRM material restoration completed');
   }
 
   /**
@@ -1707,13 +1771,41 @@ export class SceneManager {
   storeOriginalMaterials() {
     if (!this.currentModel) return;
     
+    console.log('🔧 Storing original materials...');
+    
     this.currentModel.traverse((child) => {
       if (child.isMesh && !child.userData.originalMaterial) {
         // Store original material
         child.userData.originalMaterial = child.material.clone();
         child.userData.originalColor = child.material.color.clone();
+        
+        // Enhanced VRM material preservation
+        if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
+          console.log(`🎨 Preserving VRM material for: ${child.name}`);
+          child.userData.isVRMMaterial = true;
+          child.userData.originalVRMMaterial = true;
+          
+          // Store VRM-specific properties
+          if (child.material.map) {
+            child.userData.originalMap = child.material.map;
+          }
+          if (child.material.normalMap) {
+            child.userData.originalNormalMap = child.material.normalMap;
+          }
+          if (child.material.roughnessMap) {
+            child.userData.originalRoughnessMap = child.material.roughnessMap;
+          }
+          if (child.material.metalnessMap) {
+            child.userData.originalMetalnessMap = child.material.metalnessMap;
+          }
+          if (child.material.emissiveMap) {
+            child.userData.originalEmissiveMap = child.material.emissiveMap;
+          }
+        }
       }
     });
+    
+    console.log('✅ Original materials stored');
   }
 
   /**
@@ -1721,6 +1813,8 @@ export class SceneManager {
    */
   restoreOriginalMaterials() {
     if (!this.currentModel) return;
+    
+    console.log('🔧 Restoring original materials...');
     
     this.currentModel.traverse((child) => {
       if (child.isMesh && child.userData.originalMaterial) {
@@ -1731,8 +1825,43 @@ export class SceneManager {
         child.material.transparent = original.transparent;
         child.material.opacity = original.opacity;
         child.material.needsUpdate = true;
+        
+        // Enhanced VRM material restoration
+        if (child.userData.isVRMMaterial || child.userData.originalVRMMaterial) {
+          console.log(`🎨 Restoring VRM material for: ${child.name}`);
+          
+          // Restore VRM-specific textures
+          if (child.userData.originalMap) {
+            child.material.map = child.userData.originalMap;
+            child.material.map.needsUpdate = true;
+          }
+          if (child.userData.originalNormalMap) {
+            child.material.normalMap = child.userData.originalNormalMap;
+            child.material.normalMap.needsUpdate = true;
+          }
+          if (child.userData.originalRoughnessMap) {
+            child.material.roughnessMap = child.userData.originalRoughnessMap;
+            child.material.roughnessMap.needsUpdate = true;
+          }
+          if (child.userData.originalMetalnessMap) {
+            child.material.metalnessMap = child.userData.originalMetalnessMap;
+            child.material.metalnessMap.needsUpdate = true;
+          }
+          if (child.userData.originalEmissiveMap) {
+            child.material.emissiveMap = child.userData.originalEmissiveMap;
+            child.material.emissiveMap.needsUpdate = true;
+          }
+          
+          // Ensure material needs update
+          child.material.needsUpdate = true;
+          
+          // Re-apply VRM material properties
+          this.ensureVRMMaterialProperties(child.material);
+        }
       }
     });
+    
+    console.log('✅ Original materials restored');
   }
 
   /**
