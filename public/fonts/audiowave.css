@@ -1,9 +1,9 @@
-/* Audiowide font styling - matching main title size */
+/* Audiowide font styling - smaller to match sidebar width */
 .audiowave-text {
   font-family: "Audiowide", sans-serif;
   font-weight: 500;
   font-style: normal;
-  font-size: 1.6rem;
+  font-size: 1.2rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #ffffff;
