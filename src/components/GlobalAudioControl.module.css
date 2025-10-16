@@ -1,14 +1,14 @@
 .container {
   position: fixed;
-  top: 60px;
+  top: 45px;
   left: 20px;
   display: flex;
   align-items: center;
   gap: 10px;
   z-index: 1000;
   background: rgba(0, 0, 0, 0.7);
-  padding: 10px 15px;
-  border-radius: 25px;
+  padding: 8px 12px;
+  border-radius: 20px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -48,9 +48,9 @@
 }
 
 .volumeSlider {
-  width: 140px;
-  height: 6px;
-  border-radius: 3px;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
   background: rgba(255, 255, 255, 0.2);
   outline: none;
   cursor: pointer;
@@ -62,8 +62,8 @@
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: linear-gradient(135deg, #4eb0c0, #3a7484);
   cursor: pointer;
@@ -79,8 +79,8 @@
 }
 
 .volumeSlider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: linear-gradient(135deg, #4eb0c0, #3a7484);
   cursor: pointer;
