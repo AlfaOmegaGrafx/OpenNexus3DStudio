@@ -18,6 +18,21 @@
 }
 
 
+.title-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.main-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 2rem;

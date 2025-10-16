@@ -198,9 +198,10 @@ function AppContent() {
     <div className="app">
       <TaskProgressBar tasks={tasks} />
       <header className="app-header">
-        <h1>
-          Open3DStudio: <span className="audiowave-text">SPACE-TIME EDITION</span>
-        </h1>
+        <div className="title-container">
+          <h1 className="main-title">Open3DStudio</h1>
+          <div className="audiowave-text">SPACE-TIME EDITION</div>
+        </div>
         <div className="header-controls">
           <APIStatus 
             endpoint={apiEndpoint} 

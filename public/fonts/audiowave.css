@@ -1,19 +1,16 @@
-/* Audiowide font styling - flat and constrained */
+/* Audiowide font styling - flat and constrained for column layout */
 .audiowave-text {
   font-family: "Audiowide", sans-serif;
   font-weight: 400;
   font-style: normal;
-  font-size: 2rem;
+  font-size: 1.2rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #ffffff;
-  display: inline-block;
-  margin-left: 12px;
-  position: relative;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
+  margin: 0;
+  margin-top: 2px;
+  line-height: 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
