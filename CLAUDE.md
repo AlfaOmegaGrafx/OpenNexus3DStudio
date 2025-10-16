@@ -140,7 +140,7 @@ React contexts manage different application domains:
 - **Minting Capabilities**: Batch generation and minting for both Ethereum and Solana
 - **Metaplex Integration**: Solana NFT standard compliance and marketplace support
 - **Smart Contracts**: Integration with custom and standard NFT contracts
-- **Transaction Management**: Gas optimization and transaction monitoring
+- **Transaction Mae nagement**: Gas optimization and transaction monitoring
 - **Security**: Secure wallet connections and transaction signing
 
 #### Animation System
