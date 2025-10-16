@@ -1,8 +1,8 @@
 import React, { createContext, useEffect, useState } from "react"
 import * as THREE from "three"
 import useSound from "use-sound"
-import soundFileSpecs from '../../public/sound/sound-files.json';
-import soundUrl from '../../public/sound/sounds.mp3';
+import soundFileSpecs from '../sound/sound-files.json';
+import soundUrl from '../sound/sounds.mp3';
 
 export const SoundContext = createContext()
 
