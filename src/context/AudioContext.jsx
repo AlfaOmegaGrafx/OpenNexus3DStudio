@@ -1,45 +1,64 @@
 import React, {useState, createContext} from 'react';
 export const AudioContext = createContext();
-import bgm from "../../public/sound/background/cc_bgm_balanced.wav"
+import bgm from "../sound/background/Gravity_of_Time.mp3"
 
 export const AudioProvider = ({ children }) => {
-    const [isMute, setMute] = useState(false);
+    const [isMute, setMute] = useState(true);
+    const [volume, setVolume] = useState(0.5);
     const audioRef = React.useRef(null);
 
-    const enableAudio = () => {
-        setMute(false)
-        // append the background music to the body and play, using html
-        // audio element
-        const audio = audioRef.current;
-        audio.src = bgm
-        audio.loop = true
-        audio.volume = 0.0
-        audio.play()
-        // fade audio in over 5 seconds in 1/60th of a second intervals
-        let volume = 0.0
-        const seconds = 5.0
-        const interval = setInterval(() => {
-            volume = Math.max(volume + 1.0 / (10 * seconds * 60.0), 1.0)
-            if (volume >= 1.0) {
-                clearInterval(interval)
-            }
-            audio.volume = volume
+    const handleVolumeChange = (newVolume) => {
+        setVolume(newVolume);
+        if (!isMute && audioRef.current) {
+            audioRef.current.volume = newVolume;
+        }
+    };
 
-        }, 1000 / 60)
+    const enableAudio = () => {
+        setMute(false);
+        const audio = audioRef.current;
+        
+        // Reset audio to beginning
+        audio.src = bgm;
+        audio.currentTime = 0;
+        audio.volume = volume;
+        audio.loop = true; // Enable native looping
+        
+        // Start playing
+        audio.play().catch(error => {
+            console.error("Error playing audio:", error);
+        });
     }
 
     const disableAudio = () => {
-        setMute(true)
+        setMute(true);
         const audio = audioRef.current;
-        // pause audio
-        audio.pause()
+        
+        // Immediate mute
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 0;
     }
 
+    // Cleanup on unmount
+    React.useEffect(() => {
+        return () => {
+            const audio = audioRef.current;
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+        };
+    }, []);
 
     return (
         <AudioContext.Provider value={{
-            isMute, setMute,
-            enableAudio, disableAudio
+            isMute,
+            setMute,
+            volume,
+            setVolume: handleVolumeChange,
+            enableAudio,
+            disableAudio
         }}>
             <audio ref={audioRef} />
             {children}
