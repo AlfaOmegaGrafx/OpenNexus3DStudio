@@ -259,11 +259,108 @@ export class SceneManager {
    */
   async loadGLTF(source) {
     return new Promise((resolve, reject) => {
+      console.log('🔄 Starting GLTF/GLB model loading...');
+      console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
+      
+      const startTime = Date.now();
+      
       this.gltfLoader.load(
         source,
-        (gltf) => resolve(gltf.scene),
-        (progress) => this.emit('modelLoadingProgress', { progress }),
-        (error) => reject(error)
+        (gltf) => {
+          const loadTime = Date.now() - startTime;
+          console.log(`✅ GLTF/GLB loaded successfully in ${loadTime}ms`);
+          console.log('📊 GLTF Structure:', {
+            scene: !!gltf.scene,
+            scenes: gltf.scenes?.length || 0,
+            animations: gltf.animations?.length || 0,
+            cameras: gltf.cameras?.length || 0,
+            asset: gltf.asset,
+            userData: gltf.userData
+          });
+          
+          // Debug geometry detection
+          if (gltf.scene) {
+            let geometryCount = 0;
+            let materialCount = 0;
+            let textureCount = 0;
+            let meshCount = 0;
+            
+            gltf.scene.traverse((child) => {
+              if (child.isMesh) {
+                meshCount++;
+                console.log(`🔍 Mesh found: ${child.name}`, {
+                  geometry: child.geometry?.type,
+                  material: child.material?.type,
+                  position: child.position,
+                  visible: child.visible
+                });
+                
+                if (child.geometry) {
+                  geometryCount++;
+                  console.log(`📐 Geometry details:`, {
+                    type: child.geometry.type,
+                    vertices: child.geometry.attributes?.position?.count || 0,
+                    faces: child.geometry.index ? child.geometry.index.count / 3 : 0,
+                    hasNormals: !!child.geometry.attributes?.normal,
+                    hasUVs: !!child.geometry.attributes?.uv,
+                    hasColors: !!child.geometry.attributes?.color
+                  });
+                }
+                
+                if (child.material) {
+                  materialCount++;
+                  console.log(`🎨 Material details:`, {
+                    type: child.material.type,
+                    color: child.material.color,
+                    map: !!child.material.map,
+                    normalMap: !!child.material.normalMap,
+                    roughnessMap: !!child.material.roughnessMap,
+                    metalnessMap: !!child.material.metalnessMap,
+                    emissiveMap: !!child.material.emissiveMap
+                  });
+                  
+                  // Count textures
+                  if (child.material.map) textureCount++;
+                  if (child.material.normalMap) textureCount++;
+                  if (child.material.roughnessMap) textureCount++;
+                  if (child.material.metalnessMap) textureCount++;
+                  if (child.material.emissiveMap) textureCount++;
+                }
+              }
+            });
+            
+            console.log(`📈 GLTF/GLB Summary:`, {
+              meshes: meshCount,
+              geometries: geometryCount,
+              materials: materialCount,
+              textures: textureCount,
+              loadTime: `${loadTime}ms`
+            });
+            
+            if (meshCount === 0) {
+              console.warn('⚠️ No meshes found in GLTF/GLB model!');
+            }
+            if (geometryCount === 0) {
+              console.warn('⚠️ No geometries found in GLTF/GLB model!');
+            }
+          }
+          
+          resolve(gltf.scene);
+        },
+        (progress) => {
+          const percentComplete = (progress.loaded / progress.total) * 100;
+          console.log(`📊 GLTF/GLB loading progress: ${percentComplete.toFixed(1)}% (${progress.loaded}/${progress.total} bytes)`);
+          this.emit('modelLoadingProgress', { progress: percentComplete });
+        },
+        (error) => {
+          const loadTime = Date.now() - startTime;
+          console.error(`❌ GLTF/GLB loading failed after ${loadTime}ms:`, {
+            message: error.message,
+            source: source instanceof File ? source.name : source,
+            loadTime: `${loadTime}ms`
+          });
+          reject(error);
+        }
       );
     });
   }
@@ -287,39 +384,115 @@ export class SceneManager {
    */
   async loadFBX(source) {
     return new Promise((resolve, reject) => {
+      console.log('🔄 Starting FBX model loading...');
+      console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
+      
+      const startTime = Date.now();
+      
       this.fbxLoader.load(
         source,
         (fbx) => {
-          console.log('FBX loaded successfully:', fbx);
-          console.log('FBX children count:', fbx.children.length);
-          console.log('FBX type:', fbx.type);
-          console.log('FBX name:', fbx.name);
+          const loadTime = Date.now() - startTime;
+          console.log(`✅ FBX loaded successfully in ${loadTime}ms`);
+          console.log('📊 FBX Structure:', {
+            type: fbx.type,
+            name: fbx.name,
+            children: fbx.children.length,
+            animations: fbx.animations?.length || 0,
+            userData: fbx.userData
+          });
           
-          // Check if FBX has any geometry
+          // Debug geometry detection
+          let geometryCount = 0;
+          let materialCount = 0;
+          let textureCount = 0;
+          let meshCount = 0;
           let hasGeometry = false;
+          
           fbx.traverse((child) => {
-            if (child.geometry) {
-              hasGeometry = true;
-              console.log('Found geometry in child:', child.name, child.type);
+            if (child.isMesh) {
+              meshCount++;
+              console.log(`🔍 FBX Mesh found: ${child.name}`, {
+                geometry: child.geometry?.type,
+                material: child.material?.type,
+                position: child.position,
+                visible: child.visible
+              });
+              
+              if (child.geometry) {
+                hasGeometry = true;
+                geometryCount++;
+                console.log(`📐 FBX Geometry details:`, {
+                  type: child.geometry.type,
+                  vertices: child.geometry.attributes?.position?.count || 0,
+                  faces: child.geometry.index ? child.geometry.index.count / 3 : 0,
+                  hasNormals: !!child.geometry.attributes?.normal,
+                  hasUVs: !!child.geometry.attributes?.uv,
+                  hasColors: !!child.geometry.attributes?.color
+                });
+              }
+              
+              if (child.material) {
+                materialCount++;
+                console.log(`🎨 FBX Material details:`, {
+                  type: child.material.type,
+                  color: child.material.color,
+                  map: !!child.material.map,
+                  normalMap: !!child.material.normalMap,
+                  roughnessMap: !!child.material.roughnessMap,
+                  metalnessMap: !!child.material.metalnessMap,
+                  emissiveMap: !!child.material.emissiveMap
+                });
+                
+                // Count textures
+                if (child.material.map) textureCount++;
+                if (child.material.normalMap) textureCount++;
+                if (child.material.roughnessMap) textureCount++;
+                if (child.material.metalnessMap) textureCount++;
+                if (child.material.emissiveMap) textureCount++;
+              }
             }
           });
           
+          console.log(`📈 FBX Summary:`, {
+            meshes: meshCount,
+            geometries: geometryCount,
+            materials: materialCount,
+            textures: textureCount,
+            loadTime: `${loadTime}ms`
+          });
+          
           if (!hasGeometry) {
-            console.warn('FBX model has no geometry! Creating fallback geometry...');
-            
-            // Create a simple cube as fallback geometry
+            console.warn('⚠️ FBX model has no geometry! Creating fallback geometry...');
             const geometry = new THREE.BoxGeometry(1, 1, 1);
             const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
             const cube = new THREE.Mesh(geometry, material);
             cube.name = 'FallbackGeometry';
             fbx.add(cube);
+            console.log('✅ Fallback geometry added to FBX model');
+          }
+          
+          if (meshCount === 0) {
+            console.warn('⚠️ No meshes found in FBX model!');
+          }
+          if (geometryCount === 0) {
+            console.warn('⚠️ No geometries found in FBX model!');
           }
           
           resolve(fbx);
         },
-        (progress) => this.emit('modelLoadingProgress', { progress }),
+        (progress) => {
+          const percentComplete = (progress.loaded / progress.total) * 100;
+          console.log(`📊 FBX loading progress: ${percentComplete.toFixed(1)}% (${progress.loaded}/${progress.total} bytes)`);
+          this.emit('modelLoadingProgress', { progress: percentComplete });
+        },
         (error) => {
-          console.error('FBX loading error:', error);
+          const loadTime = Date.now() - startTime;
+          console.error(`❌ FBX loading failed after ${loadTime}ms:`, {
+            message: error.message,
+            source: source instanceof File ? source.name : source,
+            loadTime: `${loadTime}ms`
+          });
           reject(error);
         }
       );
@@ -331,6 +504,11 @@ export class SceneManager {
    */
   async loadVRM(source) {
     try {
+      console.log('🔄 Starting VRM model loading...');
+      console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
+      
+      const startTime = Date.now();
+      
       const vrm = await this.vrmLoader.loadVRM(source, {
         normalize: true,
         addDefaultMaterials: true,
@@ -338,17 +516,163 @@ export class SceneManager {
         setupBones: true
       });
       
+      const loadTime = Date.now() - startTime;
+      console.log(`✅ VRM loaded successfully in ${loadTime}ms`);
+      
       // Store the VRM object for blend shape access
       this.currentVRM = vrm;
+      
+      // Enhanced VRM debugging and texture/shader processing
+      if (vrm.scene) {
+        console.log('📊 VRM Structure:', {
+          type: vrm.scene.type,
+          name: vrm.scene.name,
+          children: vrm.scene.children.length,
+          userData: vrm.scene.userData
+        });
+        
+        // Debug VRM materials and textures
+        let geometryCount = 0;
+        let materialCount = 0;
+        let textureCount = 0;
+        let meshCount = 0;
+        let vrmMaterialCount = 0;
+        
+        vrm.scene.traverse((child) => {
+          if (child.isMesh) {
+            meshCount++;
+            console.log(`🔍 VRM Mesh found: ${child.name}`, {
+              geometry: child.geometry?.type,
+              material: child.material?.type,
+              position: child.position,
+              visible: child.visible
+            });
+            
+            if (child.geometry) {
+              geometryCount++;
+              console.log(`📐 VRM Geometry details:`, {
+                type: child.geometry.type,
+                vertices: child.geometry.attributes?.position?.count || 0,
+                faces: child.geometry.index ? child.geometry.index.count / 3 : 0,
+                hasNormals: !!child.geometry.attributes?.normal,
+                hasUVs: !!child.geometry.attributes?.uv,
+                hasColors: !!child.geometry.attributes?.color
+              });
+            }
+            
+            if (child.material) {
+              materialCount++;
+              
+              // Check if it's a VRM material
+              const isVRMMaterial = child.material.userData?.vrmMaterial || 
+                                   child.material.userData?.isVRMMaterial ||
+                                   child.material.type === 'VRMMaterial';
+              
+              if (isVRMMaterial) {
+                vrmMaterialCount++;
+                console.log(`🎨 VRM Material found: ${child.name}`, {
+                  type: child.material.type,
+                  color: child.material.color,
+                  map: !!child.material.map,
+                  normalMap: !!child.material.normalMap,
+                  roughnessMap: !!child.material.roughnessMap,
+                  metalnessMap: !!child.material.metalnessMap,
+                  emissiveMap: !!child.material.emissiveMap,
+                  isVRMMaterial: true
+                });
+                
+                // Ensure VRM materials are properly configured
+                this.ensureVRMMaterialProperties(child.material);
+              } else {
+                console.log(`🎨 Standard Material: ${child.name}`, {
+                  type: child.material.type,
+                  color: child.material.color,
+                  map: !!child.material.map,
+                  normalMap: !!child.material.normalMap,
+                  roughnessMap: !!child.material.roughnessMap,
+                  metalnessMap: !!child.material.metalnessMap,
+                  emissiveMap: !!child.material.emissiveMap
+                });
+              }
+              
+              // Count textures
+              if (child.material.map) textureCount++;
+              if (child.material.normalMap) textureCount++;
+              if (child.material.roughnessMap) textureCount++;
+              if (child.material.metalnessMap) textureCount++;
+              if (child.material.emissiveMap) textureCount++;
+            }
+          }
+        });
+        
+        console.log(`📈 VRM Summary:`, {
+          meshes: meshCount,
+          geometries: geometryCount,
+          materials: materialCount,
+          vrmMaterials: vrmMaterialCount,
+          textures: textureCount,
+          loadTime: `${loadTime}ms`
+        });
+        
+        if (vrmMaterialCount === 0) {
+          console.warn('⚠️ No VRM materials found! This may cause texture/shader issues.');
+        }
+        if (textureCount === 0) {
+          console.warn('⚠️ No textures found in VRM model!');
+        }
+      }
       
       // Return the VRM scene with VRM object attached
       const scene = vrm.scene;
       scene.userData.vrm = vrm;
       return scene;
     } catch (error) {
-      console.error('VRM loading failed:', error);
+      const loadTime = Date.now() - startTime;
+      console.error(`❌ VRM loading failed after ${loadTime}ms:`, {
+        message: error.message,
+        source: source instanceof File ? source.name : source,
+        loadTime: `${loadTime}ms`
+      });
       throw error;
     }
+  }
+  
+  /**
+   * Ensure VRM material properties are properly configured
+   */
+  ensureVRMMaterialProperties(material) {
+    if (!material) return;
+    
+    // Ensure material has proper VRM properties
+    if (!material.userData) {
+      material.userData = {};
+    }
+    
+    // Mark as VRM material
+    material.userData.vrmMaterial = true;
+    material.userData.isVRMMaterial = true;
+    
+    // Ensure material is properly configured for rendering
+    if (material.map && !material.map.needsUpdate) {
+      material.map.needsUpdate = true;
+    }
+    if (material.normalMap && !material.normalMap.needsUpdate) {
+      material.normalMap.needsUpdate = true;
+    }
+    if (material.roughnessMap && !material.roughnessMap.needsUpdate) {
+      material.roughnessMap.needsUpdate = true;
+    }
+    if (material.metalnessMap && !material.metalnessMap.needsUpdate) {
+      material.metalnessMap.needsUpdate = true;
+    }
+    if (material.emissiveMap && !material.emissiveMap.needsUpdate) {
+      material.emissiveMap.needsUpdate = true;
+    }
+    
+    // Ensure material needs update
+    material.needsUpdate = true;
+    
+    console.log(`🔧 VRM Material properties ensured for: ${material.type}`);
   }
 
   /**
