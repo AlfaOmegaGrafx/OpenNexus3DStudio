@@ -1,6 +1,6 @@
 .container {
   position: fixed;
-  top: 20px;
+  top: 60px;
   left: 20px;
   display: flex;
   align-items: center;
@@ -48,7 +48,7 @@
 }
 
 .volumeSlider {
-  width: 120px;
+  width: 140px;
   height: 6px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.2);
