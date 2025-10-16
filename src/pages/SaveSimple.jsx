@@ -6,7 +6,7 @@ import downloadIcon from '/ui/download.svg';
 import backButtonIcon from '/ui/backButton_white.png';
 import mintIcon from '/ui/mint.svg';
 
-const SaveSimple = () => {
+const SaveSimple = ({ onNavigate }) => {
   const [downloadOptions, setDownloadOptions] = useState({
     downloadVRM: true,
     downloadVRMPreview: true,
@@ -124,30 +124,36 @@ const SaveSimple = () => {
         </label>
       </div>
 
-      <div className={styles.buttonContainer}>
-        <button className={styles.buttonLeft}>
-          <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
-          Back
-        </button>
-        <button 
-          className={styles.downloadButton}
-          onClick={() => handleDownload('GLB')}
-        >
-          <img src={downloadIcon} alt="Download" className={styles.buttonIcon} />
-          GLB
-        </button>
-        <button 
-          className={styles.downloadButton}
-          onClick={() => handleDownload('VRM')}
-        >
-          <img src={downloadIcon} alt="Download" className={styles.buttonIcon} />
-          VRM
-        </button>
-        <button className={styles.buttonRight}>
-          <img src={mintIcon} alt="Mint" className={styles.buttonIcon} />
-          Mint
-        </button>
-      </div>
+              <div className={styles.buttonContainer}>
+                <button 
+                  className={styles.buttonLeft}
+                  onClick={() => onNavigate && onNavigate('back')}
+                >
+                  <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
+                  Back
+                </button>
+                <button 
+                  className={styles.downloadButton}
+                  onClick={() => handleDownload('GLB')}
+                >
+                  <img src={downloadIcon} alt="Download" className={styles.buttonIcon} />
+                  GLB
+                </button>
+                <button 
+                  className={styles.downloadButton}
+                  onClick={() => handleDownload('VRM')}
+                >
+                  <img src={downloadIcon} alt="Download" className={styles.buttonIcon} />
+                  VRM
+                </button>
+                <button 
+                  className={styles.buttonRight}
+                  onClick={() => onNavigate && onNavigate('next')}
+                >
+                  <img src={mintIcon} alt="Mint" className={styles.buttonIcon} />
+                  Mint
+                </button>
+              </div>
     </div>
   );
 };

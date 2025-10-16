@@ -28,6 +28,22 @@ function AppContent() {
   const [currentPanel, setCurrentPanel] = useState('none'); // Panel state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   
+  // CharacterStudio menu cycling
+  const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
+  const [currentMenuIndex, setCurrentMenuIndex] = useState(0);
+  
+  const handleCharacterStudioNavigation = (direction) => {
+    if (direction === 'next') {
+      const nextIndex = (currentMenuIndex + 1) % characterStudioMenus.length;
+      setCurrentMenuIndex(nextIndex);
+      setCurrentPanel(characterStudioMenus[nextIndex]);
+    } else if (direction === 'back') {
+      const prevIndex = currentMenuIndex === 0 ? characterStudioMenus.length - 1 : currentMenuIndex - 1;
+      setCurrentMenuIndex(prevIndex);
+      setCurrentPanel(characterStudioMenus[prevIndex]);
+    }
+  };
+  
   // Track render mode states
   const [renderModeStates, setRenderModeStates] = useState({
     solid: true, // Start with solid mode active
@@ -439,28 +455,56 @@ function AppContent() {
             <div className="header-controls-group">
               <button 
                 className={`header-btn ${currentPanel === 'appearance' ? 'active' : ''}`}
-                onClick={() => setCurrentPanel(currentPanel === 'appearance' ? 'none' : 'appearance')}
+                onClick={() => {
+                  if (currentPanel === 'appearance') {
+                    setCurrentPanel('none');
+                  } else {
+                    setCurrentPanel('appearance');
+                    setCurrentMenuIndex(0);
+                  }
+                }}
                 title="Character Appearance"
               >
                 👤 Appearance
               </button>
               <button 
                 className={`header-btn ${currentPanel === 'save' ? 'active' : ''}`}
-                onClick={() => setCurrentPanel(currentPanel === 'save' ? 'none' : 'save')}
+                onClick={() => {
+                  if (currentPanel === 'save') {
+                    setCurrentPanel('none');
+                  } else {
+                    setCurrentPanel('save');
+                    setCurrentMenuIndex(1);
+                  }
+                }}
                 title="Save Character"
               >
                 💾 Save
               </button>
               <button 
                 className={`header-btn ${currentPanel === 'mint' ? 'active' : ''}`}
-                onClick={() => setCurrentPanel(currentPanel === 'mint' ? 'none' : 'mint')}
+                onClick={() => {
+                  if (currentPanel === 'mint') {
+                    setCurrentPanel('none');
+                  } else {
+                    setCurrentPanel('mint');
+                    setCurrentMenuIndex(2);
+                  }
+                }}
                 title="Mint Character"
               >
                 🪙 Mint
               </button>
               <button 
                 className={`header-btn ${currentPanel === 'load' ? 'active' : ''}`}
-                onClick={() => setCurrentPanel(currentPanel === 'load' ? 'none' : 'load')}
+                onClick={() => {
+                  if (currentPanel === 'load') {
+                    setCurrentPanel('none');
+                  } else {
+                    setCurrentPanel('load');
+                    setCurrentMenuIndex(3);
+                  }
+                }}
                 title="Load Character"
               >
                 📁 Load
@@ -500,39 +544,51 @@ function AppContent() {
             </div>
           </button>
 
-          {/* Collapsed Sidebar Icons */}
-          {sidebarCollapsed && (
-            <div className="collapsed-sidebar-icons">
-              <button 
-                className="sidebar-icon"
-                onClick={() => setCurrentPanel('appearance')}
-                title="Character Appearance"
-              >
-                👤
-              </button>
-              <button 
-                className="sidebar-icon"
-                onClick={() => setCurrentPanel('save')}
-                title="Save Character"
-              >
-                💾
-              </button>
-              <button 
-                className="sidebar-icon"
-                onClick={() => setCurrentPanel('mint')}
-                title="Mint Character"
-              >
-                🪙
-              </button>
-              <button 
-                className="sidebar-icon"
-                onClick={() => setCurrentPanel('load')}
-                title="Load Character"
-              >
-                📁
-              </button>
-            </div>
-          )}
+            {/* Collapsed Sidebar Icons */}
+            {sidebarCollapsed && (
+              <div className="collapsed-sidebar-icons">
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    setCurrentPanel('appearance');
+                    setCurrentMenuIndex(0);
+                  }}
+                  title="Character Appearance"
+                >
+                  👤
+                </button>
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    setCurrentPanel('save');
+                    setCurrentMenuIndex(1);
+                  }}
+                  title="Save Character"
+                >
+                  💾
+                </button>
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    setCurrentPanel('mint');
+                    setCurrentMenuIndex(2);
+                  }}
+                  title="Mint Character"
+                >
+                  🪙
+                </button>
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    setCurrentPanel('load');
+                    setCurrentMenuIndex(3);
+                  }}
+                  title="Load Character"
+                >
+                  📁
+                </button>
+              </div>
+            )}
 
           {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
@@ -605,12 +661,12 @@ function AppContent() {
                 ✕
               </button>
             </div>
-            <div className="panel-content">
-              {currentPanel === 'appearance' && <AppearanceSimple />}
-              {currentPanel === 'save' && <SaveSimple />}
-              {currentPanel === 'mint' && <MintSimple />}
-              {currentPanel === 'load' && <LoadSimple />}
-            </div>
+              <div className="panel-content">
+                {currentPanel === 'appearance' && <AppearanceSimple onNavigate={handleCharacterStudioNavigation} />}
+                {currentPanel === 'save' && <SaveSimple onNavigate={handleCharacterStudioNavigation} />}
+                {currentPanel === 'mint' && <MintSimple onNavigate={handleCharacterStudioNavigation} />}
+                {currentPanel === 'load' && <LoadSimple onNavigate={handleCharacterStudioNavigation} />}
+              </div>
           </div>
         )}
       </div>
