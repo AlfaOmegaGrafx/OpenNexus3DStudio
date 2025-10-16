@@ -65,7 +65,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #08ea9f, #009564);
+  background: linear-gradient(135deg, #4eb0c0, #3a7484);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
@@ -73,14 +73,14 @@
 
 .volumeSlider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
-  box-shadow: 0 4px 12px rgba(8, 234, 159, 0.4);
+  box-shadow: 0 4px 12px rgba(78, 176, 192, 0.4);
 }
 
 .volumeSlider::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #08ea9f, #009564);
+  background: linear-gradient(135deg, #4eb0c0, #3a7484);
   cursor: pointer;
   border: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
@@ -89,7 +89,7 @@
 
 .volumeSlider::-moz-range-thumb:hover {
   transform: scale(1.2);
-  box-shadow: 0 4px 12px rgba(8, 234, 159, 0.4);
+  box-shadow: 0 4px 12px rgba(78, 176, 192, 0.4);
 }
 
 /* Progress bar effect */
@@ -100,7 +100,7 @@
   left: 0;
   height: 100%;
   width: var(--volume-percentage, 50%);
-  background: linear-gradient(90deg, #08ea9f, #009564);
+  background: linear-gradient(90deg, #4eb0c0, #3a7484);
   border-radius: 3px;
   pointer-events: none;
   transition: width 0.1s ease;
