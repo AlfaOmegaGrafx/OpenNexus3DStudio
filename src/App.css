@@ -21,13 +21,13 @@
 .title-container {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 8px;
+  gap: 1px;
+  margin-bottom: 4px;
 }
 
 .main-title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.2rem;
   font-weight: 600;
   color: #ffffff;
   line-height: 1.1;
