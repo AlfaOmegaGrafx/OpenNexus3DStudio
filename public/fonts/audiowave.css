@@ -1,25 +1,23 @@
 /* Audiowave-style font simulation using CSS */
 .audiowave-text {
   font-family: 'Courier New', 'Monaco', 'Lucida Console', monospace;
-  font-weight: 900;
-  font-size: 1.2em;
+  font-weight: 700;
+  font-size: 1.1em;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.1em;
   color: #4eb0c0;
   text-shadow: 
-    2px 2px 0px #3a7484,
-    4px 4px 0px #2c5a66,
-    6px 6px 0px #1e4048,
-    8px 8px 0px #0f2024;
+    1px 1px 0px #3a7484,
+    2px 2px 0px #2c5a66;
   display: inline-block;
-  transform: perspective(500px) rotateX(15deg) scale(1.1);
+  transform: perspective(300px) rotateX(8deg) scale(1.05);
   margin-left: 20px;
   position: relative;
   background: linear-gradient(45deg, #4eb0c0, #3a7484);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(78, 176, 192, 0.6));
+  filter: drop-shadow(0 0 4px rgba(78, 176, 192, 0.3));
 }
 
 .audiowave-text::before {
@@ -34,6 +32,6 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   z-index: -1;
-  transform: translate(2px, 2px);
-  opacity: 0.7;
+  transform: translate(1px, 1px);
+  opacity: 0.5;
 }
