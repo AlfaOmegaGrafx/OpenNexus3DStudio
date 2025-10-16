@@ -1,16 +1,15 @@
 .container {
   position: fixed;
-  top: 100px;
+  top: 120px;
   left: 20px;
   display: flex;
   align-items: center;
   gap: 8px;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 6px 10px;
+  background: #1a1a1a;
+  padding: 8px 12px;
   border-radius: 15px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #333;
 }
 
 .audioButton {
