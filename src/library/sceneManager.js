@@ -20,21 +20,21 @@ export class SceneManager {
     this.controls = null;
     this.currentModel = null;
     this.renderMode = 'solid';
-    this.isInitialized = false;
-    this.selectedBoneName = null;
-    
-    // Multi-selection support
-    this.selectedBones = new Set();
-    this.boundingBoxSelection = {
-      isActive: false,
-      startX: 0,
-      startY: 0,
-      endX: 0,
-      endY: 0,
-      boxElement: null
-    };
-    
-    // Loaders
+      this.isInitialized = false;
+      this.selectedBoneName = null;
+      
+      // Multi-selection support
+      this.selectedBones = new Set();
+      this.boundingBoxSelection = {
+        isActive: false,
+        startX: 0,
+        startY: 0,
+        endX: 0,
+        endY: 0,
+        boxElement: null
+      };
+      
+      // Loaders
     this.gltfLoader = new GLTFLoader();
     this.objLoader = new OBJLoader();
     this.fbxLoader = new FBXLoader();
@@ -1272,6 +1272,9 @@ export class SceneManager {
       } else {
         console.log('Bones found, skipping fallback visualization');
       }
+      
+      // Setup mouse interaction for skeleton selection
+      this.setupSkeletonMouseInteraction();
     } catch (error) {
       console.error('Error in createBoneVisualization:', error);
       // Clear any partial bone visualization on error
@@ -1504,12 +1507,51 @@ export class SceneManager {
         this.boneConnections = [];
       }
       
-      // Clear selection state
-      this.selectedBone = null;
-    } catch (error) {
-      console.warn('Error in clearBoneVisualization:', error);
+        // Clear selection state
+        this.selectedBone = null;
+        this.selectedBones.clear();
+        
+        // Clean up mouse interaction
+        this.cleanupSkeletonMouseInteraction();
+      } catch (error) {
+        console.warn('Error in clearBoneVisualization:', error);
+      }
     }
-  }
+
+    /**
+     * Clean up mouse interaction for skeleton selection
+     */
+    cleanupSkeletonMouseInteraction() {
+      if (!this.container) return;
+      
+      // Remove event listeners
+      if (this.skeletonClickHandler) {
+        this.container.removeEventListener('click', this.skeletonClickHandler);
+        this.skeletonClickHandler = null;
+      }
+      if (this.skeletonRightClickHandler) {
+        this.container.removeEventListener('contextmenu', this.skeletonRightClickHandler);
+        this.skeletonRightClickHandler = null;
+      }
+      if (this.skeletonMouseDownHandler) {
+        this.container.removeEventListener('mousedown', this.skeletonMouseDownHandler);
+        this.skeletonMouseDownHandler = null;
+      }
+      if (this.skeletonMouseMoveHandler) {
+        this.container.removeEventListener('mousemove', this.skeletonMouseMoveHandler);
+        this.skeletonMouseMoveHandler = null;
+      }
+      if (this.skeletonMouseUpHandler) {
+        this.container.removeEventListener('mouseup', this.skeletonMouseUpHandler);
+        this.skeletonMouseUpHandler = null;
+      }
+      
+      // Clean up bounding box selection
+      this.boundingBoxSelection.isActive = false;
+      this.removeBoundingBoxElement();
+      
+      console.log('Skeleton mouse interaction cleanup complete');
+    }
 
   /**
    * Setup mouse interaction for skeleton selection
@@ -1580,9 +1622,6 @@ export class SceneManager {
       return;
     }
     
-    // Skip if right-click (handled separately)
-    if (event.button === 2) return;
-    
     const rect = this.container.getBoundingClientRect();
     const mouse = new THREE.Vector2();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1608,6 +1647,9 @@ export class SceneManager {
       } else {
         this.addBoneToSelection(boneName);
       }
+    } else {
+      // Click outside model: deselect all
+      this.deselectAllBones();
     }
   }
 
@@ -1661,9 +1703,8 @@ export class SceneManager {
   handleSkeletonMouseDown(event) {
     if (this.renderMode !== 'skeleton') return;
     
-    // Start bounding box selection on right-click drag
-    if (event.button === 2) {
-      event.preventDefault();
+    // Start bounding box selection on left-click drag
+    if (event.button === 0) {
       this.startBoundingBoxSelection(event);
     }
   }
@@ -1685,7 +1726,7 @@ export class SceneManager {
   handleSkeletonMouseUp(event) {
     if (this.renderMode !== 'skeleton') return;
     
-    if (this.boundingBoxSelection.isActive && event.button === 2) {
+    if (this.boundingBoxSelection.isActive && event.button === 0) {
       this.finishBoundingBoxSelection(event);
     }
   }
