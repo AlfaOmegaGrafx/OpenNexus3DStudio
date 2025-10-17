@@ -1,4 +1,4 @@
-/* Open3DStudio Theme Styles */
+/* Open3DStudio Blue Theme Styles */
 .loadPanel {
   padding: 20px;
   height: 100%;
@@ -7,6 +7,8 @@
   color: #ffffff;
   display: flex;
   flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #555;
 }
 
 .panelHeader {
@@ -15,13 +17,24 @@
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 15px;
-  border-bottom: 1px solid #555;
+  border-bottom: 2px solid #007acc;
+  position: relative;
+}
+
+.panelHeader::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #007acc 50%, transparent 100%);
 }
 
 .panelHeader h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #ccc;
+  color: #007acc;
   font-weight: 600;
 }
 
@@ -33,33 +46,122 @@
 .urlLoad {
   margin-bottom: 20px;
   padding: 15px;
-  background: #3a3a3a;
+  background: #2a2a2a;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.fileUpload:hover,
+.urlLoad:hover {
+  border-color: #007acc;
+  box-shadow: 0 2px 8px rgba(0, 122, 204, 0.1);
 }
 
 .fileUpload h3,
 .urlLoad h3 {
   margin-bottom: 10px;
-  color: #ccc;
+  color: #007acc;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionIcon {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(204deg) brightness(104%) contrast(97%);
+}
+
+.buttonIcon {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(1);
+}
+
+.buttonContainer .buttonLeft {
+    float: left;
+    padding: 12px 24px;
+    background: #3a3a3a;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 120px;
+}
+
+.buttonContainer .buttonLeft:hover {
+    background: #4a4a4a;
+    border-color: #666;
+    color: #fff;
+}
+
+.buttonContainer .buttonLeft:active {
+    background: #007acc;
+    border-color: #007acc;
+    color: white;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.buttonContainer .buttonRight {
+    float: Right;
+    padding: 12px 24px;
+    background: #007acc;
+    color: white;
+    border: 1px solid #007acc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 120px;
+    box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+}
+
+.buttonContainer .buttonRight:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+    color: #fff;
+    box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+    transform: translateY(-1px);
+}
+
+.buttonContainer .buttonRight:active {
+    background: #0056b3;
+    border-color: #0056b3;
+    color: white;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
 .fileInput {
   width: 100%;
-  padding: 8px;
+  padding: 12px;
   background: #3a3a3a;
   color: #ccc;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-size: 14px;
 }
 
 .fileInput:hover {
   background: #4a4a4a;
-  border-color: #666;
+  border-color: #007acc;
   color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+}
+
+.fileInput:focus {
+  outline: none;
+  border-color: #007acc;
+  background: #4a4a4a;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
 .selectedFile {
@@ -76,19 +178,24 @@
 }
 
 .urlButton {
-  padding: 8px 16px;
-  background: #3a3a3a;
-  color: #ccc;
-  border: 1px solid #555;
-  border-radius: 4px;
+  padding: 12px 24px;
+  background: #007acc;
+  color: white;
+  border: 1px solid #007acc;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
 }
 
 .urlButton:hover {
-  background: #4a4a4a;
-  border-color: #666;
+  background: #0056b3;
+  border-color: #0056b3;
   color: #fff;
+  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+  transform: translateY(-1px);
 }
 
 .loadButton {
@@ -96,25 +203,32 @@
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: #3a3a3a;
-  color: #ccc;
-  border: 1px solid #555;
-  border-radius: 4px;
+  background: #007acc;
+  color: white;
+  border: 1px solid #007acc;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
 }
 
 .loadButton:hover {
-  background: #4a4a4a;
-  border-color: #666;
+  background: #0056b3;
+  border-color: #0056b3;
   color: #fff;
+  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+  transform: translateY(-1px);
 }
 
 .loadButton:disabled {
   background: #666;
+  border-color: #666;
   cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .loadingIcon {
@@ -131,14 +245,20 @@
 .supportedFormats {
   margin-top: 20px;
   padding: 15px;
-  background: #3a3a3a;
+  background: #2a2a2a;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.supportedFormats:hover {
+  border-color: #007acc;
+  box-shadow: 0 2px 8px rgba(0, 122, 204, 0.1);
 }
 
 .supportedFormats h3 {
   margin-bottom: 10px;
-  color: #ccc;
+  color: #007acc;
   font-weight: 600;
 }
 
@@ -191,4 +311,282 @@
   border-color: #007acc;
   color: white;
   box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+/* Character Card Styles */
+.container {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a1a;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #555;
+}
+
+.sectionTitle {
+  font-size: 1.5rem;
+  color: #007acc;
+  font-weight: 600;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #007acc;
+  position: relative;
+}
+
+.sectionTitle::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #007acc 50%, transparent 100%);
+}
+
+.walletSection {
+  margin-bottom: 20px;
+}
+
+.walletButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  min-width: 200px;
+}
+
+.walletButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.walletButton.connected {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+}
+
+.walletIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.charactersSection {
+  margin-bottom: 20px;
+}
+
+.charactersSection h3 {
+  color: #007acc;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.charactersGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.characterCard {
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.characterCard:hover {
+  border-color: #007acc;
+  box-shadow: 0 2px 8px rgba(0, 122, 204, 0.1);
+  transform: translateY(-2px);
+}
+
+.characterCard.selected {
+  border-color: #007acc;
+  background: #3a3a3a;
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.2);
+}
+
+.characterThumbnail {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #555;
+}
+
+.characterThumbnail img {
+  width: 40px;
+  height: 40px;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(204deg) brightness(104%) contrast(97%);
+}
+
+.characterInfo h4 {
+  margin: 0 0 8px 0;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.rarity {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.rarity.common {
+  background: #666;
+  color: #fff;
+}
+
+.rarity.rare {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.rarity.epic {
+  background: #9b59b6;
+  color: #fff;
+}
+
+.rarity.legendary {
+  background: #f39c12;
+  color: #fff;
+}
+
+.traitIcons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.traitIcon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a1a;
+  border-radius: 4px;
+  border: 1px solid #555;
+  transition: all 0.2s ease;
+}
+
+.traitIcon:hover {
+  border-color: #007acc;
+  background: #2a2a2a;
+}
+
+.traitIcon img {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(204deg) brightness(104%) contrast(97%);
+}
+
+.characterDetails {
+  margin-bottom: 20px;
+}
+
+.characterDetails h3 {
+  color: #007acc;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.detailsCard {
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.detailsCard img {
+  width: 80px;
+  height: 80px;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(204deg) brightness(104%) contrast(97%);
+}
+
+.detailsCard h4 {
+  margin: 0 0 8px 0;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.detailsCard p {
+  margin: 0 0 15px 0;
+  color: #ccc;
+}
+
+.traitsList h5 {
+  color: #007acc;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.traitItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.traitItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  border: 1px solid #555;
+}
+
+.traitIconSmall {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(204deg) brightness(104%) contrast(97%);
+}
+
+.traitLabel {
+  color: #007acc;
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 60px;
+}
+
+.traitValue {
+  color: #ccc;
+  font-size: 12px;
+  flex: 1;
 }

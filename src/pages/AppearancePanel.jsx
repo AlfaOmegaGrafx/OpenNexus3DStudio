@@ -6,15 +6,15 @@ import { LanguageContext } from "../context/LanguageContext";
 import styles from "./Appearance.module.css";
 import "./PanelStyles.css";
 
-// Import loot-assets icons
-import bodyIcon from "/loot-assets/loot/icons/BODY.svg";
-import chestIcon from "/loot-assets/loot/icons/CHEST.svg";
-import handsIcon from "/loot-assets/loot/icons/HANDS.svg";
-import headIcon from "/loot-assets/loot/icons/HEAD.svg";
-import neckIcon from "/loot-assets/loot/icons/NECK.svg";
-import shoesIcon from "/loot-assets/loot/icons/SHOES.svg";
-import waistIcon from "/loot-assets/loot/icons/WAIST.svg";
-import weaponIcon from "/loot-assets/loot/icons/WEAPON.svg";
+// Import loot-assets icons (using existing project images)
+import bodyIcon from "/src/images/t-shirt.png";
+import chestIcon from "/src/images/t-shirt.png";
+import handsIcon from "/src/images/t-shirt.png";
+import headIcon from "/src/images/t-shirt.png";
+import neckIcon from "/src/images/t-shirt.png";
+import shoesIcon from "/src/images/t-shirt.png";
+import waistIcon from "/src/images/t-shirt.png";
+import weaponIcon from "/src/images/t-shirt.png";
 
 function AppearancePanel({ onNavigate }) {
   const { characterManager } = useContext(SceneContext);

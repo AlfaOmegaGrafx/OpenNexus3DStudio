@@ -7,6 +7,11 @@ import { SoundContext } from "../context/SoundContext"
 import { AudioContext } from "../context/AudioContext"
 import { mintAsset } from "../library/mint-utils"
 
+// Import loot-assets icons
+import specialIcon from "/loot-assets/loot/icons/Special.svg";
+import sigilIcon from "/loot-assets/loot/icons/SIGIL.svg";
+import typeIcon from "/loot-assets/loot/icons/TYPE.svg";
+
 function MintComponent({ onNavigate }) {
   const { model, avatar } = React.useContext(SceneContext)
   const { setViewMode } = React.useContext(ViewContext)
@@ -52,29 +57,24 @@ function MintComponent({ onNavigate }) {
       <div className={styles.mintContainer}>
         <MenuTitle />
         <div className={styles.mintButtonContainer}>
-          <CustomButton
-            size={16}
-            theme="light"
-            icon="polygon"
-            text={minting ? "Minting...":"Open Edition"}
-            className={styles.mintButton}
-            disabled = {minting}
-            onClick= {Mint}
-            minWidth = {220}
-          />
+          <button
+            className={`${styles.mintButton} ${!minting ? styles.active : ''}`}
+            onClick={Mint}
+            disabled={minting}
+          >
+            <img src={specialIcon} alt="Special" className={styles.buttonIcon} />
+            {minting ? 'Minting...' : 'Open Edition'}
+          </button>
 
           <div className={styles.divider}></div>
 
-          <CustomButton
-            size={16}
-            theme="light"
-            icon="tokens"
-            text="Genesis Edition"
+          <button
             className={styles.mintButton}
-            disabled = {true}
-            minWidth = {220}
-            // onClick= {Mint}
-          />
+            disabled={true}
+          >
+            <img src={sigilIcon} alt="Sigil" className={styles.buttonIcon} />
+            Genesis Edition
+          </button>
           {/* Genesis pass holders only */}
           <span className={styles.genesisText}>(<span className={styles.required}>Coming Soon!</span>)</span>
           

@@ -10,6 +10,10 @@ import "./PanelStyles.css";
 import downloadIcon from "/ui/download.svg";
 import backButtonIcon from "/ui/backButton_white.png";
 import mintIcon from "/ui/mint.svg";
+// Import loot-assets icons
+import saveIcon from "/loot-assets/loot/icons/CHEST.svg";
+import fileIcon from "/loot-assets/loot/icons/TYPE.svg";
+import formatIcon from "/loot-assets/loot/icons/Special.svg";
 
 function SavePanel({ onNavigate }) {
   const { characterManager, model } = useContext(SceneContext);
@@ -63,7 +67,10 @@ function SavePanel({ onNavigate }) {
 
       <div className={styles.saveOptions}>
         <div className={styles.optionGroup}>
-          <label>File Name:</label>
+          <label>
+            <img src={fileIcon} alt="File" className={styles.labelIcon} />
+            File Name:
+          </label>
           <input
             type="text"
             value={fileName}
@@ -73,7 +80,10 @@ function SavePanel({ onNavigate }) {
         </div>
 
         <div className={styles.optionGroup}>
-          <label>Format:</label>
+          <label>
+            <img src={formatIcon} alt="Format" className={styles.labelIcon} />
+            Format:
+          </label>
           <select
             value={saveFormat}
             onChange={(e) => setSaveFormat(e.target.value)}
@@ -90,7 +100,7 @@ function SavePanel({ onNavigate }) {
             disabled={isSaving}
             className={styles.saveButton}
           >
-            <img src={downloadIcon} alt="Save" className={styles.saveIcon} />
+            <img src={saveIcon} alt="Save" className={styles.saveIcon} />
             {isSaving ? 'Saving...' : 'Save Character'}
           </button>
         </div>

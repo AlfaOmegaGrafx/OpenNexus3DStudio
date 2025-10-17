@@ -239,7 +239,7 @@ function AppContent() {
         </div>
         <div className="header-controls">
           {/* Audio Controls */}
-          <div className="header-section">
+          <div className="header-section audio-section">
             <div className="header-section-title">Audio</div>
             <div className="header-controls-group">
               <GlobalAudioControl />
@@ -247,7 +247,7 @@ function AppContent() {
           </div>
 
           {/* File Operations */}
-          <div className="header-section">
+          <div className="header-section two-button-section">
             <div className="header-section-title">File</div>
             <div className="header-controls-group">
               <button 
@@ -274,7 +274,7 @@ function AppContent() {
           </div>
 
           {/* AI Tasks */}
-          <div className="header-section">
+          <div className="header-section two-button-section">
             <div className="header-section-title">AI</div>
             <div className="header-controls-group">
               <button 
@@ -312,7 +312,7 @@ function AppContent() {
           </div>
 
           {/* Render Modes */}
-          <div className="header-section">
+          <div className="header-section three-button-section">
             <div className="header-section-title">Render</div>
             <div className="header-controls-group">
               <button 
@@ -424,7 +424,7 @@ function AppContent() {
           </div>
 
           {/* Task Status */}
-          <div className="header-section">
+          <div className="header-section single-button-section">
             <div className="header-section-title">Tasks</div>
             <div className="header-controls-group">
               <div className="task-status-compact">
@@ -457,12 +457,12 @@ function AppContent() {
             </div>
           </div>
 
-          {/* CharacterStudio Panels */}
-          <div className="header-section">
+          {/* CharacterStudio Panels - Moved to end */}
+          <div className="header-section four-button-section">
             <div className="header-section-title">Studio</div>
-            <div className="header-controls-group">
+            <div className="header-controls-group studio-controls">
               <button 
-                className={`header-btn ${currentPanel === 'appearance' ? 'active' : ''}`}
+                className={`header-btn studio-btn ${currentPanel === 'appearance' ? 'active' : ''}`}
                 onClick={() => {
                   setCurrentPanel('appearance');
                   setCurrentMenuIndex(0);
@@ -470,10 +470,10 @@ function AppContent() {
                 }}
                 title="Character Appearance"
               >
-                👤 Appearance
+                👤
               </button>
               <button 
-                className={`header-btn ${currentPanel === 'save' ? 'active' : ''}`}
+                className={`header-btn studio-btn ${currentPanel === 'save' ? 'active' : ''}`}
                 onClick={() => {
                   setCurrentPanel('save');
                   setCurrentMenuIndex(1);
@@ -481,10 +481,10 @@ function AppContent() {
                 }}
                 title="Save Character"
               >
-                💾 Save
+                💾
               </button>
               <button 
-                className={`header-btn ${currentPanel === 'mint' ? 'active' : ''}`}
+                className={`header-btn studio-btn ${currentPanel === 'mint' ? 'active' : ''}`}
                 onClick={() => {
                   setCurrentPanel('mint');
                   setCurrentMenuIndex(2);
@@ -492,10 +492,10 @@ function AppContent() {
                 }}
                 title="Mint Character"
               >
-                🪙 Mint
+                🪙
               </button>
               <button 
-                className={`header-btn ${currentPanel === 'load' ? 'active' : ''}`}
+                className={`header-btn studio-btn ${currentPanel === 'load' ? 'active' : ''}`}
                 onClick={() => {
                   setCurrentPanel('load');
                   setCurrentMenuIndex(3);
@@ -503,7 +503,7 @@ function AppContent() {
                 }}
                 title="Load Character"
               >
-                📁 Load
+                📁
               </button>
             </div>
           </div>

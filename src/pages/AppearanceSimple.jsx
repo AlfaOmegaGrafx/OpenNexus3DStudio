@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import styles from './Appearance.module.css';
 
-// Import actual icons from the project
-import bodyIcon from '../images/t-shirt.png';
-import headIcon from '../images/portraits.png';
-import handsIcon from '../images/t-shirt.png';
-import shoesIcon from '../images/t-shirt.png';
-import chestIcon from '../images/t-shirt.png';
-import neckIcon from '../images/t-shirt.png';
-import weaponIcon from '../images/t-shirt.png';
-import waistIcon from '../images/t-shirt.png';
+// Import loot-assets icons (using PNG thumbnails for colorful loot graphics)
+import bodyIcon from "/loot-assets/loot/thumbnails/Body/orion.png";
+import headIcon from "/loot-assets/loot/thumbnails/Head/hood.png";
+import handsIcon from "/loot-assets/loot/thumbnails/Hands/gloves.png";
+import shoesIcon from "/loot-assets/loot/thumbnails/Shoes/shoes.png";
+import chestIcon from "/loot-assets/loot/thumbnails/Chest/robe.png";
+import neckIcon from "/loot-assets/loot/thumbnails/Neck/amulet.png";
+import weaponIcon from "/loot-assets/loot/thumbnails/Weapon/long_sword.png";
+import waistIcon from "/loot-assets/loot/thumbnails/Waist/sash.png";
 import colorPickerIcon from '../images/color-palette.png';
 import randomizeIcon from '../images/randomize.png';
 import cancelIcon from '../images/cancel.png';
@@ -40,22 +40,26 @@ const AppearanceSimple = ({ onNavigate }) => {
 
   return (
     <div className={styles.container}>
-      <div className="sectionTitle">Choose Appearance</div>
-      
       {/* Main trait categories */}
       <div className={styles.sideMenu}>
-        <div className={styles.scrollContainer}>
-          <div className={styles.editorContainer}>
-            {traitCategories.map((category, index) => (
-              <div 
-                key={index}
-                className={styles.editorButton}
-                onClick={() => setSelectedTrait(selectedTrait?.category === category.name ? null : { category: category.name, traits: category.traits })}
-              >
-                <img src={category.icon} alt={category.name} className={styles.editorIcon} />
-                <div className={styles.editorText}>{category.name}</div>
-              </div>
-            ))}
+        <div className={styles.titleContainer}>
+          <div className={styles.menuTitle}>Choose Appearance</div>
+          <div className={styles.bottomLine} />
+        </div>
+        <div className={styles.traitsContainer}>
+          <div className={styles.scrollContainer}>
+            <div className={styles.editorContainer}>
+              {traitCategories.map((category, index) => (
+                <div 
+                  key={index}
+                  className={styles.editorButton}
+                  onClick={() => setSelectedTrait(selectedTrait?.category === category.name ? null : { category: category.name, traits: category.traits })}
+                >
+                  <img src={category.icon} alt={category.name} className={styles.editorIcon} />
+                  <div className={styles.editorText}>{category.name}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

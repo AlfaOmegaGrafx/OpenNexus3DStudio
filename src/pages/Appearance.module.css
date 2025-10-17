@@ -9,10 +9,59 @@
 
 .buttonContainer .buttonLeft {
     float: left;
+    padding: 12px 24px;
+    background: #3a3a3a;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 120px;
+}
+
+.buttonContainer .buttonLeft:hover {
+    background: #4a4a4a;
+    border-color: #666;
+    color: #fff;
+}
+
+.buttonContainer .buttonLeft:active {
+    background: #007acc;
+    border-color: #007acc;
+    color: white;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
 .buttonContainer .buttonRight {
     float: Right;
+    padding: 12px 24px;
+    background: #007acc;
+    color: white;
+    border: 1px solid #007acc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 120px;
+    box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+}
+
+.buttonContainer .buttonRight:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+    color: #fff;
+    box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+    transform: translateY(-1px);
+}
+
+.buttonContainer .buttonRight:active {
+    background: #0056b3;
+    border-color: #0056b3;
+    color: white;
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
 .buttonContainer .buttonCenter {
@@ -29,7 +78,7 @@
     min-width: 120px;
 }
 
-/* Open3DStudio Theme Styles */
+/* Open3DStudio Blue Theme Styles */
 .appearancePanel {
   padding: 20px;
   height: 100%;
@@ -38,6 +87,8 @@
   color: #ffffff;
   display: flex;
   flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #555;
 }
 
 .panelHeader {
@@ -46,13 +97,24 @@
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 15px;
-  border-bottom: 1px solid #555;
+  border-bottom: 2px solid #007acc;
+  position: relative;
+}
+
+.panelHeader::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #007acc 50%, transparent 100%);
 }
 
 .panelHeader h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #ccc;
+  color: #007acc;
   font-weight: 600;
 }
 
@@ -69,30 +131,66 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: #3a3a3a;
+  background: #2a2a2a;
   color: #ccc;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .categoryButton:hover {
-  background: #4a4a4a;
-  border-color: #666;
+  background: #3a3a3a;
+  border-color: #007acc;
   color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 122, 204, 0.2);
 }
 
 .categoryButton.active {
   background: #007acc;
   border-color: #007acc;
   color: white;
-  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4);
+  transform: translateY(-1px);
 }
 
 .categoryIcon {
   width: 24px;
   height: 24px;
+  filter: none;
+  transition: all 0.2s ease;
+}
+
+.categoryButton:hover .categoryIcon {
+  filter: none;
+}
+
+.categoryButton.active .categoryIcon {
+  filter: none;
+}
+
+.editorIcon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  filter: none;
+  transition: all 0.2s ease;
+  padding: 6px;
+  background: rgba(0, 122, 204, 0.1);
+  border: 2px solid rgba(0, 122, 204, 0.3);
+  border-radius: 6px;
+}
+
+.container {
+  padding-top: 60px;
+}
+
+.editorContainer {
+  margin-top: 10px;
+}
+
+.sideMenu {
+  margin-top: 5px;
 }
 
 .traitSelector {
@@ -101,7 +199,7 @@
 
 .traitSelector h3 {
   margin-bottom: 15px;
-  color: #ccc;
+  color: #007acc;
   font-size: 1.1rem;
   font-weight: 600;
 }
@@ -118,25 +216,27 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: #3a3a3a;
+  background: #2a2a2a;
   color: #ccc;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .traitButton:hover {
-  background: #4a4a4a;
-  border-color: #666;
+  background: #3a3a3a;
+  border-color: #007acc;
   color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 122, 204, 0.2);
 }
 
 .traitButton.selected {
   background: #007acc;
   border-color: #007acc;
   color: white;
-  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4);
+  transform: translateY(-1px);
 }
 
 .traitPreview {
@@ -170,20 +270,23 @@
 
 .randomizeButton {
   padding: 12px 24px;
-  background: #3a3a3a;
-  color: #ccc;
-  border: 1px solid #555;
-  border-radius: 4px;
+  background: #007acc;
+  color: white;
+  border: 1px solid #007acc;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
 }
 
 .randomizeButton:hover {
-  background: #4a4a4a;
-  border-color: #666;
+  background: #0056b3;
+  border-color: #0056b3;
   color: #fff;
+  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.3);
+  transform: translateY(-1px);
 }
 
 .navigationButtons {
@@ -224,30 +327,57 @@
 /* previously in Editor.jsx */
 .sideMenu {
   position: fixed;
-  left: 32px;
-  top: 98px;
-  height: -webkit-calc(100vh - 176px);
-  height: calc(100vh - 176px);
+  left: 47px;
+  top: 48px;
+  height: -webkit-calc(100vh - 48px);
+  height: calc(100vh - 48px);
   backdrop-filter: blur(22.5px);
   background: rgba(5, 11, 14, 0.8);
   z-index: 1000;
   user-select: none;
+  display: flex;
+  flex-direction: column;
 }
+
+.titleContainer {
+  position: relative;
+  z-index: 10;
+}
+
+.menuTitle {
+  color: #5eb086;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  padding: 4px 0 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+  z-index: 10;
+  margin-top: 6px;
+}
+
+.traitsContainer {
+  position: relative;
+  margin-top: -23px;
+}
+
+
 .scrollContainer {
   width: 90%;
-  overflow-y: scroll;
+  overflow: visible;
   position: relative;
-  overflow-x: hidden !important;
   margin: 16px;
-  height: calc(100% - 40px);
+  margin-top: 20px;
+  height: calc(100% - 60px);
+  flex: 1;
 }
 .scrollContainerOptions{
   width: 80%;
-  overflow-y: scroll;
+  overflow: hidden;
   position: relative;
-  overflow-x: hidden !important;
   margin: 16px;
-  height: calc(100% - 100px);
+  height: calc(100% - 140px);
 }
 .bottomLine {
   background: rgb(0, 149, 100);
@@ -282,14 +412,28 @@
   width: 200px;
   position: relative;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin-top: -50px !important;
+  transform: translateY(-20px) !important;
 }
 .editorButton {
-  padding: 0.15em;
+  padding: 8px 12px;
   display: flex;
   position: relative;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin-bottom: 1px;
+}
+
+.editorButton:hover {
+  background: rgba(0, 149, 100, 0.1);
+  border: 1px solid rgba(0, 149, 100, 0.3);
 }
 .editorText{
   color: rgb(255, 255, 255);
@@ -298,7 +442,9 @@
   white-space: normal;
   word-wrap: break-word;
   text-align: left;
-  
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.1;
 }
 /* previously in Selector.jsx */
 .selectorContainerPos {
