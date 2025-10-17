@@ -1,0 +1,445 @@
+/* Shared styles for CharacterStudio panels */
+.appearancePanel,
+.savePanel,
+.loadPanel {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a1a;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #555;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.navigationButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.navButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #333;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.navButton:hover {
+  background: #444;
+}
+
+.navIcon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Appearance Panel Styles */
+.categorySelector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.categoryButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.categoryButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.categoryButton.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.categoryIcon {
+  width: 24px;
+  height: 24px;
+}
+
+.traitSelector {
+  margin-bottom: 20px;
+}
+
+.traitSelector h3 {
+  margin-bottom: 15px;
+  color: #ccc;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.traitGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.traitButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.traitButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.traitButton.selected {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.traitPreview {
+  width: 48px;
+  height: 48px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.traitImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.traitName {
+  font-size: 12px;
+  text-align: center;
+}
+
+.actionButtons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+.randomizeButton {
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.randomizeButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+/* Save Panel Styles */
+.saveOptions {
+  margin-bottom: 20px;
+}
+
+.optionGroup {
+  margin-bottom: 15px;
+}
+
+.optionGroup label {
+  display: block;
+  margin-bottom: 5px;
+  color: #ccc;
+  font-weight: 500;
+}
+
+.fileNameInput,
+.formatSelect {
+  width: 100%;
+  padding: 8px 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.fileNameInput:focus,
+.formatSelect:focus {
+  outline: none;
+  border-color: #007acc;
+  background: #4a4a4a;
+  color: #fff;
+}
+
+.saveButtonContainer {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.saveButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.saveButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.saveButton:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.saveIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.characterPreview {
+  margin-top: 20px;
+  padding: 15px;
+  background: #2a2a2a;
+  border-radius: 8px;
+}
+
+.characterPreview h3 {
+  margin-bottom: 10px;
+  color: #ffffff;
+}
+
+.modelInfo p {
+  margin: 5px 0;
+  color: #cccccc;
+}
+
+/* Load Panel Styles */
+.loadOptions {
+  margin-bottom: 20px;
+}
+
+.fileUpload,
+.urlLoad {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.fileUpload h3,
+.urlLoad h3 {
+  margin-bottom: 10px;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.fileInput {
+  width: 100%;
+  padding: 8px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fileInput:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.selectedFile {
+  margin-top: 10px;
+  padding: 10px;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.selectedFile p {
+  margin: 5px 0;
+  color: #cccccc;
+}
+
+.urlButton {
+  padding: 8px 16px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.urlButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.loadButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.loadButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.loadButton:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.loadingIcon {
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.supportedFormats {
+  margin-top: 20px;
+  padding: 15px;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.supportedFormats h3 {
+  margin-bottom: 10px;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.supportedFormats ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.supportedFormats li {
+  padding: 5px 0;
+  color: #ccc;
+  border-bottom: 1px solid #555;
+}
+
+.supportedFormats li:last-child {
+  border-bottom: none;
+}
+
+/* Navigation Buttons at Bottom - Open3DStudio Style */
+.navigationButtons {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #555;
+}
+
+.navButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.navButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.navButton:active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}

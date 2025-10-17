@@ -2,7 +2,7 @@ import { Group, MeshStandardMaterial, Color } from "three"
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter"
 import { cloneSkeleton, combine, combineNoAtlas } from "./merge-geometry"
 import { VRMExporter } from "./VRMExporter"
-import { VRMExporterv0 } from "./VRMExporterv0"
+import VRMExporterv0 from "./VRMExporterv0"
 import { findChildrenByType } from "./utils"
 import { VRMHumanBoneName, VRMExpression, VRMExpressionPresetName, VRMExpressionManager, VRMExpressionMorphTargetBind} from "@pixiv/three-vrm";
 import { doesMeshHaveMorphTargetBoundToManager } from './utils';

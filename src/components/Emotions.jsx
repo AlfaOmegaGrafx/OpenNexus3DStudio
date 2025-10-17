@@ -1,4 +1,4 @@
-import React, { useEffect, useContext } from "react"
+import React, { useEffect } from "react"
 import styles from "./Emotions.module.css"
 import MenuTitle from "./MenuTitle"
 import { SceneContext } from "../context/SceneContext";
@@ -7,7 +7,7 @@ import Slider from "./Slider";
 
 export default function Emotions(){
 
-    const {  characterManager,moveCamera } = useContext(SceneContext)
+    const {  characterManager,moveCamera } = React.useContext(SceneContext)
 
     const [isConstant, setConstant] = React.useState(false)
     const [intensity, setIntensity] = React.useState(1)

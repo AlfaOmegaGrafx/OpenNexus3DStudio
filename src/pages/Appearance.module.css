@@ -29,6 +29,198 @@
     min-width: 120px;
 }
 
+/* Open3DStudio Theme Styles */
+.appearancePanel {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a1a;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #555;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.categorySelector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.categoryButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.categoryButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.categoryButton.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.categoryIcon {
+  width: 24px;
+  height: 24px;
+}
+
+.traitSelector {
+  margin-bottom: 20px;
+}
+
+.traitSelector h3 {
+  margin-bottom: 15px;
+  color: #ccc;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.traitGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.traitButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.traitButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.traitButton.selected {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.traitPreview {
+  width: 48px;
+  height: 48px;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.traitImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.traitName {
+  font-size: 12px;
+  text-align: center;
+}
+
+.actionButtons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+.randomizeButton {
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.randomizeButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.navigationButtons {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #555;
+}
+
+.navButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.navButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.navButton:active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
 /* previously in Editor.jsx */
 .sideMenu {
   position: fixed;

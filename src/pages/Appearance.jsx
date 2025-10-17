@@ -33,18 +33,18 @@ export const TraitPage ={
 }
 
 function Appearance() {
-  const { isLoading, setViewMode, setIsLoading } = React.useContext(ViewContext)
+  const { isLoading, setViewMode, setIsLoading } = useContext(ViewContext)
   const {
     toggleDebugMode,
     characterManager,
     animationManager,
     moveCamera,
-  } = React.useContext(SceneContext)
+  } = useContext(SceneContext)
   
   const [traitView, setTraitView] = React.useState(TraitPage.TRAIT)
 
-  const { playSound } = React.useContext(SoundContext)
-  const { isMute } = React.useContext(AudioContext)
+  const { playSound } = useContext(SoundContext)
+  const { isMute } = useContext(AudioContext)
   const { t } = useContext(LanguageContext)
   
 
@@ -478,7 +478,7 @@ export default Appearance
  * @param {{selectedTrait:ModelTrait|null,selectedBlendShapeTrait:Record<string,string>,onBack:()=>void,setSelectedBlendshapeTrait:(x:Record<string,string>)=>void}} param0 
  */
 const BlendShapeTraitView = ({selectedTrait,onBack,selectedBlendShapeTrait,setSelectedBlendshapeTrait})=>{
-  const {characterManager,moveCamera} = React.useContext(SceneContext);
+  const {characterManager,moveCamera} = useContext(SceneContext);
 
   const groups = characterManager.getBlendShapeGroupTraits(selectedTrait?.traitGroup.trait||"",selectedTrait?.id||"");
 

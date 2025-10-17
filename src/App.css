@@ -24,14 +24,10 @@
   gap: 1px;
   margin-bottom: 4px;
   position: relative;
+  align-items: center;
+  justify-content: center;
 }
 
-.title-volume-control {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
 
 .main-title {
   margin: 0;
@@ -40,6 +36,14 @@
   color: #ffffff;
   line-height: 1.1;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.title-api-control {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0.25rem;
 }
 
 .app-header h1 {
@@ -62,6 +66,18 @@
   align-items: center;
   gap: 0.25rem;
   min-width: 80px;
+  position: relative;
+  padding: 0 0.5rem;
+}
+
+.header-section:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0.25rem;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, #555, transparent);
 }
 
 .header-section-title {
@@ -76,6 +92,7 @@
   display: flex;
   gap: 0.25rem;
   align-items: center;
+  margin: 0 0.25rem;
 }
 
 .header-btn {
@@ -182,8 +199,9 @@
 
 .panel-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 1rem;
   padding: 1rem;
   background: #333;
   border-bottom: 1px solid #444;
@@ -229,9 +247,167 @@
   background: #2a2a2a;
 }
 
-/* Adjust main viewport when panel is open */
-.app-content:has(.character-studio-panel) .main-viewport {
+/* CharacterStudio Sidebar */
+.character-studio-sidebar {
+  position: relative;
+  width: 400px;
+  height: 100vh;
+  background: #2a2a2a;
+  border-left: 1px solid #3a3a3a;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+  transform: translateX(100%);
+}
+
+.character-studio-sidebar:not(.collapsed) {
+  transform: translateX(0);
+}
+
+.character-studio-sidebar.collapsed {
+  width: 60px;
+  transform: translateX(calc(100% - 60px));
+}
+
+/* CharacterStudio Sticky Hamburger Menu */
+.character-studio-sticky-hamburger {
+  position: sticky;
+  top: 0;
+  left: 0;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 0 4px 4px 0;
+  padding: 0.5rem;
+  cursor: pointer;
+  z-index: 1001;
+  transition: all 0.2s ease;
+  margin: 0.5rem 0 0 0.5rem;
+  align-self: flex-start;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.character-studio-sticky-hamburger:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.character-studio-sticky-hamburger .hamburger-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 20px;
+  height: 16px;
+}
+
+.character-studio-sticky-hamburger .hamburger-icon span {
+  display: block;
+  height: 2px;
+  background: #ccc;
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+
+/* Collapsed CharacterStudio Icons */
+.collapsed-character-studio-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 0.5rem;
+  align-items: center;
+}
+
+.character-studio-sidebar-icon {
+  width: 40px;
+  height: 40px;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: all 0.2s ease;
+}
+
+.character-studio-sidebar-icon:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  transform: scale(1.05);
+}
+
+.character-studio-sidebar-icon.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
+.character-studio-sidebar-icon:active {
+  transform: scale(0.95);
+}
+
+/* CharacterStudio Content */
+.character-studio-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.character-studio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #333;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0;
+}
+
+.character-studio-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+
+.character-studio-panels {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  background: #2a2a2a;
+}
+
+/* Adjust main viewport based on sidebar states */
+.app-content .main-viewport {
+  flex: 1;
+  transition: all 0.3s ease;
+}
+
+/* When main sidebar is collapsed, give more space to viewport */
+.app-content.main-sidebar-collapsed .main-viewport {
+  margin-left: 0;
+}
+
+/* When CharacterStudio sidebar is open, adjust viewport */
+.app-content.has-character-studio .main-viewport {
   margin-right: 400px;
+}
+
+/* When CharacterStudio sidebar is collapsed, remove right margin */
+.app-content:not(.has-character-studio) .main-viewport {
+  margin-right: 0;
 }
 
 /* Simplified CharacterStudio Components */
@@ -558,6 +734,7 @@
 
 .sidebar {
   width: 320px;
+  height: 100vh;
   background: #2a2a2a;
   border-right: 1px solid #3a3a3a;
   padding: 0.5rem;
@@ -578,16 +755,17 @@
 /* Hamburger Menu */
 .hamburger-menu {
   position: sticky;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0;
+  right: 0;
   background: #3a3a3a;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 0 0 0 4px;
   padding: 0.5rem;
   cursor: pointer;
   z-index: 1000;
   transition: all 0.2s ease;
-  margin-bottom: 0.5rem;
+  margin: 0;
+  align-self: flex-end;
 }
 
 .hamburger-menu:hover {
@@ -612,8 +790,9 @@
 }
 
 .sidebar.collapsed .hamburger-menu {
-  right: 0.5rem;
-  top: 0.5rem;
+  right: 0;
+  top: 0;
+  align-self: flex-end;
 }
 
 /* Collapsed Sidebar Icons */
