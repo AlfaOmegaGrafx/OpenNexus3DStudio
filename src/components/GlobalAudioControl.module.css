@@ -1,15 +1,10 @@
 .container {
-  position: fixed;
-  top: 104px;
-  left: 20px;
   display: flex;
   align-items: center;
   gap: 6px;
-  z-index: 1000;
-  background: #2a2a2a;
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid #444;
+  background: transparent;
+  padding: 0;
+  border: none;
 }
 
 .audioButton {
@@ -47,7 +42,7 @@
 }
 
 .volumeSlider {
-  width: 100px;
+  width: 60px;
   height: 2px;
   border-radius: 1px;
   background: rgba(255, 255, 255, 0.2);

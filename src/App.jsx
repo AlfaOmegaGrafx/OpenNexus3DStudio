@@ -27,6 +27,7 @@ function AppContent() {
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('none'); // Panel state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
+  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(false); // CharacterStudio sidebar collapse state
   
   // CharacterStudio menu cycling
   const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
@@ -225,11 +226,26 @@ function AppContent() {
         <div className="title-container">
           <h1 className="main-title">Open3DStudio:</h1>
           <div className="audiowave-text">SPACE-TIME EDITION</div>
-          <div className="title-volume-control">
-            <GlobalAudioControl />
+          <div className="title-api-control">
+            <div className="api-status-compact">
+              <div 
+                className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}
+              />
+              <span className="status-text">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
           </div>
         </div>
         <div className="header-controls">
+          {/* Audio Controls */}
+          <div className="header-section">
+            <div className="header-section-title">Audio</div>
+            <div className="header-controls-group">
+              <GlobalAudioControl />
+            </div>
+          </div>
+
           {/* File Operations */}
           <div className="header-section">
             <div className="header-section-title">File</div>
@@ -407,14 +423,6 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Audio Controls */}
-          <div className="header-section">
-            <div className="header-section-title">Audio</div>
-            <div className="header-controls-group">
-              <GlobalAudioControl />
-            </div>
-          </div>
-
           {/* Task Status */}
           <div className="header-section">
             <div className="header-section-title">Tasks</div>
@@ -456,12 +464,9 @@ function AppContent() {
               <button 
                 className={`header-btn ${currentPanel === 'appearance' ? 'active' : ''}`}
                 onClick={() => {
-                  if (currentPanel === 'appearance') {
-                    setCurrentPanel('none');
-                  } else {
-                    setCurrentPanel('appearance');
-                    setCurrentMenuIndex(0);
-                  }
+                  setCurrentPanel('appearance');
+                  setCurrentMenuIndex(0);
+                  setCharacterStudioSidebarCollapsed(false);
                 }}
                 title="Character Appearance"
               >
@@ -470,12 +475,9 @@ function AppContent() {
               <button 
                 className={`header-btn ${currentPanel === 'save' ? 'active' : ''}`}
                 onClick={() => {
-                  if (currentPanel === 'save') {
-                    setCurrentPanel('none');
-                  } else {
-                    setCurrentPanel('save');
-                    setCurrentMenuIndex(1);
-                  }
+                  setCurrentPanel('save');
+                  setCurrentMenuIndex(1);
+                  setCharacterStudioSidebarCollapsed(false);
                 }}
                 title="Save Character"
               >
@@ -484,12 +486,9 @@ function AppContent() {
               <button 
                 className={`header-btn ${currentPanel === 'mint' ? 'active' : ''}`}
                 onClick={() => {
-                  if (currentPanel === 'mint') {
-                    setCurrentPanel('none');
-                  } else {
-                    setCurrentPanel('mint');
-                    setCurrentMenuIndex(2);
-                  }
+                  setCurrentPanel('mint');
+                  setCurrentMenuIndex(2);
+                  setCharacterStudioSidebarCollapsed(false);
                 }}
                 title="Mint Character"
               >
@@ -498,12 +497,9 @@ function AppContent() {
               <button 
                 className={`header-btn ${currentPanel === 'load' ? 'active' : ''}`}
                 onClick={() => {
-                  if (currentPanel === 'load') {
-                    setCurrentPanel('none');
-                  } else {
-                    setCurrentPanel('load');
-                    setCurrentMenuIndex(3);
-                  }
+                  setCurrentPanel('load');
+                  setCurrentMenuIndex(3);
+                  setCharacterStudioSidebarCollapsed(false);
                 }}
                 title="Load Character"
               >
@@ -512,24 +508,10 @@ function AppContent() {
             </div>
           </div>
 
-          {/* API Status */}
-          <div className="header-section">
-            <div className="header-section-title">API</div>
-            <div className="header-controls-group">
-              <div className="api-status-compact">
-                <div 
-                  className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}
-                />
-                <span className="status-text">
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       </header>
 
-      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''}`}>
+      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${characterStudioSidebarCollapsed ? '' : 'has-character-studio'} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
         <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           {/* Hamburger Menu Button */}
           <button 
@@ -550,42 +532,47 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setCurrentPanel('appearance');
-                    setCurrentMenuIndex(0);
+                    setSidebarCollapsed(false);
                   }}
-                  title="Character Appearance"
+                  title="Import Files"
+                >
+                  📁
+                </button>
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    setSidebarCollapsed(false);
+                  }}
+                  title="Character Controls"
                 >
                   👤
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setCurrentPanel('save');
-                    setCurrentMenuIndex(1);
+                    setSidebarCollapsed(false);
                   }}
-                  title="Save Character"
+                  title="Export GLB"
                 >
-                  💾
+                  📤
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setCurrentPanel('mint');
-                    setCurrentMenuIndex(2);
+                    setSidebarCollapsed(false);
                   }}
-                  title="Mint Character"
+                  title="Export VRM"
                 >
-                  🪙
+                  🎭
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setCurrentPanel('load');
-                    setCurrentMenuIndex(3);
+                    setSidebarCollapsed(false);
                   }}
-                  title="Load Character"
+                  title="AI Tasks"
                 >
-                  📁
+                  🤖
                 </button>
               </div>
             )}
@@ -643,32 +630,86 @@ function AppContent() {
           />
         </div>
 
-        {/* CharacterStudio Panel System */}
-        {currentPanel !== 'none' && (
-          <div className="character-studio-panel">
-            <div className="panel-header">
-              <h3 className="panel-title">
-                {currentPanel === 'appearance' && 'Character Appearance'}
-                {currentPanel === 'save' && 'Save Character'}
-                {currentPanel === 'mint' && 'Mint Character'}
-                {currentPanel === 'load' && 'Load Character'}
-              </h3>
+        {/* CharacterStudio Sidebar */}
+        <div className={`character-studio-sidebar ${characterStudioSidebarCollapsed ? 'collapsed' : ''}`}>
+          {/* CharacterStudio Sticky Hamburger Menu - Always Visible */}
+          <button 
+            className="character-studio-sticky-hamburger"
+            onClick={() => setCharacterStudioSidebarCollapsed(!characterStudioSidebarCollapsed)}
+            title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
+          >
+            <div className="hamburger-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </button>
+
+          {/* Collapsed CharacterStudio Sidebar Icons */}
+          {characterStudioSidebarCollapsed && (
+            <div className="collapsed-character-studio-icons">
               <button 
-                className="panel-close-btn"
-                onClick={() => setCurrentPanel('none')}
-                title="Close Panel"
+                className={`character-studio-sidebar-icon ${currentPanel === 'appearance' ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioSidebarCollapsed(false);
+                  setCurrentPanel('appearance');
+                  setCurrentMenuIndex(0);
+                }}
+                title="Character Appearance"
               >
-                ✕
+                👤
+              </button>
+              <button 
+                className={`character-studio-sidebar-icon ${currentPanel === 'save' ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioSidebarCollapsed(false);
+                  setCurrentPanel('save');
+                  setCurrentMenuIndex(1);
+                }}
+                title="Save Character"
+              >
+                💾
+              </button>
+              <button 
+                className={`character-studio-sidebar-icon ${currentPanel === 'mint' ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioSidebarCollapsed(false);
+                  setCurrentPanel('mint');
+                  setCurrentMenuIndex(2);
+                }}
+                title="Mint Character"
+              >
+                🪙
+              </button>
+              <button 
+                className={`character-studio-sidebar-icon ${currentPanel === 'load' ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioSidebarCollapsed(false);
+                  setCurrentPanel('load');
+                  setCurrentMenuIndex(3);
+                }}
+                title="Load Character"
+              >
+                📁
               </button>
             </div>
-              <div className="panel-content">
+          )}
+
+          {/* Full CharacterStudio Sidebar Content */}
+          {!characterStudioSidebarCollapsed && (
+            <div className="character-studio-content">
+              <div className="character-studio-header">
+                <h3 className="character-studio-title">CharacterStudio</h3>
+              </div>
+              <div className="character-studio-panels">
                 {currentPanel === 'appearance' && <AppearanceSimple onNavigate={handleCharacterStudioNavigation} />}
                 {currentPanel === 'save' && <SaveSimple onNavigate={handleCharacterStudioNavigation} />}
                 {currentPanel === 'mint' && <MintSimple onNavigate={handleCharacterStudioNavigation} />}
                 {currentPanel === 'load' && <LoadSimple onNavigate={handleCharacterStudioNavigation} />}
               </div>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

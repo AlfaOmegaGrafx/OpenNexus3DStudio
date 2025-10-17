@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react"
+import React, { useState, useEffect } from "react"
 import styles from "./ModelInformation.module.css"
 import MenuTitle from "./MenuTitle"
 import { findChildrenByType } from "../library/utils";
@@ -8,7 +8,7 @@ import { SceneContext } from "../context/SceneContext"
 export default function ModelInformation({model, name, files, index, nextVrm, previousVrm}){
     const {
         characterManager
-      } = useContext(SceneContext)
+      } = React.useContext(SceneContext)
 
     const [meshQty, setMeshQty] = useState(0);
     const [skinnedMeshQty, setSkinnedMeshQty] = useState(0);

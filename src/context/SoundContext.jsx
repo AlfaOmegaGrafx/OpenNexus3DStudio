@@ -1,29 +1,13 @@
 import React, { createContext, useEffect, useState } from "react"
 import * as THREE from "three"
-import useSound from "use-sound"
-import soundFileSpecs from '../sound/sound-files.json';
-import soundUrl from '../sound/sounds.mp3';
 
 export const SoundContext = createContext()
 
 export const SoundProvider = (props) => {
-  const _getSoundFiles = regex => soundFileSpecs.find(f => regex.test(f.name));
-
-  const [play] = useSound(soundUrl, {
-    sprite: {
-      switchItem: [_getSoundFiles(/switchingItem/).offset, _getSoundFiles(/switchingItem/).duration],
-      classSelect: [_getSoundFiles(/class-select/).offset, _getSoundFiles(/class-select/).duration],
-      characterLoad: [_getSoundFiles(/character-load/).offset, _getSoundFiles(/character-load/).duration],
-      randomizeButton: [_getSoundFiles(/randomize-button/).offset, _getSoundFiles(/randomize-button/).duration],
-      classMouseOver: [_getSoundFiles(/class-mouse-over/).offset, _getSoundFiles(/class-mouse-over/).duration],
-      backNextButton: [_getSoundFiles(/back-next-button/).offset, _getSoundFiles(/back-next-button/).duration],
-    }
-  });
-
+  // Simplified sound provider without use-sound to avoid conflicts
   const playSound = (name, delay = 0) => {
-    delay === 0 ? play({ id: name }) : setTimeout(() => {
-      play({ id: name });
-    },delay);
+    // Placeholder sound function - can be implemented later
+    console.log(`Playing sound: ${name}`);
   }
 
   return (

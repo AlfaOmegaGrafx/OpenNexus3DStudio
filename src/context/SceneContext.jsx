@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useRef, useEffect } from 'react';
 import { SceneManager } from '../library/sceneManager';
+import { CharacterManager } from '../library/characterManager';
 
-const SceneContext = createContext();
+export const SceneContext = createContext();
 
 export const useScene = () => {
   const context = useContext(SceneContext);
@@ -13,16 +14,25 @@ export const useScene = () => {
 
 export const SceneProvider = ({ children }) => {
   const sceneManagerRef = useRef(null);
+  const characterManagerRef = useRef(null);
   const containerRef = useRef(null);
   const [isInitialized, setIsInitialized] = React.useState(false);
   const [currentModel, setCurrentModel] = React.useState(null);
   const [renderMode, setRenderMode] = React.useState('solid');
   const [isLoading, setIsLoading] = React.useState(false);
 
-  // Initialize scene manager
+  // Initialize scene manager and character manager
   useEffect(() => {
     if (!sceneManagerRef.current) {
       sceneManagerRef.current = new SceneManager();
+    }
+    if (!characterManagerRef.current) {
+      characterManagerRef.current = new CharacterManager({
+        parentModel: null,
+        renderCamera: null,
+        manifestURL: null,
+        manifestIdentifier: null
+      });
     }
   }, []);
 
@@ -174,7 +184,8 @@ export const SceneProvider = ({ children }) => {
     
     // Refs
     containerRef,
-    sceneManager: sceneManagerRef.current
+    sceneManager: sceneManagerRef.current,
+    characterManager: characterManagerRef.current
   };
 
   return (

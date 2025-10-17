@@ -7,7 +7,7 @@ import { SoundContext } from "../context/SoundContext"
 import { AudioContext } from "../context/AudioContext"
 import { mintAsset } from "../library/mint-utils"
 
-function MintComponent() {
+function MintComponent({ onNavigate }) {
   const { model, avatar } = React.useContext(SceneContext)
   const { setViewMode } = React.useContext(ViewContext)
   const { playSound } = React.useContext(SoundContext)
@@ -17,7 +17,11 @@ function MintComponent() {
   const [minting, setMinting]= React.useState(false)
 
   const back = () => {
-    setViewMode(ViewMode.SAVE)
+    if (onNavigate) {
+      onNavigate('back');
+    } else {
+      setViewMode(ViewMode.SAVE)
+    }
     !isMute && playSound('backNextButton');
   }
 

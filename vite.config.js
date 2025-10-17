@@ -9,11 +9,15 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      buffer: 'buffer/'
+      buffer: 'buffer/',
+      'three': 'three'
     }
   },
   server: {
     port: 3000,
     host: true
+  },
+  optimizeDeps: {
+    include: ['three', '@pixiv/three-vrm']
   }
 })

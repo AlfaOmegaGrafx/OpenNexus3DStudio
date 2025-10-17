@@ -28,3 +28,163 @@
 .buttonContainer button {
     min-width: 120px;
 }
+
+/* Open3DStudio Theme Styles */
+.savePanel {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a1a;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #555;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.saveOptions {
+  margin-bottom: 20px;
+}
+
+.optionGroup {
+  margin-bottom: 15px;
+}
+
+.optionGroup label {
+  display: block;
+  margin-bottom: 5px;
+  color: #ccc;
+  font-weight: 500;
+}
+
+.fileNameInput,
+.formatSelect {
+  width: 100%;
+  padding: 8px 12px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.fileNameInput:focus,
+.formatSelect:focus {
+  outline: none;
+  border-color: #007acc;
+  background: #4a4a4a;
+  color: #fff;
+}
+
+.saveButtonContainer {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.saveButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.saveButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.saveButton:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.saveIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.characterPreview {
+  margin-top: 20px;
+  padding: 15px;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.characterPreview h3 {
+  margin-bottom: 10px;
+  color: #ccc;
+  font-weight: 600;
+}
+
+.previewContainer {
+  text-align: center;
+  padding: 20px;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.modelInfo p {
+  margin: 5px 0;
+  color: #ccc;
+}
+
+.navigationButtons {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #555;
+}
+
+.navButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.navButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.navButton:active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
