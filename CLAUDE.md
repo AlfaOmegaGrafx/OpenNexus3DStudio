@@ -131,7 +131,7 @@ React contexts manage different application domains:
 - Progress tracking with visual indicators
 - Task history and cleanup functionality
 - Support for all AI workflows: text-to-3D, image-to-3D, mesh painting, etc.
-- Real-time API connection monitoring
+- Real-time API connection monitoringMove the
 
 #### Blockchain Integration
 - **Multi-chain Support**: Ethereum (ethers.js) and Solana (@solana/web3.js) integration

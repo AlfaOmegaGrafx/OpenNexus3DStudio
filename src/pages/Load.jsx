@@ -8,12 +8,47 @@ import { ViewContext, ViewMode } from '../context/ViewContext';
 import { SoundContext } from "../context/SoundContext"
 import { AudioContext } from "../context/AudioContext"
 
+// Import loot icons for character traits
+import bodyIcon from '/loot-assets/loot/icons/BODY.svg';
+import headIcon from '/loot-assets/loot/icons/HEAD.svg';
+import weaponIcon from '/loot-assets/loot/icons/WEAPON.svg';
+import chestIcon from '/loot-assets/loot/icons/CHEST.svg';
+import handsIcon from '/loot-assets/loot/icons/HANDS.svg';
+import shoesIcon from '/loot-assets/loot/icons/SHOES.svg';
+import hairIcon from '/loot-assets/loot/icons/HAIR.svg';
+import eyesIcon from '/loot-assets/loot/icons/EYES.svg';
+import hatIcon from '/loot-assets/loot/icons/HATS.svg';
+import maskIcon from '/loot-assets/loot/icons/MASKS.svg';
+import wingsIcon from '/loot-assets/loot/icons/WINGS.svg';
+import tailIcon from '/loot-assets/loot/icons/TAIL.svg';
+import sigilIcon from '/loot-assets/loot/icons/SIGIL.svg';
+
 function Load() {
     const { account, library, activate } = useWeb3React();
     const [characters, setCharacters] = useState([]);
     const { setViewMode } = React.useContext(ViewContext);
     const { playSound } = React.useContext(SoundContext)
     const { isMute } = React.useContext(AudioContext)
+
+    // Function to get loot icon for a trait type
+    const getTraitIcon = (traitType) => {
+        const iconMap = {
+            body: bodyIcon,
+            head: headIcon,
+            weapon: weaponIcon,
+            chest: chestIcon,
+            hands: handsIcon,
+            shoes: shoesIcon,
+            hair: hairIcon,
+            eyes: eyesIcon,
+            hat: hatIcon,
+            mask: maskIcon,
+            wings: wingsIcon,
+            tail: tailIcon,
+            sigil: sigilIcon
+        };
+        return iconMap[traitType] || bodyIcon;
+    };
 
     const injectedConnector = new InjectedConnector({
         supportedChainIds: [137, 1, 3, 4, 5, 42, 97],
@@ -71,17 +106,35 @@ function Load() {
             )}
             <div className={styles.characterContainer}>
                 <div className={styles.title}>Load Character</div>
-                {characters.map((character, i) => {
-                    return (
-                        <div
-                            key={i}
-                                className={styles.character}
-                                    onClick={()=> {loadCharacter(character)}}
-                                    >
-                            {JSON.stringify(character)}
-                        </div>
-                    );
-                })}
+                <div className={styles.charactersGrid}>
+                    {characters.map((character, i) => {
+                        // Parse character data to extract traits
+                        const characterData = typeof character === 'string' ? JSON.parse(character) : character;
+                        const traits = characterData.attributes || characterData.traits || {};
+                        
+                        return (
+                            <div
+                                key={i}
+                                className={styles.characterCard}
+                                onClick={() => {loadCharacter(character)}}
+                            >
+                                <div className={styles.characterThumbnail}>
+                                    <img src={getTraitIcon('body')} alt="Character" />
+                                </div>
+                                <div className={styles.characterInfo}>
+                                    <h4>{characterData.name || `Character #${i + 1}`}</h4>
+                                    <div className={styles.traitIcons}>
+                                        {Object.keys(traits).slice(0, 4).map((traitType) => (
+                                            <div key={traitType} className={styles.traitIcon} title={traits[traitType]}>
+                                                <img src={getTraitIcon(traitType)} alt={traitType} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
                 {/* show back button to return to landing page */}
             <button className={styles.button} onClick={() => back()}>Back</button>

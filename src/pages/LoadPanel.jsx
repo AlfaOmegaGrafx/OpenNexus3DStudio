@@ -9,6 +9,10 @@ import "./PanelStyles.css";
 // Import icons
 import backButtonIcon from "/ui/backButton_white.png";
 import loadingIcon from "/ui/loading.svg";
+// Import loot-assets icons
+import uploadIcon from "/loot-assets/loot/icons/WEAPON.svg";
+import urlIcon from "/loot-assets/loot/icons/SIGIL.svg";
+import fileIcon from "/loot-assets/loot/icons/BODY.svg";
 
 function LoadPanel({ onNavigate }) {
   const { characterManager, loadModel } = useContext(SceneContext);
@@ -78,7 +82,10 @@ function LoadPanel({ onNavigate }) {
 
       <div className={styles.loadOptions}>
         <div className={styles.fileUpload}>
-          <h3>Upload File</h3>
+          <h3>
+            <img src={fileIcon} alt="File" className={styles.sectionIcon} />
+            Upload File
+          </h3>
           <input
             type="file"
             accept=".vrm,.glb,.gltf,.fbx,.obj"
@@ -94,8 +101,12 @@ function LoadPanel({ onNavigate }) {
         </div>
 
         <div className={styles.urlLoad}>
-          <h3>Load from URL</h3>
+          <h3>
+            <img src={urlIcon} alt="URL" className={styles.sectionIcon} />
+            Load from URL
+          </h3>
           <button onClick={handleLoadFromURL} className={styles.urlButton}>
+            <img src={urlIcon} alt="URL" className={styles.buttonIcon} />
             Load from URL
           </button>
         </div>
@@ -112,7 +123,10 @@ function LoadPanel({ onNavigate }) {
                 Loading...
               </>
             ) : (
-              'Load Character'
+              <>
+                <img src={uploadIcon} alt="Load" className={styles.buttonIcon} />
+                Load Character
+              </>
             )}
           </button>
         </div>

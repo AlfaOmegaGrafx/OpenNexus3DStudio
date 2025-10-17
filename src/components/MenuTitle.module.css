@@ -1,13 +1,16 @@
 .mainTitleWrap {
-  background: rgba(5, 11, 14, 0.8);
-  position: absolute;
-  top: -28px;
-  padding: 8px 0 6px 0;
-  font-size: 12px;
-  width: 104px;
+  background: #ff0000 !important;
+  position: fixed !important;
+  top: 10px !important;
+  left: 10px !important;
+  padding: 20px !important;
+  font-size: 24px !important;
+  width: 200px !important;
   text-align: center;
-  color: #5eb086;
+  color: #ffffff !important;
   text-transform: uppercase;
+  z-index: 9999 !important;
+  border: 5px solid #00ff00 !important;
 }
 
 .mainTitleWrap .mainTitle {
