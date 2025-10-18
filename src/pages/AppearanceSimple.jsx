@@ -117,6 +117,7 @@ const AppearanceSimple = ({ onNavigate }) => {
           Next
         </button>
       </div>
+
     </div>
   );
 };

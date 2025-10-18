@@ -67,6 +67,12 @@ vi.mock('three/examples/jsm/loaders/FBXLoader.js', () => ({
   }))
 }));
 
+vi.mock('three/examples/jsm/loaders/RGBELoader.js', () => ({
+  RGBELoader: vi.fn(() => ({
+    load: vi.fn()
+  }))
+}));
+
 vi.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
   OrbitControls: vi.fn(() => ({
     enableDamping: true,
@@ -168,6 +174,53 @@ describe('SceneManager', () => {
       sceneManager.emit('testEvent', { data: 'test' });
       
       expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('HDR environment', () => {
+    it('should load HDR environment successfully', async () => {
+      await sceneManager.initialize(mockContainer);
+      
+      // Mock the RGBELoader load method
+      const mockRGBELoader = require('three/examples/jsm/loaders/RGBELoader.js').RGBELoader;
+      const mockLoad = vi.fn();
+      mockRGBELoader.mockImplementation(() => ({ load: mockLoad }));
+      
+      sceneManager.loadHDREnvironment('./test.hdr', 0.8);
+      
+      expect(mockLoad).toHaveBeenCalledWith(
+        './test.hdr',
+        expect.any(Function),
+        undefined,
+        expect.any(Function)
+      );
+    });
+
+    it('should handle HDR loading errors gracefully', async () => {
+      await sceneManager.initialize(mockContainer);
+      
+      const mockRGBELoader = require('three/examples/jsm/loaders/RGBELoader.js').RGBELoader;
+      const mockLoad = vi.fn();
+      mockRGBELoader.mockImplementation(() => ({ load: mockLoad }));
+      
+      // Mock console.error to avoid test output
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      sceneManager.loadHDREnvironment('./invalid.hdr');
+      
+      expect(mockLoad).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should not load HDR if scene is not initialized', () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      sceneManager.loadHDREnvironment('./test.hdr');
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Scene not initialized. Call initialize() first.'
+      );
+      consoleSpy.mockRestore();
     });
   });
 

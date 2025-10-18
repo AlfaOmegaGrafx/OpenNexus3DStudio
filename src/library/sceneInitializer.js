@@ -8,6 +8,7 @@ export function sceneInitializer(canvasId) {
     const scene = new THREE.Scene()
 
     
+    // HDR environment map for CharacterStudio renderer
     new RGBELoader().load("./hdr/studio_small_09_2k.hdr", (hdr_) => {
         hdr_.mapping = THREE.EquirectangularReflectionMapping;
         hdr_.colorSpace = THREE.LinearSRGBColorSpace

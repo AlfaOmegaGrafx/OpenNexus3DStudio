@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
 import { AudioProvider } from './context/AudioContext';
@@ -13,6 +13,7 @@ import VRMExport from './components/VRMExport';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
+import { sceneInitializer } from './library/sceneInitializer';
 
 // Import CharacterStudio pages (simplified versions)
 import AppearanceSimple from './pages/AppearanceSimple';
@@ -25,13 +26,27 @@ function AppContent() {
   const [isElectron, setIsElectron] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState('http://localhost:8000');
   const [skeletonActive, setSkeletonActive] = useState(false);
-  const [currentPanel, setCurrentPanel] = useState('none'); // Panel state
+  const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
-  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(false); // CharacterStudio sidebar collapse state
+  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(false); // CharacterStudio sidebar collapse state - default to open
+  const [characterStudioViewportVisible, setCharacterStudioViewportVisible] = useState(true); // Independent viewport visibility state
+  const [characterStudioInitialized, setCharacterStudioInitialized] = useState(false);
+  const characterStudioRef = useRef(null);
+  
+  // Debug class changes
+  useEffect(() => {
+    console.log('🔍 Class Debug:', {
+      sidebarCollapsed,
+      characterStudioSidebarCollapsed,
+      characterStudioViewportVisible,
+      hasCharacterStudio: !characterStudioSidebarCollapsed,
+      mainSidebarCollapsed: sidebarCollapsed
+    });
+  }, [sidebarCollapsed, characterStudioSidebarCollapsed, characterStudioViewportVisible]);
   
   // CharacterStudio menu cycling
   const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
-  const [currentMenuIndex, setCurrentMenuIndex] = useState(0);
+  const [currentMenuIndex, setCurrentMenuIndex] = useState(0); // Default to appearance (index 0)
   
   const handleCharacterStudioNavigation = (direction) => {
     if (direction === 'next') {
@@ -216,6 +231,49 @@ function AppContent() {
     }
   }, [isElectron, clearModel]);
 
+  // Initialize CharacterStudio 3D renderer
+  useEffect(() => {
+    const initCharacterStudio = async () => {
+      if (!characterStudioRef.current || characterStudioInitialized) return;
+      
+      try {
+        console.log('🎬 Initializing CharacterStudio 3D renderer...');
+        const characterStudioScene = await sceneInitializer('character-studio-scene');
+        characterStudioRef.current = characterStudioScene;
+        setCharacterStudioInitialized(true);
+        console.log('✅ CharacterStudio 3D renderer initialized');
+      } catch (error) {
+        console.error('❌ Failed to initialize CharacterStudio renderer:', error);
+      }
+    };
+
+    initCharacterStudio();
+  }, [characterStudioInitialized]);
+
+  // Sync model between main scene and CharacterStudio
+  useEffect(() => {
+    if (!characterStudioInitialized || !characterStudioRef.current || !currentModel) return;
+
+    const syncModelToCharacterStudio = async () => {
+      try {
+        console.log('🔄 Syncing model to CharacterStudio renderer...');
+        
+        // Get the CharacterStudio scene and character manager
+        const { scene, characterManager } = characterStudioRef.current;
+        
+        // Load the model into CharacterStudio
+        if (characterManager && characterManager.loadModel) {
+          await characterManager.loadModel(currentModel);
+          console.log('✅ Model synced to CharacterStudio renderer');
+        }
+      } catch (error) {
+        console.error('❌ Failed to sync model to CharacterStudio:', error);
+      }
+    };
+
+    syncModelToCharacterStudio();
+  }, [currentModel, characterStudioInitialized]);
+
   // Check if there are any running tasks
   const hasRunningTasks = tasks.some(task => task.status === 'running');
 
@@ -225,7 +283,10 @@ function AppContent() {
       <header className="app-header">
         <div className="title-container">
           <h1 className="main-title">Open3DStudio:</h1>
-          <div className="audiowave-text">SPACE-TIME EDITION</div>
+          <div className="audiowave-text">
+            <span className="space-time">SPACE-TIME</span>
+            <span className="edition">EDITION</span>
+          </div>
           <div className="title-api-control">
             <div className="api-status-compact">
               <div 
@@ -511,6 +572,49 @@ function AppContent() {
         </div>
       </header>
 
+      {/* Anchored Hamburger Menus */}
+      <button 
+        className="anchored-left-hamburger"
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+      >
+        <div className="hamburger-icon">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </button>
+
+      <button 
+        className="anchored-right-hamburger"
+        onClick={() => setCharacterStudioSidebarCollapsed(!characterStudioSidebarCollapsed)}
+        title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
+      >
+        <div className="hamburger-icon">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </button>
+
+      {/* Independent CharacterStudio Viewport Toggle */}
+      <button 
+        className="anchored-viewport-toggle"
+        onClick={() => {
+          console.log('🎮 Viewport toggle clicked! Current state:', characterStudioViewportVisible);
+          setCharacterStudioViewportVisible(!characterStudioViewportVisible);
+        }}
+        title={characterStudioViewportVisible ? 'Hide 3D Viewport' : 'Show 3D Viewport'}
+        style={{
+          backgroundColor: characterStudioViewportVisible ? '#4a4a4a' : '#3a3a3a',
+          borderColor: characterStudioViewportVisible ? '#00ff00' : '#555'
+        }}
+      >
+        <div className="viewport-icon">
+          {characterStudioViewportVisible ? '🎮' : '🎯'}
+        </div>
+      </button>
+
       <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${characterStudioSidebarCollapsed ? '' : 'has-character-studio'} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
         <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           {/* Hamburger Menu Button */}
@@ -628,6 +732,57 @@ function AppContent() {
             model={currentModel}
             renderMode={renderMode}
           />
+          
+          {/* CharacterStudio 3D Renderer - Overlay on main viewport */}
+          <div 
+            className="character-studio-viewport-overlay"
+            style={{
+              opacity: characterStudioViewportVisible ? 1 : 0,
+              visibility: characterStudioViewportVisible ? 'visible' : 'hidden',
+              transform: characterStudioViewportVisible ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
+              display: characterStudioViewportVisible ? 'flex' : 'none',
+              transition: 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease'
+            }}
+          >
+            <div className="character-studio-viewport-title">
+              CharacterStudio 3D View 
+              <span style={{ 
+                color: characterStudioViewportVisible ? '#00ff00' : '#ff0000',
+                fontSize: '12px',
+                marginLeft: '10px'
+              }}>
+                {characterStudioViewportVisible ? 'VISIBLE' : 'HIDDEN'}
+              </span>
+            </div>
+            <div 
+              id="character-studio-scene" 
+              className="character-studio-viewport-canvas"
+              style={{ width: '100%', height: '625px', background: 'transparent' }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                  console.log('📁 File dropped on CharacterStudio renderer:', files[0].name);
+                  // Handle file drop - could sync with main scene or load directly
+                }
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragEnter={(e) => e.preventDefault()}
+            />
+            {!characterStudioInitialized && (
+              <div style={{ 
+                position: 'absolute', 
+                top: '50%', 
+                left: '50%', 
+                transform: 'translate(-50%, -50%)', 
+                color: '#ccc', 
+                fontSize: '14px',
+                textAlign: 'center'
+              }}>
+                Initializing CharacterStudio 3D Renderer...
+              </div>
+            )}
+          </div>
         </div>
 
         {/* CharacterStudio Sidebar */}
