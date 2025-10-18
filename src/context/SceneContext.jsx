@@ -157,6 +157,13 @@ export const SceneProvider = ({ children }) => {
     return null;
   };
 
+  // Load HDR environment
+  const loadHDREnvironment = (hdrPath, intensity = 0.5) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.loadHDREnvironment(hdrPath, intensity);
+    }
+  };
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -181,6 +188,7 @@ export const SceneProvider = ({ children }) => {
     exportModel,
     startRenderLoop,
     getSceneData,
+    loadHDREnvironment,
     
     // Refs
     containerRef,

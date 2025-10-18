@@ -286,6 +286,46 @@
   background: #2a2a2a;
 }
 
+/* CharacterStudio Viewport Overlay */
+.character-studio-viewport-overlay {
+  position: absolute;
+  top: calc(50% - 5px);
+  left: calc(50% + 368px);
+  width: 400px;
+  height: 675px;
+  background: rgba(42, 42, 42, 0.95);
+  border-radius: 8px;
+  border: 2px solid rgba(0, 122, 204, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1001;
+  padding: 12px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+}
+
+.character-studio-viewport-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.character-studio-viewport-canvas {
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  border: 1px solid rgba(0, 122, 204, 0.3);
+}
+
+.character-studio-viewport-canvas:hover {
+  border-color: rgba(0, 122, 204, 0.6);
+}
+
 /* CharacterStudio Sidebar */
 .character-studio-sidebar {
   position: relative;
@@ -314,7 +354,57 @@
   transform: translateX(calc(100% - 60px));
 }
 
-/* CharacterStudio Sticky Hamburger Menu */
+/* Anchored Right Hamburger Menu */
+.anchored-right-hamburger {
+  position: fixed;
+  top: 121px;
+  right: 0;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 0 4px 4px 0;
+  padding: 0.5rem;
+  cursor: pointer;
+  z-index: 1002;
+  transition: all 0.2s ease;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Independent CharacterStudio Viewport Toggle */
+.anchored-viewport-toggle {
+  position: fixed;
+  top: 170px;
+  right: 0;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 0 4px 4px 0;
+  padding: 0.5rem;
+  cursor: pointer;
+  z-index: 1002;
+  transition: all 0.2s ease;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anchored-viewport-toggle:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.viewport-icon {
+  font-size: 16px;
+  color: #ccc;
+}
+
+/* Original CharacterStudio Hamburger Menu (hidden) */
 .character-studio-sticky-hamburger {
   position: sticky;
   top: 0;
@@ -333,6 +423,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  visibility: hidden;
 }
 
 .character-studio-sticky-hamburger:hover {
@@ -367,8 +458,8 @@
 }
 
 .character-studio-sidebar-icon {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 30px;
   background: #3a3a3a;
   border: 1px solid #555;
   border-radius: 4px;
@@ -376,8 +467,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   transition: all 0.2s ease;
+  padding: 4px 8px;
 }
 
 .character-studio-sidebar-icon:hover {
@@ -477,6 +569,28 @@
 /* When CharacterStudio sidebar is collapsed, remove right margin */
 .app-content:not(.has-character-studio) .main-viewport {
   margin-right: 0;
+}
+
+/* Note: CharacterStudio viewport is now completely independent of left sidebar state */
+
+/* Independent CharacterStudio viewport control */
+.character-studio-viewport-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(1);
+  display: flex;
+}
+
+.character-studio-viewport-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -50%) scale(0.95);
+  display: none;
+}
+
+/* CharacterStudio viewport is completely independent of left sidebar state */
+.character-studio-viewport-overlay {
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
 }
 
 /* Simplified CharacterStudio Components */
@@ -590,13 +704,19 @@
 }
 
 .buttonLeft, .buttonRight {
-  padding: 0.5rem 1rem;
+  padding: 6px 12px;
   border: 1px solid #555;
   border-radius: 4px;
   background: #3a3a3a;
   color: #ccc;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-size: 0.8rem;
+  min-width: 50px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .buttonLeft:hover, .buttonRight:hover {
@@ -605,13 +725,19 @@
 }
 
 .downloadButton {
-  padding: 0.5rem 1rem;
+  padding: 6px 12px;
   border: 1px solid #007acc;
   border-radius: 4px;
   background: #007acc;
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-size: 0.8rem;
+  min-width: 50px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .downloadButton:hover {
@@ -652,14 +778,17 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem;
+  padding: 6px 12px;
   border: 1px solid #555;
   border-radius: 4px;
   background: #3a3a3a;
   color: #ccc;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 200px;
+  min-width: 50px;
+  height: 30px;
+  font-size: 0.8rem;
+  justify-content: center;
 }
 
 .mintButton:hover {
@@ -709,13 +838,19 @@
 }
 
 .walletButton {
-  padding: 0.5rem 1rem;
+  padding: 6px 12px;
   border: 1px solid #555;
   border-radius: 4px;
   background: #3a3a3a;
   color: #ccc;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-size: 0.8rem;
+  min-width: 50px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .walletButton.connected {
@@ -821,7 +956,27 @@
   padding: 0.5rem;
 }
 
-/* Hamburger Menu */
+/* Anchored Left Hamburger Menu */
+.anchored-left-hamburger {
+  position: fixed;
+  top: 121px;
+  left: 0;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 0 0 0 4px;
+  padding: 0.5rem;
+  cursor: pointer;
+  z-index: 1001;
+  transition: all 0.2s ease;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Original Hamburger Menu (hidden) */
 .hamburger-menu {
   position: sticky;
   top: 0;
@@ -840,6 +995,7 @@
   align-items: center;
   justify-content: center;
   align-self: flex-end;
+  visibility: hidden;
 }
 
 .hamburger-menu:hover {
@@ -878,8 +1034,8 @@
 }
 
 .sidebar-icon {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 30px;
   background: #3a3a3a;
   border: 1px solid #555;
   border-radius: 4px;
@@ -887,8 +1043,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   transition: all 0.2s ease;
+  padding: 4px 8px;
 }
 
 .sidebar-icon:hover {
@@ -945,16 +1102,19 @@
 
 /* Button styles */
 .btn {
-  padding: 0.5rem 1rem;
+  padding: 6px 12px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  min-width: 50px;
+  height: 30px;
 }
 
 .btn-primary {

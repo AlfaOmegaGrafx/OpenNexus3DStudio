@@ -80,18 +80,52 @@
   filter: brightness(0) invert(1);
 }
 
+.button {
+  padding: 8px 16px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 50px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+.button:active {
+  background: #007acc;
+  border-color: #007acc;
+  color: white;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+}
+
 .buttonContainer .buttonLeft {
     float: left;
-    padding: 12px 24px;
+    padding: 8px 16px;
     background: #3a3a3a;
     color: #ccc;
     border: 1px solid #555;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 500;
     transition: all 0.2s ease;
-    min-width: 120px;
+    min-width: 50px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .buttonContainer .buttonLeft:hover {
@@ -109,16 +143,20 @@
 
 .buttonContainer .buttonRight {
     float: Right;
-    padding: 12px 24px;
+    padding: 8px 16px;
     background: #007acc;
     color: white;
     border: 1px solid #007acc;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 500;
     transition: all 0.2s ease;
-    min-width: 120px;
+    min-width: 50px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
 }
 
@@ -348,22 +386,28 @@
 
 .walletSection {
   margin-bottom: 20px;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .walletButton {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 24px;
+  gap: 0.5rem;
+  padding: 8px 16px;
   background: #3a3a3a;
   color: #ccc;
   border: 1px solid #555;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   transition: all 0.2s ease;
-  min-width: 200px;
+  min-width: 50px;
+  height: 30px;
+  justify-content: center;
 }
 
 .walletButton:hover {

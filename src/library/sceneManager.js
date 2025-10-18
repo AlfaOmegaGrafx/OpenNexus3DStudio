@@ -7,6 +7,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
@@ -97,6 +98,9 @@ export class SceneManager {
       // Setup lighting
       this.setupLighting();
 
+      // Setup HDR environment map
+      this.setupHDREnvironment();
+
       // Ground plane removed - user doesn't want it
 
       // Add helpers
@@ -165,6 +169,59 @@ export class SceneManager {
     const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1d, 0.8);
     hemisphereLight.position.set(0, 10, 0);
     this.scene.add(hemisphereLight);
+  }
+
+  /**
+   * Setup HDR environment map for realistic lighting and reflections
+   */
+  setupHDREnvironment() {
+    const rgbeLoader = new RGBELoader();
+    
+    // Load the HDR environment map
+    rgbeLoader.load('./hdr/studio_small_09_2k.hdr', (hdrTexture) => {
+      // Configure the HDR texture
+      hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
+      hdrTexture.colorSpace = THREE.LinearSRGBColorSpace;
+      
+      // Set as scene environment for realistic reflections
+      this.scene.environment = hdrTexture;
+      
+      // Set environment intensity for proper lighting balance
+      this.scene.environmentIntensity = 0.5;
+      
+      console.log('HDR environment map loaded successfully');
+    }, undefined, (error) => {
+      console.error('Failed to load HDR environment map:', error);
+    });
+  }
+
+  /**
+   * Load a custom HDR environment map
+   * @param {string} hdrPath - Path to the HDR file
+   * @param {number} intensity - Environment intensity (default: 0.5)
+   */
+  loadHDREnvironment(hdrPath, intensity = 0.5) {
+    if (!this.scene) {
+      console.error('Scene not initialized. Call initialize() first.');
+      return;
+    }
+
+    const rgbeLoader = new RGBELoader();
+    
+    rgbeLoader.load(hdrPath, (hdrTexture) => {
+      // Configure the HDR texture
+      hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
+      hdrTexture.colorSpace = THREE.LinearSRGBColorSpace;
+      
+      // Set as scene environment
+      this.scene.environment = hdrTexture;
+      this.scene.environmentIntensity = intensity;
+      
+      console.log(`HDR environment map loaded: ${hdrPath}`);
+      this.emit('environmentChanged', { path: hdrPath, intensity });
+    }, undefined, (error) => {
+      console.error(`Failed to load HDR environment map: ${hdrPath}`, error);
+    });
   }
 
   /**
