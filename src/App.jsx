@@ -30,7 +30,7 @@ function AppContent() {
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(true); // CharacterStudio sidebar collapse state - default to collapsed
-  // Removed characterStudioViewportVisible - now controlled by sidebar state
+  const [characterStudioViewportVisible, setCharacterStudioViewportVisible] = useState(true); // CharacterStudio 3D viewport visibility
   const [characterStudioInitialized, setCharacterStudioInitialized] = useState(false);
   const characterStudioRef = useRef(null);
   
@@ -357,18 +357,18 @@ function AppContent() {
 
     const { pauseRendering, resumeRendering } = characterStudioRef.current;
     
-    if (!characterStudioSidebarCollapsed) {
-      console.log('🎮 Resuming CharacterStudio render loop (sidebar open)');
+    if (!characterStudioSidebarCollapsed && characterStudioViewportVisible) {
+      console.log('🎮 Resuming CharacterStudio render loop (sidebar open and viewport visible)');
       resumeRendering();
       // Re-apply HDR environment to all scenes
       sharedHDRManager.applyToAllScenes();
     } else {
-      console.log('⏸️ Pausing CharacterStudio render loop (sidebar collapsed)');
+      console.log('⏸️ Pausing CharacterStudio render loop (sidebar collapsed or viewport hidden)');
       pauseRendering();
       // Clear HDR environment from all scenes to save memory
       sharedHDRManager.clearFromAllScenes();
     }
-  }, [characterStudioSidebarCollapsed, characterStudioInitialized]);
+  }, [characterStudioSidebarCollapsed, characterStudioViewportVisible, characterStudioInitialized]);
 
   // Note: Removed incorrect main viewport control
   // The CharacterStudio viewport should operate independently from the main viewport
@@ -669,6 +669,15 @@ function AppContent() {
               >
                 📁
               </button>
+              <button 
+                className={`header-btn studio-btn ${characterStudioViewportVisible ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioViewportVisible(!characterStudioViewportVisible);
+                }}
+                title="Toggle CharacterStudio 3D Viewport"
+              >
+                🎮
+              </button>
             </div>
           </div>
 
@@ -722,9 +731,7 @@ function AppContent() {
               <div className="collapsed-sidebar-icons">
                 <button 
                   className="sidebar-icon"
-                  onClick={() => {
-                    setSidebarCollapsed(false);
-                  }}
+                  onClick={() => document.querySelector('input[type="file"]')?.click()}
                   title="Import Files"
                 >
                   📁
@@ -732,16 +739,20 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setSidebarCollapsed(false);
+                    setSkeletonActive(!skeletonActive);
                   }}
-                  title="Character Controls"
+                  title="Toggle Skeleton"
                 >
                   👤
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setSidebarCollapsed(false);
+                    if (currentModel) {
+                      exportModel('glb', { filename: 'export.glb' });
+                    } else {
+                      alert('No model to export');
+                    }
                   }}
                   title="Export GLB"
                 >
@@ -750,18 +761,29 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setSidebarCollapsed(false);
+                    const userPrompt = window.prompt('Enter text-to-3D prompt:');
+                    if (userPrompt) {
+                      handleAITask('text-to-3d', userPrompt);
+                    }
                   }}
-                  title="Export VRM"
+                  title="AI Text-to-3D"
                 >
                   🎭
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
-                    setSidebarCollapsed(false);
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = (e) => {
+                      if (e.target.files[0]) {
+                        handleAITask('image-to-3d', null, e.target.files[0]);
+                      }
+                    };
+                    input.click();
                   }}
-                  title="AI Tasks"
+                  title="AI Image-to-3D"
                 >
                   🤖
                 </button>
@@ -824,10 +846,10 @@ function AppContent() {
           <div 
             className="character-studio-viewport-overlay"
             style={{
-              opacity: !characterStudioSidebarCollapsed ? 1 : 0,
-              visibility: !characterStudioSidebarCollapsed ? 'visible' : 'hidden',
-              transform: !characterStudioSidebarCollapsed ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
-              display: !characterStudioSidebarCollapsed ? 'flex' : 'none',
+              opacity: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 1 : 0,
+              visibility: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'visible' : 'hidden',
+              transform: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
+              display: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'flex' : 'none',
               transition: 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease'
             }}
           >
@@ -933,6 +955,15 @@ function AppContent() {
                 title="Load Character"
               >
                 📁
+              </button>
+              <button 
+                className={`character-studio-sidebar-icon ${characterStudioViewportVisible ? 'active' : ''}`}
+                onClick={() => {
+                  setCharacterStudioViewportVisible(!characterStudioViewportVisible);
+                }}
+                title="Toggle CharacterStudio 3D Viewport"
+              >
+                🎮
               </button>
             </div>
           )}
