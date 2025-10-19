@@ -286,11 +286,11 @@
   background: #2a2a2a;
 }
 
-/* CharacterStudio Viewport Overlay */
+/* CharacterStudio Viewport Overlay - Locked to HDR Sky position */
 .character-studio-viewport-overlay {
-  position: absolute;
-  top: calc(50% - 5px);
-  left: calc(50% + 368px);
+  position: fixed;
+  top: calc(50vh - 337.5px + 800px - 200px - 300px + 100px - 20px + 10px);
+  left: calc(50vw + 368px - 300px + 100px - 50px + 5px + 5px);
   width: 400px;
   height: 675px;
   background: rgba(42, 42, 42, 0.95);
@@ -374,35 +374,7 @@
   justify-content: center;
 }
 
-/* Independent CharacterStudio Viewport Toggle */
-.anchored-viewport-toggle {
-  position: fixed;
-  top: 170px;
-  right: 0;
-  background: #3a3a3a;
-  border: 1px solid #555;
-  border-radius: 0 4px 4px 0;
-  padding: 0.5rem;
-  cursor: pointer;
-  z-index: 1002;
-  transition: all 0.2s ease;
-  margin: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.anchored-viewport-toggle:hover {
-  background: #4a4a4a;
-  border-color: #666;
-}
-
-.viewport-icon {
-  font-size: 16px;
-  color: #ccc;
-}
+/* Removed viewport toggle - now controlled by sidebar */
 
 /* Original CharacterStudio Hamburger Menu (hidden) */
 .character-studio-sticky-hamburger {
@@ -561,19 +533,31 @@
   margin-left: 0;
 }
 
-/* When CharacterStudio sidebar is open, adjust viewport */
+/* CharacterStudio viewport is completely independent of left sidebar state */
+/* When CharacterStudio sidebar is open, adjust viewport (regardless of left sidebar state) */
 .app-content.has-character-studio .main-viewport {
-  margin-right: 400px;
+  margin-right: 400px !important;
 }
 
-/* When CharacterStudio sidebar is collapsed, remove right margin */
+/* When CharacterStudio sidebar is collapsed, remove right margin (regardless of left sidebar state) */
 .app-content:not(.has-character-studio) .main-viewport {
-  margin-right: 0;
+  margin-right: 0 !important;
+}
+
+/* Ensure CharacterStudio viewport is completely independent of left sidebar state */
+.app-content.main-sidebar-collapsed.has-character-studio .main-viewport {
+  margin-right: 400px !important;
+  margin-left: 0;
+}
+
+.app-content.main-sidebar-collapsed:not(.has-character-studio) .main-viewport {
+  margin-right: 0 !important;
+  margin-left: 0;
 }
 
 /* Note: CharacterStudio viewport is now completely independent of left sidebar state */
 
-/* Independent CharacterStudio viewport control */
+/* Independent CharacterStudio viewport control - Locked to HDR Sky position */
 .character-studio-viewport-overlay.visible {
   opacity: 1;
   visibility: visible;
@@ -588,7 +572,7 @@
   display: none;
 }
 
-/* CharacterStudio viewport is completely independent of left sidebar state */
+/* CharacterStudio viewport is completely independent of left sidebar state and locked to HDR Sky */
 .character-studio-viewport-overlay {
   transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
 }
