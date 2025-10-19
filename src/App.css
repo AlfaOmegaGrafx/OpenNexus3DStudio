@@ -13,6 +13,8 @@
   align-items: center;
   padding: 0.1rem 0.5rem;
   background: #2a2a2a;
+  position: relative;
+  z-index: 1001; /* Higher than CharacterStudio sidebar */
   border-bottom: 1px solid #3a3a3a;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
@@ -290,8 +292,8 @@
 .character-studio-viewport-overlay {
   position: fixed;
   top: calc(50vh - 337.5px + 800px - 200px - 300px + 100px - 20px + 10px);
-  left: calc(50vw + 368px - 300px + 100px - 50px + 5px + 5px);
-  width: 400px;
+  left: calc(50vw + 368px - 300px + 100px - 50px + 5px + 5px - 300px + 100px - 100px + 200px - 500px + 100px + 200px - 50px + 50px);
+  width: 1000px;
   height: 675px;
   background: rgba(42, 42, 42, 0.95);
   border-radius: 8px;
@@ -328,13 +330,15 @@
 
 /* CharacterStudio Sidebar */
 .character-studio-sidebar {
-  position: relative;
+  position: fixed;
+  top: 60px; /* Start below the header */
+  right: 0;
   width: 400px;
-  height: 100vh;
+  height: calc(100vh - 60px); /* Adjust height to account for header */
   background: #2a2a2a;
   border-left: 1px solid #3a3a3a;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
+  z-index: 5; /* Lower than title bar to go behind it */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -364,7 +368,7 @@
   border-radius: 0 4px 4px 0;
   padding: 0.5rem;
   cursor: pointer;
-  z-index: 1002;
+  z-index: 1003;
   transition: all 0.2s ease;
   margin: 0;
   width: 40px;
@@ -386,7 +390,7 @@
   border-radius: 0 4px 4px 0;
   padding: 0.5rem;
   cursor: pointer;
-  z-index: 1001;
+  z-index: 1004;
   transition: all 0.2s ease;
   margin: 0;
   align-self: flex-start;
@@ -425,8 +429,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding-top: 3rem;
+  padding-top: 1rem;
   align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  margin-top: 115px; /* Position below the hamburger menu + 55px more */
 }
 
 .character-studio-sidebar-icon {
@@ -442,6 +449,7 @@
   font-size: 0.9rem;
   transition: all 0.2s ease;
   padding: 4px 8px;
+  margin-bottom: 0.5rem; /* Add spacing between icons */
 }
 
 .character-studio-sidebar-icon:hover {
@@ -468,25 +476,27 @@
   flex-direction: column;
   overflow: hidden;
   gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+  margin-top: 60px; /* Start below the fixed CharacterStudio header */
 }
 
 .character-studio-header {
+  position: fixed;
+  top: 60px;
+  right: 0;
+  width: 400px;
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: center;
   gap: 0;
   padding: 0.5rem 1rem 0.5rem 0.25rem;
-  background: transparent;
-  border-bottom: none;
+  background: #2a2a2a;
+  border-bottom: 1px solid #3a3a3a;
   flex-shrink: 0;
   margin-top: 0;
-  margin-left: 10px;
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 40px;
-  z-index: 999;
-  height: 40px;
+  margin-left: 50px;
+  z-index: 1002; /* Very high z-index to overlay everything */
 }
 
 .character-studio-title {
@@ -557,6 +567,15 @@
 
 /* Note: CharacterStudio viewport is now completely independent of left sidebar state */
 
+/* Main viewport synchronization with hamburger states */
+.app-content.main-sidebar-collapsed .main-viewport {
+  display: none;
+}
+
+.app-content:not(.main-sidebar-collapsed) .main-viewport {
+  display: block;
+}
+
 /* Independent CharacterStudio viewport control - Locked to HDR Sky position */
 .character-studio-viewport-overlay.visible {
   opacity: 1;
@@ -575,6 +594,17 @@
 /* CharacterStudio viewport is completely independent of left sidebar state and locked to HDR Sky */
 .character-studio-viewport-overlay {
   transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+}
+
+/* Space-time and Edition text styling - each on its own row */
+.space-time-row {
+  display: block;
+  line-height: 1.2;
+}
+
+.edition-row {
+  display: block;
+  line-height: 1.2;
 }
 
 /* Simplified CharacterStudio Components */
@@ -950,7 +980,7 @@
   border-radius: 0 0 0 4px;
   padding: 0.5rem;
   cursor: pointer;
-  z-index: 1001;
+  z-index: 1003;
   transition: all 0.2s ease;
   margin: 0;
   width: 40px;
@@ -970,7 +1000,7 @@
   border-radius: 0 0 0 4px;
   padding: 0.5rem;
   cursor: pointer;
-  z-index: 1000;
+  z-index: 1004;
   transition: all 0.2s ease;
   margin: 0;
   width: 40px;

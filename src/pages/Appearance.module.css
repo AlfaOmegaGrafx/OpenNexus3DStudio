@@ -5,6 +5,7 @@
     width: calc(100% - 64px);
     width: -webkit-calc(100% - 64px);
     text-align: center;
+    z-index: 1000; /* Much higher z-index to ensure buttons are on top */
 }
 
 .buttonContainer .buttonLeft {
@@ -188,6 +189,13 @@
 
 .editorContainer {
   margin-top: 10px;
+  width: 100%; /* Full width for trait buttons */
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Two equal columns */
+  gap: 16px; /* Increased spacing between grid items */
+  height: auto; /* Let height adjust to content */
+  align-content: start; /* Align content to top */
+  padding-bottom: 20px; /* Add bottom padding to ensure content is visible */
 }
 
 .sideMenu {
@@ -355,17 +363,25 @@
   letter-spacing: 1px;
   position: relative;
   z-index: 10;
-  margin-top: 6px;
+  margin-top: 40px; /* Move down further from CharacterStudio header */
+  margin-bottom: 20px; /* More spacing below title */
 }
 
 .traitsContainer {
   position: relative;
-  margin-top: -23px;
+  margin-top: 20px; /* Move traits down from title */
+  margin-bottom: 100px; /* Reduced bottom margin to show more content */
+  z-index: 1; /* Lower z-index to go behind CharacterStudio header */
+  width: 95%; /* Use almost all available horizontal space */
+  max-width: none; /* Remove width constraint to use all space */
+  height: auto; /* Let height adjust to content */
+  max-height: none; /* Remove height limit */
+  overflow: visible; /* Allow content to show */
 }
 
 
 .scrollContainer {
-  width: 90%;
+  width: 100%; /* Match traits container width */
   overflow: visible;
   position: relative;
   margin: 16px;
@@ -421,15 +437,19 @@
   transform: translateY(-20px) !important;
 }
 .editorButton {
-  padding: 8px 12px;
+  padding: 20px 24px; /* Increased padding for larger buttons */
   display: flex;
   position: relative;
   align-items: center;
-  gap: 8px;
+  gap: 14px; /* Increased gap between icon and text */
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 10px; /* Larger border radius */
   transition: all 0.2s ease;
   margin-bottom: 1px;
+  width: 100%; /* Full width within grid cell */
+  min-width: auto; /* Remove minimum width constraint */
+  font-size: 1.1rem; /* Larger font size */
+  min-height: 60px; /* Increased minimum height */
 }
 
 .editorButton:hover {
