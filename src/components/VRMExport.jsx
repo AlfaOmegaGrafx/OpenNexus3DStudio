@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useScene } from '../context/SceneContext';
 import { VRMExporter } from '../library/VRMExporter';
 
 const VRMExport = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [vrmMetadata, setVrmMetadata] = useState(null);
   const [exportOptions, setExportOptions] = useState({
     filename: 'open3dstudio_export.vrm',
     vrmVersion: '0.0',
@@ -20,6 +21,81 @@ const VRMExport = () => {
 
   const { currentModel, sceneManager } = useScene();
   const [vrmExporter] = useState(() => new VRMExporter());
+
+  // Extract VRM metadata when a VRM model is loaded
+  useEffect(() => {
+    if (sceneManager && sceneManager.currentVRM && sceneManager.currentVRM.meta) {
+      const vrmMeta = sceneManager.currentVRM.meta;
+      console.log('📋 VRM Metadata found:', vrmMeta);
+      
+      // Extract VRM metadata
+      const extractedMetadata = {
+        title: vrmMeta.title || 'Untitled',
+        version: vrmMeta.version || '1.0.0',
+        author: vrmMeta.author || 'Unknown',
+        contactInformation: vrmMeta.contactInformation || '',
+        reference: vrmMeta.reference || '',
+        texture: vrmMeta.texture || -1,
+        allowedUserName: vrmMeta.allowedUserName || 'Everyone',
+        violentUssageName: vrmMeta.violentUssageName || 'Disallow',
+        sexualUssageName: vrmMeta.sexualUssageName || 'Disallow',
+        commercialUssageName: vrmMeta.commercialUssageName || 'Allow',
+        otherPermissionUrl: vrmMeta.otherPermissionUrl || '',
+        licenseUrl: vrmMeta.licenseUrl || '',
+        otherLicenseUrl: vrmMeta.otherLicenseUrl || '',
+        metaVersion: vrmMeta.metaVersion || '0'
+      };
+
+      // Try to extract VRM image/thumbnail if available
+      if (sceneManager.currentVRM && sceneManager.currentVRM.scene) {
+        // Look for textures in the VRM scene
+        const textures = [];
+        sceneManager.currentVRM.scene.traverse((child) => {
+          if (child.isMesh && child.material) {
+            if (child.material.map) {
+              textures.push({
+                name: child.material.name || 'Unknown Material',
+                texture: child.material.map,
+                type: 'Main Texture'
+              });
+            }
+            if (child.material.normalMap) {
+              textures.push({
+                name: (child.material.name || 'Unknown Material') + ' Normal',
+                texture: child.material.normalMap,
+                type: 'Normal Map'
+              });
+            }
+            if (child.material.roughnessMap) {
+              textures.push({
+                name: (child.material.name || 'Unknown Material') + ' Roughness',
+                texture: child.material.roughnessMap,
+                type: 'Roughness Map'
+              });
+            }
+          }
+        });
+        
+        extractedMetadata.textures = textures;
+        console.log('🖼️ Found VRM textures:', textures.length);
+      }
+      
+      setVrmMetadata(extractedMetadata);
+      
+      // Update export options with VRM metadata
+      setExportOptions(prev => ({
+        ...prev,
+        title: extractedMetadata.title,
+        author: extractedMetadata.author,
+        version: extractedMetadata.version,
+        allowedUserName: extractedMetadata.allowedUserName,
+        commercialUssageName: extractedMetadata.commercialUssageName,
+        vrmVersion: extractedMetadata.metaVersion
+      }));
+    } else {
+      setVrmMetadata(null);
+    }
+  }, [sceneManager?.currentVRM]);
 
   const handleExport = async () => {
     if (!currentModel) {
@@ -255,6 +331,131 @@ const VRMExport = () => {
                   Add basic VRM expression blend shapes
                 </p>
               </div>
+
+              {/* VRM Metadata Display */}
+              {vrmMetadata && (
+                <div className="vrm-metadata-section">
+                  <h4 className="text-lg font-semibold mb-3 text-blue-600">📋 VRM Metadata (from imported VRM)</h4>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <label className="metadata-label">Title:</label>
+                      <span className="metadata-value">{vrmMetadata.title}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">Author:</label>
+                      <span className="metadata-value">{vrmMetadata.author}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">Version:</label>
+                      <span className="metadata-value">{vrmMetadata.version}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">VRM Version:</label>
+                      <span className="metadata-value">{vrmMetadata.metaVersion}</span>
+                    </div>
+                    {vrmMetadata.contactInformation && (
+                      <div className="metadata-item">
+                        <label className="metadata-label">Contact:</label>
+                        <span className="metadata-value">{vrmMetadata.contactInformation}</span>
+                      </div>
+                    )}
+                    {vrmMetadata.reference && (
+                      <div className="metadata-item">
+                        <label className="metadata-label">Reference:</label>
+                        <span className="metadata-value">{vrmMetadata.reference}</span>
+                      </div>
+                    )}
+                    <div className="metadata-item">
+                      <label className="metadata-label">Allowed User:</label>
+                      <span className="metadata-value">{vrmMetadata.allowedUserName}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">Commercial Usage:</label>
+                      <span className="metadata-value">{vrmMetadata.commercialUssageName}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">Violent Usage:</label>
+                      <span className="metadata-value">{vrmMetadata.violentUssageName}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <label className="metadata-label">Sexual Usage:</label>
+                      <span className="metadata-value">{vrmMetadata.sexualUssageName}</span>
+                    </div>
+                    {vrmMetadata.licenseUrl && (
+                      <div className="metadata-item">
+                        <label className="metadata-label">License URL:</label>
+                        <span className="metadata-value">
+                          <a href={vrmMetadata.licenseUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            {vrmMetadata.licenseUrl}
+                          </a>
+                        </span>
+                      </div>
+                    )}
+                    {vrmMetadata.otherPermissionUrl && (
+                      <div className="metadata-item">
+                        <label className="metadata-label">Other Permission URL:</label>
+                        <span className="metadata-value">
+                          <a href={vrmMetadata.otherPermissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            {vrmMetadata.otherPermissionUrl}
+                          </a>
+                        </span>
+                      </div>
+                    )}
+                    {vrmMetadata.otherLicenseUrl && (
+                      <div className="metadata-item">
+                        <label className="metadata-label">Other License URL:</label>
+                        <span className="metadata-value">
+                          <a href={vrmMetadata.otherLicenseUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            {vrmMetadata.otherLicenseUrl}
+                          </a>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* VRM Image/Texture Display */}
+                  {vrmMetadata.textures && vrmMetadata.textures.length > 0 && (
+                    <div className="vrm-images-section">
+                      <h5 className="text-md font-semibold mb-2 text-green-600">🖼️ VRM Images & Textures</h5>
+                      <div className="images-grid">
+                        {vrmMetadata.textures.map((textureInfo, index) => (
+                          <div key={index} className="texture-item">
+                            <div className="texture-preview">
+                              <img 
+                                src={textureInfo.texture.image?.src || textureInfo.texture.source?.data?.image?.src} 
+                                alt={textureInfo.name}
+                                className="texture-image"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'block';
+                                }}
+                              />
+                              <div className="texture-placeholder" style={{ display: 'none' }}>
+                                <div className="texture-icon">🖼️</div>
+                                <div className="texture-name">{textureInfo.name}</div>
+                              </div>
+                            </div>
+                            <div className="texture-info">
+                              <div className="texture-name">{textureInfo.name}</div>
+                              <div className="texture-type">{textureInfo.type}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* VRM Texture Index Info */}
+                  {vrmMetadata.texture !== -1 && (
+                    <div className="texture-index-info">
+                      <div className="metadata-item">
+                        <label className="metadata-label">VRM Texture Index:</label>
+                        <span className="metadata-value">{vrmMetadata.texture}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="export-actions">
                 <button
