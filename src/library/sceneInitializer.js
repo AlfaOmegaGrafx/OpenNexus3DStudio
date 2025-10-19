@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { CharacterManager } from "./characterManager";
+import { sharedHDRManager } from "./sharedHDRManager";
 
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 
@@ -8,13 +9,13 @@ export function sceneInitializer(canvasId) {
     const scene = new THREE.Scene()
 
     
-    // HDR environment map for CharacterStudio renderer
-    new RGBELoader().load("./hdr/studio_small_09_2k.hdr", (hdr_) => {
-        hdr_.mapping = THREE.EquirectangularReflectionMapping;
-        hdr_.colorSpace = THREE.LinearSRGBColorSpace
-        scene.environment = hdr_;
-    })
-    scene.environmentIntensity = 0.5
+    // Register with shared HDR manager for consistent environment
+    sharedHDRManager.registerScene(scene);
+    
+    // Load HDR if not already loaded
+    if (!sharedHDRManager.isHDRLoaded()) {
+        sharedHDRManager.loadHDR();
+    }
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -73,8 +74,13 @@ export function sceneInitializer(canvasId) {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     const clock = new THREE.Clock();
+    let animationId = null;
+    let isRendering = true;
+    
     const animate = () => {
-        requestAnimationFrame(animate);
+        if (!isRendering) return;
+        
+        animationId = requestAnimationFrame(animate);
         const delta = clock.getDelta();
         controls.target.clamp(minPan, maxPan);
         controls?.update();
@@ -82,8 +88,28 @@ export function sceneInitializer(canvasId) {
         renderer.render(scene, camera);
     };
 
-
+    // Start the render loop
     animate();
+    
+    // Pause/resume functionality
+    const pauseRendering = () => {
+        isRendering = false;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        // Clear environment when paused to save memory
+        scene.environment = null;
+    };
+    
+    const resumeRendering = () => {
+        isRendering = true;
+        // Re-apply HDR environment when resuming
+        sharedHDRManager.applyToAllScenes();
+        if (!animationId) {
+            animate();
+        }
+    };
 
     const handleMouseClick = (event) => {
         const isCtrlPressed = event.ctrlKey;
@@ -114,6 +140,8 @@ export function sceneInitializer(canvasId) {
         controls,
         characterManager,
         sceneElements,
-        clock
+        clock,
+        pauseRendering,
+        resumeRendering
     };
 }

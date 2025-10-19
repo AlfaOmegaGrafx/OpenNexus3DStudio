@@ -12,6 +12,7 @@ import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
 import { VRMExpressionPresetName } from '@pixiv/three-vrm';
+import { sharedHDRManager } from './sharedHDRManager.js';
 
 export class SceneManager {
   constructor() {
@@ -172,27 +173,16 @@ export class SceneManager {
   }
 
   /**
-   * Setup HDR environment map for realistic lighting and reflections
+   * Setup HDR environment map using shared manager
    */
   setupHDREnvironment() {
-    const rgbeLoader = new RGBELoader();
+    // Register this scene with the shared HDR manager
+    sharedHDRManager.registerScene(this.scene);
     
-    // Load the HDR environment map
-    rgbeLoader.load('./hdr/studio_small_09_2k.hdr', (hdrTexture) => {
-      // Configure the HDR texture
-      hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
-      hdrTexture.colorSpace = THREE.LinearSRGBColorSpace;
-      
-      // Set as scene environment for realistic reflections
-      this.scene.environment = hdrTexture;
-      
-      // Set environment intensity for proper lighting balance
-      this.scene.environmentIntensity = 0.5;
-      
-      console.log('HDR environment map loaded successfully');
-    }, undefined, (error) => {
-      console.error('Failed to load HDR environment map:', error);
-    });
+    // Load HDR if not already loaded
+    if (!sharedHDRManager.isHDRLoaded()) {
+      sharedHDRManager.loadHDR();
+    }
   }
 
   /**

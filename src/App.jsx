@@ -14,6 +14,7 @@ import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
 import { sceneInitializer } from './library/sceneInitializer';
+import { sharedHDRManager } from './library/sharedHDRManager';
 
 // Import CharacterStudio pages (simplified versions)
 import AppearanceSimple from './pages/AppearanceSimple';
@@ -29,7 +30,7 @@ function AppContent() {
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(false); // CharacterStudio sidebar collapse state - default to open
-  const [characterStudioViewportVisible, setCharacterStudioViewportVisible] = useState(true); // Independent viewport visibility state
+  // Removed characterStudioViewportVisible - now controlled by sidebar state
   const [characterStudioInitialized, setCharacterStudioInitialized] = useState(false);
   const characterStudioRef = useRef(null);
   
@@ -38,11 +39,10 @@ function AppContent() {
     console.log('🔍 Class Debug:', {
       sidebarCollapsed,
       characterStudioSidebarCollapsed,
-      characterStudioViewportVisible,
       hasCharacterStudio: !characterStudioSidebarCollapsed,
       mainSidebarCollapsed: sidebarCollapsed
     });
-  }, [sidebarCollapsed, characterStudioSidebarCollapsed, characterStudioViewportVisible]);
+  }, [sidebarCollapsed, characterStudioSidebarCollapsed]);
   
   // CharacterStudio menu cycling
   const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
@@ -261,10 +261,58 @@ function AppContent() {
         // Get the CharacterStudio scene and character manager
         const { scene, characterManager } = characterStudioRef.current;
         
-        // Load the model into CharacterStudio
-        if (characterManager && characterManager.loadModel) {
-          await characterManager.loadModel(currentModel);
-          console.log('✅ Model synced to CharacterStudio renderer');
+        // Create a URL for the model if it's a File object
+        let modelUrl;
+        if (currentModel instanceof File) {
+          modelUrl = URL.createObjectURL(currentModel);
+        } else if (typeof currentModel === 'string') {
+          modelUrl = currentModel;
+        } else {
+          console.warn('Unsupported model type for CharacterStudio sync:', typeof currentModel);
+          return;
+        }
+        
+        // Load the model into CharacterStudio using direct VRM loading
+        if (characterManager) {
+          // Try to load VRM directly into the character model
+          try {
+            // Clear existing character model
+            if (characterManager.characterModel) {
+              characterManager.characterModel.clear();
+            }
+            
+            // Load VRM directly using the GLTFLoader with VRM plugin
+            const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader');
+            const { VRMLoaderPlugin } = await import('@pixiv/three-vrm');
+            
+            const gltfLoader = new GLTFLoader();
+            gltfLoader.register((parser) => {
+              return new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true });
+            });
+            
+            const gltf = await gltfLoader.loadAsync(modelUrl);
+            const vrm = gltf.userData.vrm;
+            
+            if (vrm && vrm.scene) {
+              // Add the VRM to the character model
+              characterManager.characterModel.add(vrm.scene);
+              console.log('✅ VRM loaded directly into CharacterStudio renderer');
+            } else {
+              console.error('❌ Failed to load VRM - no VRM data found');
+            }
+          } catch (error) {
+            console.error('❌ Failed to load VRM directly:', error);
+            // Fallback to optimizer character method
+            if (characterManager.loadOptimizerCharacter) {
+              await characterManager.loadOptimizerCharacter(modelUrl);
+              console.log('✅ Model synced to CharacterStudio renderer (fallback)');
+            }
+          }
+          
+          // Clean up object URL if we created one
+          if (currentModel instanceof File) {
+            URL.revokeObjectURL(modelUrl);
+          }
         }
       } catch (error) {
         console.error('❌ Failed to sync model to CharacterStudio:', error);
@@ -273,6 +321,28 @@ function AppContent() {
 
     syncModelToCharacterStudio();
   }, [currentModel, characterStudioInitialized]);
+
+  // Handle viewport visibility changes - pause/resume render loop based on sidebar state
+  useEffect(() => {
+    if (!characterStudioInitialized || !characterStudioRef.current) return;
+
+    const { pauseRendering, resumeRendering } = characterStudioRef.current;
+    
+    if (!characterStudioSidebarCollapsed) {
+      console.log('🎮 Resuming CharacterStudio render loop (sidebar open)');
+      resumeRendering();
+      // Re-apply HDR environment to all scenes
+      sharedHDRManager.applyToAllScenes();
+    } else {
+      console.log('⏸️ Pausing CharacterStudio render loop (sidebar collapsed)');
+      pauseRendering();
+      // Clear HDR environment from all scenes to save memory
+      sharedHDRManager.clearFromAllScenes();
+    }
+  }, [characterStudioSidebarCollapsed, characterStudioInitialized]);
+
+  // Note: Removed incorrect main viewport control
+  // The CharacterStudio viewport should operate independently from the main viewport
 
   // Check if there are any running tasks
   const hasRunningTasks = tasks.some(task => task.status === 'running');
@@ -597,25 +667,9 @@ function AppContent() {
         </div>
       </button>
 
-      {/* Independent CharacterStudio Viewport Toggle */}
-      <button 
-        className="anchored-viewport-toggle"
-        onClick={() => {
-          console.log('🎮 Viewport toggle clicked! Current state:', characterStudioViewportVisible);
-          setCharacterStudioViewportVisible(!characterStudioViewportVisible);
-        }}
-        title={characterStudioViewportVisible ? 'Hide 3D Viewport' : 'Show 3D Viewport'}
-        style={{
-          backgroundColor: characterStudioViewportVisible ? '#4a4a4a' : '#3a3a3a',
-          borderColor: characterStudioViewportVisible ? '#00ff00' : '#555'
-        }}
-      >
-        <div className="viewport-icon">
-          {characterStudioViewportVisible ? '🎮' : '🎯'}
-        </div>
-      </button>
+      {/* Removed redundant viewport toggle - now controlled by sidebar */}
 
-      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${characterStudioSidebarCollapsed ? '' : 'has-character-studio'} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
+      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!characterStudioSidebarCollapsed ? 'has-character-studio' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
         <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           {/* Hamburger Menu Button */}
           <button 
@@ -737,21 +791,21 @@ function AppContent() {
           <div 
             className="character-studio-viewport-overlay"
             style={{
-              opacity: characterStudioViewportVisible ? 1 : 0,
-              visibility: characterStudioViewportVisible ? 'visible' : 'hidden',
-              transform: characterStudioViewportVisible ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
-              display: characterStudioViewportVisible ? 'flex' : 'none',
+              opacity: !characterStudioSidebarCollapsed ? 1 : 0,
+              visibility: !characterStudioSidebarCollapsed ? 'visible' : 'hidden',
+              transform: !characterStudioSidebarCollapsed ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
+              display: !characterStudioSidebarCollapsed ? 'flex' : 'none',
               transition: 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease'
             }}
           >
             <div className="character-studio-viewport-title">
               CharacterStudio 3D View 
               <span style={{ 
-                color: characterStudioViewportVisible ? '#00ff00' : '#ff0000',
+                color: !characterStudioSidebarCollapsed ? '#00ff00' : '#ff0000',
                 fontSize: '12px',
                 marginLeft: '10px'
               }}>
-                {characterStudioViewportVisible ? 'VISIBLE' : 'HIDDEN'}
+                {!characterStudioSidebarCollapsed ? 'VISIBLE' : 'HIDDEN'}
               </span>
             </div>
             <div 
