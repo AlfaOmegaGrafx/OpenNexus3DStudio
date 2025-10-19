@@ -27,6 +27,8 @@ const VRMExport = () => {
     if (sceneManager && sceneManager.currentVRM && sceneManager.currentVRM.meta) {
       const vrmMeta = sceneManager.currentVRM.meta;
       console.log('📋 VRM Metadata found:', vrmMeta);
+      console.log('🔍 VRM Object structure:', sceneManager.currentVRM);
+      console.log('🔍 VRM Scene:', sceneManager.currentVRM.scene);
       
       // Extract VRM metadata
       const extractedMetadata = {
@@ -50,34 +52,114 @@ const VRMExport = () => {
       if (sceneManager.currentVRM && sceneManager.currentVRM.scene) {
         // Look for textures in the VRM scene
         const textures = [];
+        console.log('🔍 Starting texture extraction from VRM scene...');
         sceneManager.currentVRM.scene.traverse((child) => {
           if (child.isMesh && child.material) {
+            console.log('🔍 Found mesh with material:', child.name, child.material.name);
+            // Handle single material
             if (child.material.map) {
-              textures.push({
-                name: child.material.name || 'Unknown Material',
-                texture: child.material.map,
-                type: 'Main Texture'
-              });
+              const texture = child.material.map;
+              console.log('🔍 Found main texture:', texture);
+              console.log('🔍 Texture image:', texture.image);
+              console.log('🔍 Texture source:', texture.source);
+              
+              // Handle different texture types
+              let imageUrl = null;
+              if (texture.image?.src) {
+                // Regular Image object
+                imageUrl = texture.image.src;
+              } else if (texture.image instanceof ImageBitmap) {
+                // ImageBitmap - convert to data URL
+                try {
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  canvas.width = texture.image.width;
+                  canvas.height = texture.image.height;
+                  ctx.drawImage(texture.image, 0, 0);
+                  imageUrl = canvas.toDataURL();
+                  console.log('🔍 Converted ImageBitmap to data URL');
+                } catch (error) {
+                  console.log('❌ Failed to convert ImageBitmap:', error);
+                }
+              } else if (texture.source?.data?.image?.src) {
+                // Alternative source path
+                imageUrl = texture.source.data.image.src;
+              }
+              
+              console.log('🔍 Extracted imageUrl:', imageUrl);
+              if (imageUrl) {
+                textures.push({
+                  name: child.material.name || 'Unknown Material',
+                  texture: texture,
+                  imageUrl: imageUrl,
+                  type: 'Main Texture'
+                });
+                console.log('✅ Added main texture:', child.material.name);
+              }
             }
             if (child.material.normalMap) {
-              textures.push({
-                name: (child.material.name || 'Unknown Material') + ' Normal',
-                texture: child.material.normalMap,
-                type: 'Normal Map'
-              });
+              const texture = child.material.normalMap;
+              let imageUrl = null;
+              if (texture.image?.src) {
+                imageUrl = texture.image.src;
+              } else if (texture.image instanceof ImageBitmap) {
+                try {
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  canvas.width = texture.image.width;
+                  canvas.height = texture.image.height;
+                  ctx.drawImage(texture.image, 0, 0);
+                  imageUrl = canvas.toDataURL();
+                } catch (error) {
+                  console.log('❌ Failed to convert normal map ImageBitmap:', error);
+                }
+              } else if (texture.source?.data?.image?.src) {
+                imageUrl = texture.source.data.image.src;
+              }
+              
+              if (imageUrl) {
+                textures.push({
+                  name: (child.material.name || 'Unknown Material') + ' Normal',
+                  texture: texture,
+                  imageUrl: imageUrl,
+                  type: 'Normal Map'
+                });
+              }
             }
             if (child.material.roughnessMap) {
-              textures.push({
-                name: (child.material.name || 'Unknown Material') + ' Roughness',
-                texture: child.material.roughnessMap,
-                type: 'Roughness Map'
-              });
+              const texture = child.material.roughnessMap;
+              let imageUrl = null;
+              if (texture.image?.src) {
+                imageUrl = texture.image.src;
+              } else if (texture.image instanceof ImageBitmap) {
+                try {
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  canvas.width = texture.image.width;
+                  canvas.height = texture.image.height;
+                  ctx.drawImage(texture.image, 0, 0);
+                  imageUrl = canvas.toDataURL();
+                } catch (error) {
+                  console.log('❌ Failed to convert roughness map ImageBitmap:', error);
+                }
+              } else if (texture.source?.data?.image?.src) {
+                imageUrl = texture.source.data.image.src;
+              }
+              
+              if (imageUrl) {
+                textures.push({
+                  name: (child.material.name || 'Unknown Material') + ' Roughness',
+                  texture: texture,
+                  imageUrl: imageUrl,
+                  type: 'Roughness Map'
+                });
+              }
             }
           }
         });
         
         extractedMetadata.textures = textures;
-        console.log('🖼️ Found VRM textures:', textures.length);
+        console.log('🖼️ Found VRM textures:', textures.length, textures);
       }
       
       setVrmMetadata(extractedMetadata);
@@ -335,6 +417,8 @@ const VRMExport = () => {
               {/* VRM Metadata Display */}
               {vrmMetadata && (
                 <div className="vrm-metadata-section">
+                  {console.log('🔍 VRM Metadata Debug:', vrmMetadata)}
+                  {console.log('🔍 VRM Textures Debug:', vrmMetadata.textures)}
                   <h4 className="text-lg font-semibold mb-3 text-blue-600">📋 VRM Metadata (from imported VRM)</h4>
                   <div className="metadata-grid">
                     <div className="metadata-item">
@@ -416,18 +500,27 @@ const VRMExport = () => {
                   {/* VRM Image/Texture Display */}
                   {vrmMetadata.textures && vrmMetadata.textures.length > 0 && (
                     <div className="vrm-images-section">
-                      <h5 className="text-md font-semibold mb-2 text-green-600">🖼️ VRM Images & Textures</h5>
+                      <h5 className="text-md font-semibold mb-2 text-green-600">🖼️ VRM Images & Textures ({vrmMetadata.textures.length} found)</h5>
                       <div className="images-grid">
                         {vrmMetadata.textures.map((textureInfo, index) => (
                           <div key={index} className="texture-item">
                             <div className="texture-preview">
                               <img 
-                                src={textureInfo.texture.image?.src || textureInfo.texture.source?.data?.image?.src} 
+                                src={textureInfo.imageUrl} 
                                 alt={textureInfo.name}
                                 className="texture-image"
                                 onError={(e) => {
+                                  console.log('❌ Failed to load texture image:', textureInfo.name);
+                                  console.log('❌ Image URL:', textureInfo.imageUrl);
+                                  console.log('❌ Image URL length:', textureInfo.imageUrl?.length);
+                                  console.log('❌ Image URL type:', typeof textureInfo.imageUrl);
                                   e.target.style.display = 'none';
                                   e.target.nextSibling.style.display = 'block';
+                                }}
+                                onLoad={(e) => {
+                                  console.log('✅ Successfully loaded texture image:', textureInfo.name);
+                                  console.log('✅ Image URL:', textureInfo.imageUrl);
+                                  console.log('✅ Image dimensions:', e.target.naturalWidth, 'x', e.target.naturalHeight);
                                 }}
                               />
                               <div className="texture-placeholder" style={{ display: 'none' }}>
