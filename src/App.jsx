@@ -29,7 +29,7 @@ function AppContent() {
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
-  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(false); // CharacterStudio sidebar collapse state - default to open
+  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(true); // CharacterStudio sidebar collapse state - default to collapsed
   // Removed characterStudioViewportVisible - now controlled by sidebar state
   const [characterStudioInitialized, setCharacterStudioInitialized] = useState(false);
   const characterStudioRef = useRef(null);
@@ -44,6 +44,35 @@ function AppContent() {
     });
   }, [sidebarCollapsed, characterStudioSidebarCollapsed]);
   
+  // Synchronized hamburger handlers - when one expands, the other collapses
+  const handleLeftHamburgerClick = () => {
+    if (sidebarCollapsed) {
+      // Left hamburger is expanding - collapse right hamburger and main viewport
+      setSidebarCollapsed(false);
+      setCharacterStudioSidebarCollapsed(true);
+      // Main viewport expands when left hamburger expands
+    } else {
+      // Left hamburger is collapsing - expand right hamburger and collapse main viewport
+      setSidebarCollapsed(true);
+      setCharacterStudioSidebarCollapsed(false);
+      // Main viewport collapses when left hamburger collapses
+    }
+  };
+
+  const handleRightHamburgerClick = () => {
+    if (characterStudioSidebarCollapsed) {
+      // Right hamburger is expanding - collapse left hamburger and main viewport
+      setCharacterStudioSidebarCollapsed(false);
+      setSidebarCollapsed(true);
+      // Main viewport collapses when right hamburger expands
+    } else {
+      // Right hamburger is collapsing - expand left hamburger and main viewport
+      setCharacterStudioSidebarCollapsed(true);
+      setSidebarCollapsed(false);
+      // Main viewport expands when right hamburger collapses
+    }
+  };
+
   // CharacterStudio menu cycling
   const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
   const [currentMenuIndex, setCurrentMenuIndex] = useState(0); // Default to appearance (index 0)
@@ -354,8 +383,12 @@ function AppContent() {
         <div className="title-container">
           <h1 className="main-title">Open3DStudio:</h1>
           <div className="audiowave-text">
-            <span className="space-time">SPACE-TIME</span>
-            <span className="edition">EDITION</span>
+            <div className="space-time-row">
+              <span className="space-time">SPACE-TIME</span>
+            </div>
+            <div className="edition-row">
+              <span className="edition">EDITION</span>
+            </div>
           </div>
           <div className="title-api-control">
             <div className="api-status-compact">
@@ -643,9 +676,9 @@ function AppContent() {
       </header>
 
       {/* Anchored Hamburger Menus */}
-      <button 
+      <button
         className="anchored-left-hamburger"
-        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onClick={handleLeftHamburgerClick}
         title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
       >
         <div className="hamburger-icon">
@@ -655,9 +688,9 @@ function AppContent() {
         </div>
       </button>
 
-      <button 
+      <button
         className="anchored-right-hamburger"
-        onClick={() => setCharacterStudioSidebarCollapsed(!characterStudioSidebarCollapsed)}
+        onClick={handleRightHamburgerClick}
         title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
       >
         <div className="hamburger-icon">
@@ -674,7 +707,7 @@ function AppContent() {
           {/* Hamburger Menu Button */}
           <button 
             className="hamburger-menu"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onClick={handleLeftHamburgerClick}
             title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             <div className="hamburger-icon">
@@ -844,7 +877,7 @@ function AppContent() {
           {/* CharacterStudio Sticky Hamburger Menu - Always Visible */}
           <button 
             className="character-studio-sticky-hamburger"
-            onClick={() => setCharacterStudioSidebarCollapsed(!characterStudioSidebarCollapsed)}
+            onClick={handleRightHamburgerClick}
             title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
           >
             <div className="hamburger-icon">
