@@ -582,6 +582,13 @@ export class SceneManager {
       // Store the VRM object for blend shape access
       this.currentVRM = vrm;
       
+      // Debug: Log VRM object structure and userData
+      console.log('🔍 VRM object stored in sceneManager:', vrm);
+      console.log('🔍 VRM userData:', vrm.userData);
+      console.log('🔍 VRM userData.gltf:', vrm.userData?.gltf);
+      console.log('🔍 VRM userData.gltf.images:', vrm.userData?.gltf?.images);
+      console.log('🔍 VRM userData.gltf.images length:', vrm.userData?.gltf?.images?.length);
+      
       // Enhanced VRM debugging and texture/shader processing
       if (vrm.scene) {
         console.log('📊 VRM Structure:', {

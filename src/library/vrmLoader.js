@@ -48,6 +48,51 @@ export class VRMLoader {
 
       const vrm = gltf.userData.vrm;
       
+      // Debug: Log the original GLTF structure
+      console.log('🔍 Original GLTF structure:', gltf);
+      console.log('🔍 Original GLTF keys:', Object.keys(gltf));
+      console.log('🔍 Original GLTF images:', gltf.images);
+      console.log('🔍 Original GLTF textures:', gltf.textures);
+      console.log('🔍 Original GLTF scenes:', gltf.scenes);
+      console.log('🔍 Original GLTF nodes:', gltf.nodes);
+      console.log('🔍 Original GLTF materials:', gltf.materials);
+      
+      // Debug: Check if GLTF has parser or other properties
+      console.log('🔍 GLTF parser:', gltf.parser);
+      console.log('🔍 GLTF userData:', gltf.userData);
+      console.log('🔍 GLTF animations:', gltf.animations);
+      console.log('🔍 GLTF cameras:', gltf.cameras);
+      console.log('🔍 GLTF asset:', gltf.asset);
+      
+      // Debug: Check if GLTF has any image-related properties
+      for (const key of Object.keys(gltf)) {
+        if (key.toLowerCase().includes('image') || key.toLowerCase().includes('texture') || key.toLowerCase().includes('buffer')) {
+          console.log(`🔍 GLTF ${key}:`, gltf[key]);
+        }
+      }
+      
+      // Debug: Check if GLTF has any nested structures that might contain images
+      if (gltf.parser) {
+        console.log('🔍 GLTF parser keys:', Object.keys(gltf.parser));
+        console.log('🔍 GLTF parser images:', gltf.parser.images);
+        console.log('🔍 GLTF parser textures:', gltf.parser.textures);
+        console.log('🔍 GLTF parser buffers:', gltf.parser.buffers);
+        console.log('🔍 GLTF parser bufferViews:', gltf.parser.bufferViews);
+      }
+      
+      // Debug: Check if GLTF has any buffer-related properties
+      if (gltf.buffers) {
+        console.log('🔍 GLTF buffers:', gltf.buffers);
+      }
+      
+      if (gltf.bufferViews) {
+        console.log('🔍 GLTF bufferViews:', gltf.bufferViews);
+      }
+      
+      if (gltf.accessors) {
+        console.log('🔍 GLTF accessors:', gltf.accessors);
+      }
+      
       if (!vrm) {
         throw new Error('VRM object is null or undefined');
       }
@@ -59,6 +104,41 @@ export class VRMLoader {
         processBlendShapes,
         setupBones
       });
+
+      // Preserve the original GLTF data in the VRM's userData for thumbnail extraction
+      if (!processedVRM.userData) {
+        processedVRM.userData = {};
+      }
+      processedVRM.userData.gltf = gltf;
+      
+      // Also attach GLTF data directly to the VRM object for easier access
+      processedVRM.gltf = gltf;
+      
+      // Debug: Log GLTF data attachment
+      console.log('🔍 GLTF data attached to VRM userData:', gltf);
+      console.log('🔍 GLTF structure keys:', Object.keys(gltf || {}));
+      console.log('🔍 GLTF images array:', gltf?.images);
+      console.log('🔍 GLTF images length:', gltf?.images?.length);
+      console.log('🔍 GLTF textures array:', gltf?.textures);
+      console.log('🔍 GLTF textures length:', gltf?.textures?.length);
+      console.log('🔍 GLTF scenes:', gltf?.scenes);
+      console.log('🔍 GLTF nodes:', gltf?.nodes);
+      console.log('🔍 GLTF materials:', gltf?.materials);
+      console.log('🔍 VRM userData after GLTF attachment:', processedVRM.userData);
+      console.log('🔍 VRM userData.gltf after attachment:', processedVRM.userData.gltf);
+      console.log('🔍 VRM.gltf after attachment:', processedVRM.gltf);
+      
+      // Debug: Check VRM metadata for thumbnail
+      console.log('🔍 VRM metadata:', processedVRM.meta);
+      console.log('🔍 VRM metadata texture index:', processedVRM.meta?.texture);
+      console.log('🔍 VRM metadata keys:', Object.keys(processedVRM.meta || {}));
+      
+      // Debug: Check if VRM has any image-related properties
+      for (const key of Object.keys(processedVRM.meta || {})) {
+        if (key.toLowerCase().includes('image') || key.toLowerCase().includes('texture') || key.toLowerCase().includes('thumbnail')) {
+          console.log(`🔍 VRM metadata ${key}:`, processedVRM.meta[key]);
+        }
+      }
 
       this.emit('vrmLoaded', { vrm: processedVRM, gltf });
       return processedVRM;
