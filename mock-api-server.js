@@ -1,12 +1,13 @@
 /**
- * Mock API Server for Open3DStudio Development
- * This provides a simple mock API for testing the frontend without the full 3DAIGC-API backend
+ * Mock 3DAIGC-API Server for Development
+ * This provides a local API server for testing the frontend integration
  */
 
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = 8000;
@@ -14,439 +15,289 @@ const PORT = 8000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    const uploadDir = 'uploads';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
+    cb(null, `${Date.now()}-${file.originalname}`);
   }
 });
 
-// Create different multer instances for different use cases
 const upload = multer({ storage });
-const uploadNone = multer();
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
-    message: 'Mock API server is running',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Get available models
-app.get('/models', (req, res) => {
   res.json({
-    models: [
-      {
-        id: 'text-to-3d',
-        name: 'Text to 3D',
-        description: 'Generate 3D models from text descriptions',
-        status: 'available'
-      },
-      {
-        id: 'image-to-3d',
-        name: 'Image to 3D',
-        description: 'Convert 2D images to 3D models',
-        status: 'available'
-      },
-      {
-        id: 'mesh-segmentation',
-        name: 'Mesh Segmentation',
-        description: 'Segment 3D models into parts',
-        status: 'available'
-      },
-      {
-        id: 'mesh-painting',
-        name: 'Mesh Painting',
-        description: 'Apply textures and materials to 3D models',
-        status: 'available'
-      },
-      {
-        id: 'part-completion',
-        name: 'Part Completion',
-        description: 'Complete missing parts of 3D models',
-        status: 'available'
-      },
-      {
-        id: 'auto-rigging',
-        name: 'Auto Rigging',
-        description: 'Automatically rig 3D models for animation',
-        status: 'available'
-      }
-    ]
-  });
-});
-
-// Create a new task
-app.post('/tasks', (req, res) => {
-  const { type, prompt, imageFile } = req.body;
-  
-  const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
-  // Simulate task creation
-  const task = {
-    id: taskId,
-    type,
-    prompt,
-    status: 'pending',
-    progress: 0,
-    createdAt: new Date().toISOString(),
-    estimatedTime: '2-5 minutes'
-  };
-  
-  console.log(`Created task: ${taskId} (${type})`);
-  
-  res.json(task);
-});
-
-// Get task status
-app.get('/tasks/:taskId', (req, res) => {
-  const { taskId } = req.params;
-  
-  // Simulate task progress
-  const progress = Math.min(100, Math.floor(Math.random() * 100));
-  const status = progress === 100 ? 'completed' : 'running';
-  
-  const task = {
-    id: taskId,
-    status,
-    progress,
-    updatedAt: new Date().toISOString()
-  };
-  
-  if (status === 'completed') {
-    task.result = {
-      modelUrl: '/mock-models/sample-model.glb',
-      thumbnailUrl: '/mock-models/sample-thumbnail.jpg',
-      metadata: {
-        vertices: 1234,
-        faces: 5678,
-        materials: 2
-      }
-    };
-  }
-  
-  res.json(task);
-});
-
-// Get all tasks
-app.get('/tasks', (req, res) => {
-  res.json({
-    tasks: [
-      {
-        id: 'task_1',
-        type: 'text-to-3d',
-        prompt: 'A cute robot',
-        status: 'completed',
-        progress: 100,
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-        result: {
-          modelUrl: '/mock-models/robot.glb',
-          thumbnailUrl: '/mock-models/robot-thumbnail.jpg'
-        }
-      },
-      {
-        id: 'task_2',
-        type: 'image-to-3d',
-        prompt: 'Convert this image to 3D',
-        status: 'running',
-        progress: 65,
-        createdAt: new Date(Date.now() - 1800000).toISOString()
-      }
-    ]
-  });
-});
-
-// Delete task
-app.delete('/tasks/:taskId', (req, res) => {
-  const { taskId } = req.params;
-  console.log(`Deleted task: ${taskId}`);
-  res.json({ message: 'Task deleted successfully' });
-});
-
-// Upload file
-app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-  
-  res.json({
-    message: 'File uploaded successfully',
-    filename: req.file.filename,
-    originalName: req.file.originalname,
-    size: req.file.size,
-    url: `/uploads/${req.file.filename}`
-  });
-});
-
-// Get task results
-app.get('/tasks/:taskId/result', (req, res) => {
-  const { taskId } = req.params;
-  
-  // Simulate result download
-  res.json({
-    taskId,
-    status: 'completed',
-    result: {
-      modelUrl: '/mock-models/sample-result.glb',
-      thumbnailUrl: '/mock-models/sample-result-thumbnail.jpg',
-      metadata: {
-        vertices: 2048,
-        faces: 4096,
-        materials: 3,
-        fileSize: '2.5MB'
-      }
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    services: {
+      'text-to-3d': 'available',
+      'image-to-3d': 'available',
+      'mesh-segmentation': 'available',
+      'mesh-painting': 'available',
+      'part-completion': 'available',
+      'auto-rigging': 'available'
     }
   });
 });
 
-// Generate endpoints that TaskManager expects
-app.post('/generate/text-to-3d', uploadNone.none(), (req, res) => {
-  let prompt, options;
-  
-  console.log('Text-to-3D request received');
-  console.log('Content-Type:', req.headers['content-type']);
-  console.log('Request body:', req.body);
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    prompt = req.body.prompt;
-    options = req.body.options;
-  } else {
-    // Handle multipart/form-data
-    prompt = req.body.prompt;
-    options = req.body.options ? JSON.parse(req.body.options) : {};
-  }
-  
-  // Fallback if prompt is still undefined
-  if (!prompt) {
-    prompt = 'A 3D model';
-    console.log('No prompt provided, using fallback');
-  }
-  
-  console.log(`Text-to-3D generation request: "${prompt}"`);
-  
-  // Simulate processing time
-  setTimeout(() => {
-    res.json({
+// Text-to-3D generation
+app.post('/generate/text-to-3d', upload.single('image'), async (req, res) => {
+  try {
+    const { prompt, options } = req.body;
+    console.log('Text-to-3D request:', { prompt, options });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Mock response
+    const result = {
       success: true,
       taskId: `text-to-3d_${Date.now()}`,
-      result: {
-        modelUrl: '/mock-models/text-to-3d-result.fbx',
-        thumbnailUrl: '/mock-models/text-to-3d-thumbnail.jpg',
-        metadata: {
-          prompt: prompt,
-          vertices: 1500,
-          faces: 3000,
-          materials: 2,
-          fileSize: '1.8MB'
-        }
+      modelUrl: '/mock-models/text-to-3d-result.glb',
+      thumbnailUrl: '/mock-models/text-to-3d-thumbnail.jpg',
+      metadata: {
+        prompt,
+        generatedAt: new Date().toISOString(),
+        processingTime: '3.2s',
+        modelFormat: 'GLB',
+        vertices: 12543,
+        faces: 24876
       }
-    });
-  }, 2000);
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Text-to-3D error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/generate/image-to-3d', upload.single('image'), (req, res) => {
-  let prompt, options;
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    prompt = req.body.prompt;
-    options = req.body.options;
-  } else {
-    prompt = req.body.prompt;
-    options = req.body.options ? JSON.parse(req.body.options) : {};
-  }
-  
-  console.log(`Image-to-3D generation request: "${prompt}"`);
-  console.log('Request body:', req.body);
-  console.log('Content-Type:', req.headers['content-type']);
-  
-  setTimeout(() => {
-    res.json({
+// Image-to-3D generation
+app.post('/generate/image-to-3d', upload.single('image'), async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const imageFile = req.file;
+    console.log('Image-to-3D request:', { prompt, imageFile: imageFile?.filename });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    
+    // Mock response
+    const result = {
       success: true,
       taskId: `image-to-3d_${Date.now()}`,
-      result: {
-        modelUrl: '/mock-models/image-to-3d-result.glb',
-        thumbnailUrl: '/mock-models/image-to-3d-thumbnail.jpg',
-        metadata: {
-          prompt: prompt,
-          vertices: 2000,
-          faces: 4000,
-          materials: 3,
-          fileSize: '2.2MB'
-        }
+      modelUrl: '/mock-models/image-to-3d-result.glb',
+      thumbnailUrl: '/mock-models/image-to-3d-thumbnail.jpg',
+      metadata: {
+        prompt,
+        sourceImage: imageFile?.filename,
+        generatedAt: new Date().toISOString(),
+        processingTime: '4.1s',
+        modelFormat: 'GLB',
+        vertices: 18765,
+        faces: 36542
       }
-    });
-  }, 3000);
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Image-to-3D error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/generate/mesh-painting', upload.single('image'), (req, res) => {
-  let prompt, options;
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    prompt = req.body.prompt;
-    options = req.body.options;
-  } else {
-    prompt = req.body.prompt;
-    options = req.body.options ? JSON.parse(req.body.options) : {};
-  }
-  
-  console.log(`Mesh painting request: "${prompt}"`);
-  
-  setTimeout(() => {
-    res.json({
-      success: true,
-      taskId: `mesh-painting_${Date.now()}`,
-      result: {
-        modelUrl: '/mock-models/mesh-painting-result.glb',
-        thumbnailUrl: '/mock-models/mesh-painting-thumbnail.jpg',
-        metadata: {
-          prompt: prompt,
-          vertices: 1800,
-          faces: 3600,
-          materials: 4,
-          fileSize: '2.0MB'
-        }
-      }
-    });
-  }, 2500);
-});
-
-app.post('/generate/mesh-segmentation', uploadNone.none(), (req, res) => {
-  let options;
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    options = req.body.options;
-  } else {
-    options = req.body.options ? JSON.parse(req.body.options) : {};
-  }
-  
-  console.log('Mesh segmentation request');
-  
-  setTimeout(() => {
-    res.json({
+// Mesh segmentation
+app.post('/generate/mesh-segmentation', async (req, res) => {
+  try {
+    const { options } = req.body;
+    console.log('Mesh segmentation request:', { options });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Mock response
+    const result = {
       success: true,
       taskId: `mesh-segmentation_${Date.now()}`,
-      result: {
-        segments: [
-          { id: 'head', name: 'Head', vertices: 500 },
-          { id: 'torso', name: 'Torso', vertices: 800 },
-          { id: 'arms', name: 'Arms', vertices: 400 },
-          { id: 'legs', name: 'Legs', vertices: 600 }
-        ],
-        metadata: {
-          totalSegments: 4,
-          totalVertices: 2300
-        }
+      segments: [
+        { id: 'head', name: 'Head', vertices: 1254, faces: 2487 },
+        { id: 'torso', name: 'Torso', vertices: 3456, faces: 6789 },
+        { id: 'arms', name: 'Arms', vertices: 2345, faces: 4567 },
+        { id: 'legs', name: 'Legs', vertices: 2890, faces: 5678 }
+      ],
+      metadata: {
+        totalVertices: 9945,
+        totalFaces: 19501,
+        segmentCount: 4,
+        processingTime: '2.1s'
       }
-    });
-  }, 1500);
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Mesh segmentation error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/generate/part-completion', uploadNone.none(), (req, res) => {
-  let prompt, options;
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    prompt = req.body.prompt;
-    options = req.body.options;
-  } else {
-    prompt = req.body.prompt;
-    options = req.body.options ? JSON.parse(req.body.options) : {};
+// Mesh painting
+app.post('/generate/mesh-painting', upload.single('image'), async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const imageFile = req.file;
+    console.log('Mesh painting request:', { prompt, imageFile: imageFile?.filename });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    
+    // Mock response
+    const result = {
+      success: true,
+      taskId: `mesh-painting_${Date.now()}`,
+      modelUrl: '/mock-models/mesh-painted-result.glb',
+      textureUrl: '/mock-models/mesh-painted-texture.jpg',
+      metadata: {
+        prompt,
+        sourceImage: imageFile?.filename,
+        generatedAt: new Date().toISOString(),
+        processingTime: '2.5s',
+        textureResolution: '2048x2048'
+      }
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Mesh painting error:', error);
+    res.status(500).json({ error: error.message });
   }
-  
-  console.log(`Part completion request: "${prompt}"`);
-  
-  setTimeout(() => {
-    res.json({
+});
+
+// Part completion
+app.post('/generate/part-completion', async (req, res) => {
+  try {
+    const { prompt, options } = req.body;
+    console.log('Part completion request:', { prompt, options });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 3500));
+    
+    // Mock response
+    const result = {
       success: true,
       taskId: `part-completion_${Date.now()}`,
-      result: {
-        modelUrl: '/mock-models/part-completion-result.glb',
-        thumbnailUrl: '/mock-models/part-completion-thumbnail.jpg',
-        metadata: {
-          prompt: prompt,
-          vertices: 2200,
-          faces: 4400,
-          materials: 3,
-          fileSize: '2.3MB'
-        }
+      modelUrl: '/mock-models/part-completed-result.glb',
+      metadata: {
+        prompt,
+        generatedAt: new Date().toISOString(),
+        processingTime: '3.5s',
+        completedParts: ['missing_arm', 'missing_leg'],
+        modelFormat: 'GLB'
       }
-    });
-  }, 4000);
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Part completion error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/generate/auto-rigging', uploadNone.none(), (req, res) => {
-  let options;
-  
-  // Handle both JSON and form data
-  if (req.headers['content-type']?.includes('application/json')) {
-    options = req.body.options;
-  } else {
-    options = req.body.options ? JSON.parse(req.body.options) : {};
-  }
-  
-  console.log('Auto rigging request');
-  
-  setTimeout(() => {
-    res.json({
+// Auto rigging
+app.post('/generate/auto-rigging', async (req, res) => {
+  try {
+    const { options } = req.body;
+    console.log('Auto rigging request:', { options });
+    
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Mock response
+    const result = {
       success: true,
       taskId: `auto-rigging_${Date.now()}`,
-      result: {
-        riggedModelUrl: '/mock-models/auto-rigging-result.glb',
-        thumbnailUrl: '/mock-models/auto-rigging-thumbnail.jpg',
-        bones: [
-          { name: 'Hips', position: [0, 0, 0] },
-          { name: 'Spine', position: [0, 0.5, 0] },
-          { name: 'Chest', position: [0, 1.0, 0] },
-          { name: 'Neck', position: [0, 1.3, 0] },
-          { name: 'Head', position: [0, 1.6, 0] }
-        ],
-        metadata: {
-          bones: 5,
-          vertices: 2500,
-          faces: 5000,
-          fileSize: '2.8MB'
-        }
+      modelUrl: '/mock-models/auto-rigged-result.glb',
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        processingTime: '5.0s',
+        boneCount: 54,
+        animationCount: 12,
+        modelFormat: 'GLB'
       }
-    });
-  }, 5000);
+    };
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Auto rigging error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: err.message 
-  });
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ 
-    error: 'Endpoint not found',
-    path: req.path 
+// Get available models/endpoints
+app.get('/models', (req, res) => {
+  res.json({
+    available: [
+      {
+        name: 'text-to-3d',
+        description: 'Generate 3D models from text prompts',
+        endpoint: '/generate/text-to-3d',
+        supportedFormats: ['GLB', 'GLTF', 'OBJ']
+      },
+      {
+        name: 'image-to-3d',
+        description: 'Convert 2D images to 3D models',
+        endpoint: '/generate/image-to-3d',
+        supportedFormats: ['GLB', 'GLTF', 'OBJ']
+      },
+      {
+        name: 'mesh-segmentation',
+        description: 'Segment 3D models into parts',
+        endpoint: '/generate/mesh-segmentation',
+        supportedFormats: ['GLB', 'GLTF']
+      },
+      {
+        name: 'mesh-painting',
+        description: 'Apply textures to 3D models',
+        endpoint: '/generate/mesh-painting',
+        supportedFormats: ['GLB', 'GLTF']
+      },
+      {
+        name: 'part-completion',
+        description: 'Complete missing parts of 3D models',
+        endpoint: '/generate/part-completion',
+        supportedFormats: ['GLB', 'GLTF']
+      },
+      {
+        name: 'auto-rigging',
+        description: 'Automatically rig 3D models for animation',
+        endpoint: '/generate/auto-rigging',
+        supportedFormats: ['GLB', 'GLTF']
+      }
+    ]
   });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Mock API server running on http://localhost:${PORT}`);
+  console.log(`🚀 Mock 3DAIGC-API Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 Available models: http://localhost:${PORT}/models`);
-  console.log(`📁 Upload endpoint: http://localhost:${PORT}/upload`);
-  console.log('\n💡 This is a mock server for development. For production, use the full 3DAIGC-API backend.');
+  console.log(`🔧 Available endpoints:`);
+  console.log(`   - POST /generate/text-to-3d`);
+  console.log(`   - POST /generate/image-to-3d`);
+  console.log(`   - POST /generate/mesh-segmentation`);
+  console.log(`   - POST /generate/mesh-painting`);
+  console.log(`   - POST /generate/part-completion`);
+  console.log(`   - POST /generate/auto-rigging`);
+  console.log(`   - GET /models`);
 });
 
 module.exports = app;
