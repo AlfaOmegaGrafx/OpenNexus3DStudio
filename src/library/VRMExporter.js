@@ -552,6 +552,18 @@ export class VRMExporter {
       buffers: ensureArray(gltfData.buffers)
     };
 
+    // Debug: Log the VRM file structure before conversion
+    console.log('VRM Export: VRM file structure:', {
+      hasAsset: !!vrmFile.asset,
+      hasExtensions: !!vrmFile.extensions,
+      hasVRMExtension: !!vrmFile.extensions?.VRM,
+      scenesCount: vrmFile.scenes?.length || 0,
+      nodesCount: vrmFile.nodes?.length || 0,
+      meshesCount: vrmFile.meshes?.length || 0,
+      materialsCount: vrmFile.materials?.length || 0,
+      buffersCount: vrmFile.buffers?.length || 0
+    });
+
     // Convert to proper GLB binary format with embedded binary data
     return this.convertToGLB(vrmFile, gltfData);
   }
@@ -563,8 +575,22 @@ export class VRMExporter {
    * @returns {ArrayBuffer} GLB binary data
    */
   convertToGLB(vrmFile, gltfData = null) {
-    // Convert to JSON string
-    const jsonString = JSON.stringify(vrmFile);
+    // Sanitize VRM data to prevent JSON parsing issues
+    const sanitizedVRMFile = this.sanitizeVRMData(vrmFile);
+    
+    // Convert to JSON string with proper formatting
+    const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
+    
+    // Validate JSON before proceeding
+    try {
+      JSON.parse(jsonString);
+      console.log('VRM Export: JSON validation successful');
+    } catch (error) {
+      console.error('VRM Export: JSON validation failed:', error);
+      console.error('VRM Export: Invalid JSON at position:', error.message);
+      throw new Error(`Invalid JSON structure: ${error.message}`);
+    }
+    
     const jsonBuffer = new TextEncoder().encode(jsonString);
     
     // Get actual binary data from GLTF export
@@ -660,6 +686,35 @@ export class VRMExporter {
     return glbBuffer;
   }
 
+
+  /**
+   * Sanitize VRM data to prevent JSON parsing issues
+   * @param {Object} vrmFile - VRM file data
+   * @returns {Object} Sanitized VRM file data
+   */
+  sanitizeVRMData(vrmFile) {
+    // Deep clone the VRM file to avoid modifying the original
+    const sanitized = JSON.parse(JSON.stringify(vrmFile));
+    
+    // Recursively sanitize all string values
+    const sanitizeObject = (obj) => {
+      if (typeof obj === 'string') {
+        // Remove any non-printable characters and control characters
+        return obj.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+      } else if (Array.isArray(obj)) {
+        return obj.map(sanitizeObject);
+      } else if (obj && typeof obj === 'object') {
+        const sanitizedObj = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitizedObj[key] = sanitizeObject(value);
+        }
+        return sanitizedObj;
+      }
+      return obj;
+    };
+    
+    return sanitizeObject(sanitized);
+  }
 
   /**
    * Download file

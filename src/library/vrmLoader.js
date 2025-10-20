@@ -171,8 +171,19 @@ export class VRMLoader {
       return processedVRM;
     } catch (error) {
       console.error('Failed to load VRM:', error);
-      this.emit('vrmLoadError', { error, source });
-      throw error;
+      
+      // Provide more specific error information
+      if (error.message.includes('Unexpected non-whitespace character')) {
+        console.error('VRM Load Error: JSON parsing failed - file may be corrupted or not a valid VRM file');
+        console.error('VRM Load Error: This usually indicates the exported VRM file has malformed JSON structure');
+        throw new Error(`VRM file has invalid JSON structure: ${error.message}. The exported VRM file may be corrupted.`);
+      } else if (error.message.includes('JSON')) {
+        console.error('VRM Load Error: JSON parsing error - file format issue');
+        throw new Error(`VRM file format error: ${error.message}`);
+      } else {
+        console.error('VRM Load Error: General loading error');
+        throw new Error(`VRM loading failed: ${error.message}`);
+      }
     }
   }
 
