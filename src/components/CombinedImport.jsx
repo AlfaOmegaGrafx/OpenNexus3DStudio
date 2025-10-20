@@ -15,12 +15,13 @@ const CombinedImport = ({ onFileLoad }) => {
       setValidationResult(null);
       setVrmMetadata(null);
 
-      // Load and process the VRM file
+      // Load and process the VRM file with fallback support
       const vrm = await loader.loadVRM(file, {
         normalize: true,
         addDefaultMaterials: true,
         processBlendShapes: true,
-        setupBones: true
+        setupBones: true,
+        allowMissingHumanoidBones: true
       });
 
       // Get VRM metadata
@@ -37,10 +38,18 @@ const CombinedImport = ({ onFileLoad }) => {
           onFileLoad(file);
         }
         
-        alert('VRM model imported successfully!');
+        if (validation.isFallbackVRM) {
+          alert('VRM model imported successfully in fallback mode (no humanoid bones)!');
+        } else {
+          alert('VRM model imported successfully!');
+        }
       } else {
         console.warn('VRM validation issues:', validation.issues);
-        alert(`VRM imported with issues: ${validation.issues.join(', ')}`);
+        if (validation.isFallbackVRM) {
+          alert(`VRM imported in fallback mode with issues: ${validation.issues.join(', ')}`);
+        } else {
+          alert(`VRM imported with issues: ${validation.issues.join(', ')}`);
+        }
       }
     } catch (error) {
       console.error('VRM import failed:', error);
@@ -167,8 +176,19 @@ const CombinedImport = ({ onFileLoad }) => {
               </span>
               <span className="status-text">
                 {validationResult.valid ? 'VRM is valid' : 'VRM has issues'}
+                {validationResult.isFallbackVRM && ' (Fallback Mode)'}
               </span>
             </div>
+            
+            {validationResult.isFallbackVRM && (
+              <div className="fallback-info">
+                <h4 className="text-sm font-semibold mb-1 text-yellow-400">⚠️ Fallback Mode:</h4>
+                <p className="text-xs text-yellow-300">
+                  This VRM model lacks humanoid bones and is loaded in fallback mode. 
+                  Some features may be limited, but the model can still be viewed and exported.
+                </p>
+              </div>
+            )}
             
             {validationResult.issues.length > 0 && (
               <div className="validation-issues">
@@ -176,6 +196,17 @@ const CombinedImport = ({ onFileLoad }) => {
                 <ul className="text-xs text-red-400">
                   {validationResult.issues.map((issue, index) => (
                     <li key={index}>• {issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {validationResult.warnings.length > 0 && (
+              <div className="validation-warnings">
+                <h4 className="text-sm font-semibold mb-1">Warnings:</h4>
+                <ul className="text-xs text-yellow-400">
+                  {validationResult.warnings.map((warning, index) => (
+                    <li key={index}>• {warning}</li>
                   ))}
                 </ul>
               </div>

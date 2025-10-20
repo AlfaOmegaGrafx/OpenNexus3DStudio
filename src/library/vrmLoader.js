@@ -9,10 +9,13 @@ import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 export class VRMLoader {
   constructor() {
     this.gltfLoader = new GLTFLoader();
-    // Register VRM loader plugin if available
+    // Register VRM loader plugin with fallback for missing humanoid bones
     if (this.gltfLoader.register) {
       this.gltfLoader.register((parser) => {
-        return new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true });
+        return new VRMLoaderPlugin(parser, { 
+          autoUpdateHumanBones: false, // Disable strict humanoid bone checking
+          strictHumanoidBones: false   // Allow VRM models without humanoid bones
+        });
       });
     }
     
@@ -29,14 +32,26 @@ export class VRMLoader {
       normalize = true,
       addDefaultMaterials = true,
       processBlendShapes = true,
-      setupBones = true
+      setupBones = true,
+      allowMissingHumanoidBones = true
     } = options;
 
     try {
       this.emit('vrmLoadingStart', { source, options });
 
-      // Load the VRM file
-      const gltf = await this.loadGLTF(source);
+      // Try to load the VRM file with fallback for missing humanoid bones
+      let gltf;
+      try {
+        gltf = await this.loadGLTF(source);
+      } catch (error) {
+        // If VRM loading fails due to missing humanoid bones, try fallback approach
+        if (error.message.includes('humanoid bones are required') && allowMissingHumanoidBones) {
+          console.warn('VRM loading failed due to missing humanoid bones, attempting fallback...');
+          gltf = await this.loadVRMWithFallback(source);
+        } else {
+          throw error;
+        }
+      }
       
       if (!gltf || !gltf.userData) {
         throw new Error('Failed to load GLTF file or missing userData');
@@ -183,6 +198,107 @@ export class VRMLoader {
         }
       );
     });
+  }
+
+  /**
+   * Load VRM with fallback for missing humanoid bones
+   * @param {File|string} source - File or URL
+   */
+  async loadVRMWithFallback(source) {
+    console.log('🔄 Attempting VRM fallback loading...');
+    
+    // Create a new GLTF loader without VRM plugin for fallback
+    const fallbackLoader = new GLTFLoader();
+    
+    return new Promise((resolve, reject) => {
+      // Handle File objects by creating a URL
+      let url = source;
+      if (source instanceof File) {
+        url = URL.createObjectURL(source);
+      }
+      
+      fallbackLoader.load(
+        url,
+        (gltf) => {
+          // Clean up object URL if we created one
+          if (source instanceof File) {
+            URL.revokeObjectURL(url);
+          }
+          
+          // Create a mock VRM object for models without humanoid bones
+          const mockVRM = this.createMockVRM(gltf);
+          gltf.userData.vrm = mockVRM;
+          
+          console.log('✅ VRM fallback loading successful');
+          resolve(gltf);
+        },
+        (progress) => {
+          const percentComplete = (progress.loaded / progress.total) * 100;
+          this.emit('vrmLoadingProgress', { progress: percentComplete });
+        },
+        (error) => {
+          // Clean up object URL if we created one
+          if (source instanceof File) {
+            URL.revokeObjectURL(url);
+          }
+          console.error('❌ VRM fallback loading failed:', error);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  /**
+   * Create a mock VRM object for models without humanoid bones
+   * @param {Object} gltf - GLTF object
+   */
+  createMockVRM(gltf) {
+    console.log('🔧 Creating mock VRM object for model without humanoid bones...');
+    
+    const mockVRM = {
+      scene: gltf.scene,
+      meta: {
+        title: 'Untitled',
+        version: '1.0.0',
+        author: 'Unknown',
+        contactInformation: '',
+        reference: '',
+        texture: -1,
+        allowedUserName: 'Everyone',
+        violentUssageName: 'Disallow',
+        sexualUssageName: 'Disallow',
+        commercialUssageName: 'Allow',
+        otherPermissionUrl: '',
+        licenseUrl: '',
+        otherLicenseUrl: '',
+        metaVersion: '0'
+      },
+      humanoid: null, // No humanoid bones
+      expressionManager: null, // No expressions
+      userData: {
+        open3dstudio: {
+          fallbackMode: true,
+          hasHumanoidBones: false,
+          loaded: true,
+          loadDate: new Date().toISOString()
+        }
+      }
+    };
+
+    // Add basic scene processing
+    if (gltf.scene) {
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          // Ensure materials are properly set
+          if (child.material) {
+            child.material.needsUpdate = true;
+          }
+        }
+      });
+    }
+
+    console.log('✅ Mock VRM object created successfully');
+    return mockVRM;
   }
 
   /**
@@ -529,8 +645,13 @@ export class VRMLoader {
       warnings.push('VRM model lacks metadata');
     }
 
-    if (!vrm.humanoid) {
+    // Check if this is a fallback VRM (no humanoid bones)
+    const isFallbackVRM = vrm.userData?.open3dstudio?.fallbackMode === true;
+    
+    if (!vrm.humanoid && !isFallbackVRM) {
       warnings.push('VRM model lacks humanoid structure');
+    } else if (isFallbackVRM) {
+      warnings.push('VRM model loaded in fallback mode (no humanoid bones)');
     }
 
     if (!vrm.scene) {
@@ -555,10 +676,15 @@ export class VRMLoader {
       issues.push('VRM model has no meshes');
     }
 
+    // For fallback VRMs, be more lenient with validation
+    const isStrictValidation = !isFallbackVRM;
+    
     return {
       valid: issues.length === 0,
       issues,
-      warnings
+      warnings,
+      isFallbackVRM,
+      strictValidation: isStrictValidation
     };
   }
 
