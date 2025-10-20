@@ -5,6 +5,7 @@ import { VRMExporter } from '../library/VRMExporter';
 const VRMExport = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isImagesExpanded, setIsImagesExpanded] = useState(false);
   const [vrmMetadata, setVrmMetadata] = useState(null);
   const [exportOptions, setExportOptions] = useState({
     filename: 'open3dstudio_export.vrm',
@@ -1848,8 +1849,18 @@ const VRMExport = () => {
                   {/* VRM Image/Texture Display */}
                   {vrmMetadata.textures && vrmMetadata.textures.length > 0 && (
                     <div className="vrm-images-section">
-                      <h5 className="text-md font-semibold mb-2 text-green-600">🖼️ VRM Images & Textures ({vrmMetadata.textures.length} found)</h5>
-                      <div className="images-grid">
+                      <div className="flex items-center mb-2">
+                        <button 
+                          onClick={() => setIsImagesExpanded(!isImagesExpanded)}
+                          className="expand-icon-button mr-2"
+                          title={isImagesExpanded ? "Collapse Images" : "Expand Images"}
+                        >
+                          {isImagesExpanded ? '▼' : '▶'}
+                        </button>
+                        <h5 className="text-md font-semibold text-green-600">🖼️ VRM Images & Textures ({vrmMetadata.textures.length} found)</h5>
+                      </div>
+                      {isImagesExpanded && (
+                        <div className="images-grid">
                         {vrmMetadata.textures.map((textureInfo, index) => (
                           <div key={index} className="texture-item">
                             <div className="texture-preview">
@@ -1882,7 +1893,8 @@ const VRMExport = () => {
                             </div>
                           </div>
                         ))}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
