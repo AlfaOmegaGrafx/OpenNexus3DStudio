@@ -20,7 +20,7 @@ const VRMExport = () => {
     includeHumanoidBones: true
   });
 
-  const { currentModel, sceneManager } = useScene();
+  const { currentModel, sceneManager, characterManager } = useScene();
   const [vrmExporter] = useState(() => new VRMExporter());
 
   // Extract VRM metadata when a VRM model is loaded
@@ -1489,37 +1489,15 @@ const VRMExport = () => {
 
     try {
       setIsExporting(true);
-      
-      // Create VRM metadata
-      const metadata = {
-        title: exportOptions.title,
-        author: exportOptions.author,
-        version: exportOptions.version,
-        allowedUserName: exportOptions.allowedUserName,
-        commercialUssageName: exportOptions.commercialUssageName
-      };
 
-      // Create humanoid bones if needed
-      const humanoidBones = exportOptions.includeHumanoidBones 
-        ? vrmExporter.createDefaultHumanoidBones(currentModel)
-        : {};
+      // Use CharacterManager's robust VRM exporter (VRM 0.0 pipeline)
+      const baseName = exportOptions.filename.endsWith('.vrm')
+        ? exportOptions.filename.slice(0, -4)
+        : exportOptions.filename;
 
-      // Create expressions if needed
-      const expressions = exportOptions.includeExpressions
-        ? vrmExporter.createDefaultExpressions()
-        : {};
+      await characterManager.downloadVRM(baseName, null);
 
-      const result = await vrmExporter.exportToVRM(currentModel, {
-        filename: exportOptions.filename,
-        vrmVersion: exportOptions.vrmVersion,
-        metadata,
-        humanoidBones,
-        expressions,
-        optimize: exportOptions.optimize
-      });
-      
-      // Show success message
-      alert(`VRM model exported successfully as ${result.filename}`);
+      alert(`VRM model exported successfully as ${baseName}.vrm`);
     } catch (error) {
       console.error('VRM export failed:', error);
       alert(`VRM export failed: ${error.message}`);
