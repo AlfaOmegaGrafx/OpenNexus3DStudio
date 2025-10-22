@@ -71,7 +71,6 @@ const MintSimple = ({ onNavigate }) => {
                   className={styles.buttonLeft}
                   onClick={() => onNavigate && onNavigate('back')}
                 >
-                  <img src={backButtonIcon} alt="Back" className={styles.buttonIcon} />
                   Back
                 </button>
                 <button 
