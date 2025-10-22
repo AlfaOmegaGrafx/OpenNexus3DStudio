@@ -73,7 +73,9 @@ export class VRMExporter {
         images: gltfData.images?.length || 0,
         accessors: gltfData.accessors?.length || 0,
         bufferViews: gltfData.bufferViews?.length || 0,
-        buffers: gltfData.buffers?.length || 0
+        buffers: gltfData.buffers?.length || 0,
+        skins: gltfData.skins?.length || 0,
+        animations: gltfData.animations?.length || 0
       });
 
       // Debug binary data
@@ -459,7 +461,11 @@ export class VRMExporter {
       images: gltfData.images || [],
       accessors: gltfData.accessors || [],
       bufferViews: gltfData.bufferViews || [],
-      buffers: gltfData.buffers || []
+      buffers: gltfData.buffers || [],
+      // CRITICAL: Include skins array for skeleton/bone data
+      skins: gltfData.skins || [],
+      // Also include animations if present
+      animations: gltfData.animations || []
     };
 
     // Convert to GLB format
@@ -468,7 +474,16 @@ export class VRMExporter {
 
   /**
    * Create proper VRM 0.0 file structure
-   * @param {Object} gltfData - GLTF data
+   * 
+   * CRITICAL: This method must include ALL GLTF arrays, especially:
+   * - skins: Contains skeleton/bone data. Without this, the GLTFLoader will fail
+   *   with "Cannot read properties of undefined (reading '0')" when loading skin data.
+   * - animations: Contains animation data for the model.
+   * 
+   * The VRM file format is essentially GLTF 2.0 with a VRM extension, so all
+   * standard GLTF arrays must be preserved for the file to load correctly.
+   * 
+   * @param {Object} gltfData - GLTF data from Three.js exporter
    * @param {Object} vrmData - VRM metadata
    * @returns {ArrayBuffer} VRM 0.0 file data
    */
@@ -484,7 +499,11 @@ export class VRMExporter {
       hasMeshes: !!gltfData.meshes,
       hasMaterials: !!gltfData.materials,
       hasBuffers: !!gltfData.buffers,
-      bufferCount: gltfData.buffers?.length || 0
+      hasSkins: !!gltfData.skins,
+      hasAnimations: !!gltfData.animations,
+      bufferCount: gltfData.buffers?.length || 0,
+      skinsCount: gltfData.skins?.length || 0,
+      animationsCount: gltfData.animations?.length || 0
     });
 
     // Create complete VRM 0.0 GLTF structure with embedded model data
@@ -549,7 +568,11 @@ export class VRMExporter {
       images: ensureArray(gltfData.images),
       accessors: ensureArray(gltfData.accessors),
       bufferViews: ensureArray(gltfData.bufferViews),
-      buffers: ensureArray(gltfData.buffers)
+      buffers: ensureArray(gltfData.buffers),
+      // CRITICAL: Include skins array for skeleton/bone data
+      skins: ensureArray(gltfData.skins),
+      // Also include animations if present
+      animations: ensureArray(gltfData.animations)
     };
 
     // Debug: Log the VRM file structure before conversion
@@ -561,7 +584,9 @@ export class VRMExporter {
       nodesCount: vrmFile.nodes?.length || 0,
       meshesCount: vrmFile.meshes?.length || 0,
       materialsCount: vrmFile.materials?.length || 0,
-      buffersCount: vrmFile.buffers?.length || 0
+      buffersCount: vrmFile.buffers?.length || 0,
+      skinsCount: vrmFile.skins?.length || 0,
+      animationsCount: vrmFile.animations?.length || 0
     });
 
     // Convert to proper GLB binary format with embedded binary data
