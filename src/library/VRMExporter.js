@@ -89,6 +89,14 @@ export class VRMExporter {
         buffers: gltfData.buffers?.length || 0,
         binaryData: gltfData.binaryData ? gltfData.binaryData.byteLength : 0
       });
+      
+      // Debug: Check how images are stored
+      if (gltfData.images && gltfData.images.length > 0) {
+        console.log('VRM Export: First image structure:', gltfData.images[0]);
+        const hasBufferViews = gltfData.images.filter(img => img.bufferView !== undefined).length;
+        const hasDataURIs = gltfData.images.filter(img => img.uri && img.uri.startsWith('data:')).length;
+        console.log(`VRM Export: Images with bufferView: ${hasBufferViews}, with data URIs: ${hasDataURIs}`);
+      }
 
       // Debug binary data
       if (gltfData.binaryData) {
@@ -525,24 +533,30 @@ export class VRMExporter {
     
     // CRITICAL FIX: Keep bufferView references for images, remove data URIs
     // Images in GLB files should reference bufferViews for texture data
-    const cleanImages = ensureArray(gltfData.images).map(image => {
+    const cleanImages = ensureArray(gltfData.images).map((image, idx) => {
       // If image has bufferView, keep it (this is the proper GLB way)
       if (image.bufferView !== undefined) {
+        console.log(`VRM Export: Image ${idx} has bufferView ${image.bufferView}, keeping it`);
         // Remove URI if present, keep bufferView and mimeType
         return {
           bufferView: image.bufferView,
-          mimeType: image.mimeType || 'image/png'
+          mimeType: image.mimeType || 'image/png',
+          name: image.name
         };
       }
       // If image only has data URI, we need to keep it (not ideal but necessary)
       // The GLTFExporter should have created bufferViews, but if not, keep the URI
       if (image.uri && image.uri.startsWith('data:')) {
-        console.warn('VRM Export: Image has data URI but no bufferView:', image.name || 'unnamed');
+        console.warn(`VRM Export: Image ${idx} has data URI but no bufferView, keeping data URI`);
         // Keep the image as-is since there's no bufferView alternative
+        // This will make the JSON large, but textures will work
         return image;
       }
+      console.warn(`VRM Export: Image ${idx} has neither bufferView nor data URI!`, image);
       return image;
     });
+    
+    console.log(`VRM Export: Cleaned ${cleanImages.length} images, preserved texture data`);
 
     // Extract VRM-specific data from extracted VRM if available
     const extractedVRM = vrmData.extractedVRMData;
