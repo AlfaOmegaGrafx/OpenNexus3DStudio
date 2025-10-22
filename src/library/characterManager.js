@@ -360,6 +360,15 @@ export class CharacterManager {
         }
       });
     }
+    /**
+     * Backward-compatible alias for SavePanel and other UIs.
+     * Delegates to downloadVRM to produce a full VRM file with required data.
+     * @param {string} name
+     * @param {Object|null} exportOptions
+     */
+    exportVRM(name, exportOptions = null) {
+      return this.downloadVRM(name, exportOptions);
+    }
     downloadGLB(name, exportOptions = null){
       console.log("XXX fix glb downloader");
       if (this.canDownload()){
@@ -370,6 +379,15 @@ export class CharacterManager {
       else{
         console.error("Download not supported");
       }
+    }
+    /**
+     * Backward-compatible alias for SavePanel and other UIs.
+     * Delegates to downloadGLB.
+     * @param {string} name
+     * @param {Object|null} exportOptions
+     */
+    exportGLB(name, exportOptions = null){
+      return this.downloadGLB(name, exportOptions);
     }
     /**
      * Gets the current avatar selection.
