@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 import VRMToGLBConverter from '../library/vrmToGlbConverter';
 
 const CharacterPreview3D = ({ model, className = "", cameraAngle = "3/4" }) => {
@@ -65,6 +66,14 @@ const CharacterPreview3D = ({ model, className = "", cameraAngle = "3/4" }) => {
     // Initialize converter and loader
     converterRef.current = new VRMToGLBConverter();
     gltfLoaderRef.current = new GLTFLoader();
+    // Ensure VRM plugin is registered for preview loader too
+    if (typeof gltfLoaderRef.current.register === 'function') {
+      try {
+        gltfLoaderRef.current.register((parser) => new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }));
+      } catch (e) {
+        console.warn('CharacterPreview3D: VRMLoaderPlugin registration failed', e);
+      }
+    }
 
     // Store references
     sceneRef.current = { scene, camera, controls };

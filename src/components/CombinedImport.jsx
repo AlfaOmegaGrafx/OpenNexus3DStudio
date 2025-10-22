@@ -53,7 +53,12 @@ const CombinedImport = ({ onFileLoad }) => {
       }
     } catch (error) {
       console.error('VRM import failed:', error);
-      alert(`VRM import failed: ${error.message}`);
+      const msg = String(error?.message || 'Unknown error');
+      let hint = '';
+      if (msg.includes('Unknown extension') || msg.includes('humanoid bones')) {
+        hint = '\n\nTip: The loader will attempt a fallback mode for non-standard VRM files.';
+      }
+      alert(`VRM import failed: ${msg}${hint}`);
     } finally {
       setIsLoading(false);
     }

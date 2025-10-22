@@ -544,6 +544,8 @@ export class VRMExporter {
       scenes: ensureArray(gltfData.scenes, [{ nodes: [0] }]),
       nodes: ensureArray(gltfData.nodes, [{ name: "Root" }]),
       meshes: ensureArray(gltfData.meshes),
+      // IMPORTANT: include skins array to satisfy GLTFLoader when nodes reference skins
+      skins: ensureArray(gltfData.skins),
       materials: ensureArray(gltfData.materials),
       textures: ensureArray(gltfData.textures),
       images: ensureArray(gltfData.images),
@@ -551,6 +553,17 @@ export class VRMExporter {
       bufferViews: ensureArray(gltfData.bufferViews),
       buffers: ensureArray(gltfData.buffers)
     };
+
+    // Preserve any other extension declarations used by the original GLTF (e.g., KHR_*),
+    // while ensuring VRM stays included.
+    if (Array.isArray(gltfData.extensionsUsed)) {
+      const used = new Set(["VRM", ...gltfData.extensionsUsed]);
+      vrmFile.extensionsUsed = Array.from(used);
+    }
+    if (Array.isArray(gltfData.extensionsRequired)) {
+      const req = new Set(["VRM", ...gltfData.extensionsRequired]);
+      vrmFile.extensionsRequired = Array.from(req);
+    }
 
     // Debug: Log the VRM file structure before conversion
     console.log('VRM Export: VRM file structure:', {

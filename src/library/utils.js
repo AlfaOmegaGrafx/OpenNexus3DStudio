@@ -76,9 +76,14 @@ export function getRandomArrayValue (arr){
 
 export async function loadModel(file, onProgress) {
   const gltfLoader = new GLTFLoader()
-  gltfLoader.register((parser) => {
-    return new VRMLoaderPlugin(parser)
-  })
+  // Register VRM plugin defensively so VRM files load via this utility
+  if (typeof gltfLoader.register === 'function') {
+    try {
+      gltfLoader.register((parser) => new VRMLoaderPlugin(parser))
+    } catch (e) {
+      console.warn('utils.loadModel: VRMLoaderPlugin registration failed', e)
+    }
+  }
   return gltfLoader.loadAsync(file, onProgress).then((model) => {
     const vrm = model.userData.vrm
     renameVRMBones(vrm)

@@ -11,7 +11,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
-import { VRMExpressionPresetName } from '@pixiv/three-vrm';
+import { VRMExpressionPresetName, VRMLoaderPlugin } from '@pixiv/three-vrm';
 import { sharedHDRManager } from './sharedHDRManager.js';
 
 export class SceneManager {
@@ -38,6 +38,14 @@ export class SceneManager {
       
       // Loaders
     this.gltfLoader = new GLTFLoader();
+    // Register VRM plugin so GLTFLoader can understand VRM extensions
+    if (typeof this.gltfLoader.register === 'function') {
+      try {
+        this.gltfLoader.register((parser) => new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }));
+      } catch (e) {
+        console.warn('Failed to register VRMLoaderPlugin on SceneManager GLTFLoader:', e);
+      }
+    }
     this.objLoader = new OBJLoader();
     this.fbxLoader = new FBXLoader();
     

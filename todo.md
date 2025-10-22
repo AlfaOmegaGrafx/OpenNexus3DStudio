@@ -14,6 +14,9 @@
 - [x] **Collapsible VRM Images & Textures Section** - Added expand/collapse functionality with proper state management
 - [x] **VRM Metadata Display** - Successfully extracting and displaying VRM model metadata
 - [x] **VRM Texture Processing** - Working texture extraction and display (2048x2048 resolution)
+- [x] **Register VRM Plugin** - Registered `VRMLoaderPlugin` on all `GLTFLoader` instances (scene manager, utils, asset manager, preview)
+- [x] **Harden VRM Loader** - VRM 0.x/1.0 tolerant loading, graceful fallback, better errors
+- [x] **Import Error UX** - Improved CombinedImport error messages with helpful hints
 
 ### API Integration & AI Workflows (MAJOR ACHIEVEMENT)
 - [x] **Fix API Connection Issues** - API now shows "Connected" status instead of "Disconnected"
@@ -44,7 +47,6 @@
   - One-click VRM optimizer (merge geometries + texture atlasing)
   - Performance optimization for large models
   - Memory management improvements
-
 
 ---
 
@@ -194,5 +196,5 @@
 
 ---
 
-*Last Updated: [Current Date]*
+*Last Updated: 2025-10-22*
 *Status: Active Development*

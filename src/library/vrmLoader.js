@@ -9,14 +9,16 @@ import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 export class VRMLoader {
   constructor() {
     this.gltfLoader = new GLTFLoader();
-    // Register VRM loader plugin with fallback for missing humanoid bones
-    if (this.gltfLoader.register) {
-      this.gltfLoader.register((parser) => {
-        return new VRMLoaderPlugin(parser, { 
-          autoUpdateHumanBones: false, // Disable strict humanoid bone checking
-          strictHumanoidBones: false   // Allow VRM models without humanoid bones
-        });
-      });
+    // Register VRM loader plugin with tolerant options (supports VRM 0.x and 1.0)
+    if (typeof this.gltfLoader.register === 'function') {
+      try {
+        this.gltfLoader.register((parser) => new VRMLoaderPlugin(parser, {
+          autoUpdateHumanBones: true,
+          strictHumanoidBones: false
+        }));
+      } catch (e) {
+        console.warn('VRMLoader: VRMLoaderPlugin registration failed', e);
+      }
     }
     
     this.eventListeners = new Map();
@@ -45,7 +47,10 @@ export class VRMLoader {
         gltf = await this.loadGLTF(source);
       } catch (error) {
         // If VRM loading fails due to missing humanoid bones, try fallback approach
-        if (error.message.includes('humanoid bones are required') && allowMissingHumanoidBones) {
+        const msg = String(error?.message || '');
+        const missingHumanoid = msg.includes('humanoid bones are required');
+        const unknownExtension = msg.includes('Unknown extension "VRM"') || msg.includes('Unknown extension "VRMC_vrm"');
+        if ((missingHumanoid || unknownExtension) && allowMissingHumanoidBones) {
           console.warn('VRM loading failed due to missing humanoid bones, attempting fallback...');
           gltf = await this.loadVRMWithFallback(source);
         } else {
@@ -58,7 +63,9 @@ export class VRMLoader {
       }
       
       if (!gltf.userData.vrm) {
-        throw new Error('File does not contain VRM data');
+        // Some exporters may place VRM meta differently; tolerate by creating a lightweight wrapper
+        console.warn('No VRM data found in userData; creating lightweight VRM wrapper');
+        gltf.userData.vrm = this.createMockVRM(gltf);
       }
 
       const vrm = gltf.userData.vrm;

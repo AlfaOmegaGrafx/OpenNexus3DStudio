@@ -3,6 +3,7 @@
  * Similar to the asset management in CharacterStudio
  */
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
@@ -20,6 +21,15 @@ export class AssetManager {
       obj: new OBJLoader(),
       fbx: new FBXLoader()
     };
+
+    // Register VRM plugin on shared GLTF loader used by AssetManager
+    if (typeof this.loaders.gltf.register === 'function') {
+      try {
+        this.loaders.gltf.register((parser) => new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }));
+      } catch (e) {
+        console.warn('AssetManager: VRMLoaderPlugin registration failed', e);
+      }
+    }
     
     this.eventListeners = new Map();
   }
