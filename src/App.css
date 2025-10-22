@@ -450,6 +450,7 @@
   transition: all 0.2s ease;
   padding: 4px 8px;
   margin-bottom: 0.5rem; /* Add spacing between icons */
+  position: relative;
 }
 
 .character-studio-sidebar-icon:hover {
@@ -467,6 +468,51 @@
 
 .character-studio-sidebar-icon:active {
   transform: scale(0.95);
+}
+
+.character-studio-sidebar-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1a1a;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 10000;
+  border: 1px solid #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  font-weight: 500;
+  min-width: max-content;
+  margin-right: 8px;
+}
+
+.character-studio-sidebar-icon::before {
+  content: '';
+  position: absolute;
+  right: calc(100% + 2px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-left-color: #1a1a1a;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.character-studio-sidebar-icon:hover::after,
+.character-studio-sidebar-icon:hover::before {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* CharacterStudio Content */
@@ -821,6 +867,8 @@
   height: 16px;
   object-fit: contain;
   margin-right: 0.5rem;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .colorPickerIcon {
@@ -1060,6 +1108,7 @@
   font-size: 0.9rem;
   transition: all 0.2s ease;
   padding: 4px 8px;
+  position: relative;
 }
 
 .sidebar-icon:hover {
@@ -1070,6 +1119,51 @@
 
 .sidebar-icon:active {
   transform: scale(0.95);
+}
+
+.sidebar-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1a1a;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 10000;
+  border: 1px solid #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  font-weight: 500;
+  min-width: max-content;
+  margin-left: 8px;
+}
+
+.sidebar-icon::before {
+  content: '';
+  position: absolute;
+  left: calc(100% + 2px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-right-color: #1a1a1a;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.sidebar-icon:hover::after,
+.sidebar-icon:hover::before {
+  opacity: 1;
+  visibility: visible;
 }
 
 .main-viewport {

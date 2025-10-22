@@ -732,6 +732,7 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => document.querySelector('input[type="file"]')?.click()}
+                  data-tooltip="Import Files"
                   title="Import Files"
                 >
                   📁
@@ -741,6 +742,7 @@ function AppContent() {
                   onClick={() => {
                     setSkeletonActive(!skeletonActive);
                   }}
+                  data-tooltip="Toggle Skeleton"
                   title="Toggle Skeleton"
                 >
                   👤
@@ -754,6 +756,7 @@ function AppContent() {
                       alert('No model to export');
                     }
                   }}
+                  data-tooltip="Export GLB"
                   title="Export GLB"
                 >
                   📤
@@ -766,6 +769,7 @@ function AppContent() {
                       handleAITask('text-to-3d', userPrompt);
                     }
                   }}
+                  data-tooltip="AI Text-to-3D"
                   title="AI Text-to-3D"
                 >
                   🎭
@@ -783,6 +787,7 @@ function AppContent() {
                     };
                     input.click();
                   }}
+                  data-tooltip="AI Image-to-3D"
                   title="AI Image-to-3D"
                 >
                   🤖
@@ -919,6 +924,7 @@ function AppContent() {
                   setCurrentPanel('appearance');
                   setCurrentMenuIndex(0);
                 }}
+                data-tooltip="Character Appearance"
                 title="Character Appearance"
               >
                 👤
@@ -930,6 +936,7 @@ function AppContent() {
                   setCurrentPanel('save');
                   setCurrentMenuIndex(1);
                 }}
+                data-tooltip="Save Character"
                 title="Save Character"
               >
                 💾
@@ -941,6 +948,7 @@ function AppContent() {
                   setCurrentPanel('mint');
                   setCurrentMenuIndex(2);
                 }}
+                data-tooltip="Mint Character"
                 title="Mint Character"
               >
                 🪙
@@ -952,6 +960,7 @@ function AppContent() {
                   setCurrentPanel('load');
                   setCurrentMenuIndex(3);
                 }}
+                data-tooltip="Load Character"
                 title="Load Character"
               >
                 📁
@@ -961,6 +970,7 @@ function AppContent() {
                 onClick={() => {
                   setCharacterStudioViewportVisible(!characterStudioViewportVisible);
                 }}
+                data-tooltip="Toggle 3D Viewport"
                 title="Toggle CharacterStudio 3D Viewport"
               >
                 🎮
