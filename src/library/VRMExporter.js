@@ -51,8 +51,8 @@ export class VRMExporter {
       const scene = new THREE.Scene();
       scene.add(model);
       
-      // Export as standard GLTF with proper binary data
-      const gltfData = await this.gltfExporter.parseAsync(scene, {
+      // Export as GLB (binary: true) to get proper bufferViews for images and geometry
+      const glbArrayBuffer = await this.gltfExporter.parseAsync(scene, {
         binary: true,
         includeCustomExtensions: false,
         animations: [],
@@ -64,6 +64,9 @@ export class VRMExporter {
         forcePowerOfTwoTextures: false
       });
       
+      // Parse the GLB to extract JSON and binary chunks
+      const gltfData = this.parseGLB(glbArrayBuffer);
+      
       console.log('VRM Export: GLTF data structure:', {
         scenes: gltfData.scenes?.length || 0,
         nodes: gltfData.nodes?.length || 0,
@@ -73,20 +76,15 @@ export class VRMExporter {
         images: gltfData.images?.length || 0,
         accessors: gltfData.accessors?.length || 0,
         bufferViews: gltfData.bufferViews?.length || 0,
-        buffers: gltfData.buffers?.length || 0
+        buffers: gltfData.buffers?.length || 0,
+        binaryData: gltfData.binaryData ? gltfData.binaryData.byteLength : 0
       });
 
       // Debug binary data
-      if (gltfData.buffers && gltfData.buffers.length > 0) {
-        const buffer = gltfData.buffers[0];
-        console.log('VRM Export: Buffer details:', {
-          hasData: !!buffer.data,
-          dataType: buffer.data ? buffer.data.constructor.name : 'no data',
-          dataSize: buffer.data ? buffer.data.byteLength : 0,
-          bufferType: buffer.type || 'unknown'
-        });
+      if (gltfData.binaryData) {
+        console.log('VRM Export: Binary data extracted, size:', gltfData.binaryData.byteLength);
       } else {
-        console.warn('VRM Export: No buffers found in GLTF data');
+        console.warn('VRM Export: No binary data found in GLB');
       }
 
       // Create VRM 0.0 file structure manually
@@ -234,10 +232,13 @@ export class VRMExporter {
 
   /**
    * Create VRM 0.0 file structure
-   * @param {Object} gltfData - GLTF data from Three.js exporter
+   * @param {Object} gltfData - GLTF data from Three.js exporter (with binaryData)
    * @param {Object} options - VRM options
    */
   async createVRM0File(gltfData, options = {}) {
+    // Store binaryData separately
+    const binaryData = gltfData.binaryData;
+    
     // Ensure GLTF data has required arrays
     const ensureArray = (arr) => Array.isArray(arr) ? arr : [];
     
@@ -287,6 +288,19 @@ export class VRMExporter {
     };
 
     // Create VRM GLTF structure
+    // Note: We need to clean up buffer references (remove data URIs)
+    const cleanBuffers = ensureArray(gltfData.buffers).map(buffer => ({
+      byteLength: buffer.byteLength
+      // Remove uri property as we'll embed the data in the binary chunk
+    }));
+    
+    // Check if images use bufferViews or data URIs
+    const hasImageDataUris = ensureArray(gltfData.images).some(img => img.uri && img.uri.startsWith('data:'));
+    if (hasImageDataUris) {
+      console.warn('VRM Export: Images are using data URIs. For optimal VRM files, images should use bufferViews.');
+      // Note: The images will still work, but the file might be larger than necessary
+    }
+    
     const vrmGltf = {
       asset: {
         version: "2.0",
@@ -301,7 +315,7 @@ export class VRMExporter {
       images: ensureArray(gltfData.images),
       accessors: ensureArray(gltfData.accessors),
       bufferViews: ensureArray(gltfData.bufferViews),
-      buffers: ensureArray(gltfData.buffers),
+      buffers: cleanBuffers,
       extensions: {
         VRM: vrmExtensions
       },
@@ -468,11 +482,14 @@ export class VRMExporter {
 
   /**
    * Create proper VRM 0.0 file structure
-   * @param {Object} gltfData - GLTF data
+   * @param {Object} gltfData - GLTF data (with binaryData)
    * @param {Object} vrmData - VRM metadata
    * @returns {ArrayBuffer} VRM 0.0 file data
    */
   createVRM0File(gltfData, vrmData) {
+    // Store binaryData separately (will be used by convertToGLB)
+    const binaryData = gltfData.binaryData;
+    
     // Ensure all GLTF arrays are properly initialized
     const ensureArray = (data, defaultValue = []) => {
       return Array.isArray(data) ? data : defaultValue;
@@ -484,8 +501,16 @@ export class VRMExporter {
       hasMeshes: !!gltfData.meshes,
       hasMaterials: !!gltfData.materials,
       hasBuffers: !!gltfData.buffers,
-      bufferCount: gltfData.buffers?.length || 0
+      bufferCount: gltfData.buffers?.length || 0,
+      hasBinaryData: !!binaryData,
+      binaryDataSize: binaryData ? binaryData.byteLength : 0
     });
+
+    // Clean up buffer references (remove data URIs as we'll embed in binary chunk)
+    const cleanBuffers = ensureArray(gltfData.buffers).map(buffer => ({
+      byteLength: buffer.byteLength
+      // Remove uri property as data will be in the GLB binary chunk
+    }));
 
     // Create complete VRM 0.0 GLTF structure with embedded model data
     const vrmFile = {
@@ -549,7 +574,7 @@ export class VRMExporter {
       images: ensureArray(gltfData.images),
       accessors: ensureArray(gltfData.accessors),
       bufferViews: ensureArray(gltfData.bufferViews),
-      buffers: ensureArray(gltfData.buffers)
+      buffers: cleanBuffers
     };
 
     // Debug: Log the VRM file structure before conversion
@@ -575,8 +600,11 @@ export class VRMExporter {
    * @returns {ArrayBuffer} GLB binary data
    */
   convertToGLB(vrmFile, gltfData = null) {
+    // Remove binaryData from vrmFile before sanitizing (it shouldn't be in JSON)
+    const { binaryData, ...vrmFileWithoutBinary } = vrmFile;
+    
     // Sanitize VRM data to prevent JSON parsing issues
-    const sanitizedVRMFile = this.sanitizeVRMData(vrmFile);
+    const sanitizedVRMFile = this.sanitizeVRMData(vrmFileWithoutBinary);
     
     // Convert to JSON string with proper formatting
     const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
@@ -593,26 +621,42 @@ export class VRMExporter {
     
     const jsonBuffer = new TextEncoder().encode(jsonString);
     
-    // Get actual binary data from GLTF export
+    // Get actual binary data from parsed GLB
     let binaryBuffer = new ArrayBuffer(0);
-    if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
+    
+    // First check if we have binaryData directly from parseGLB
+    if (gltfData && gltfData.binaryData) {
+      binaryBuffer = gltfData.binaryData;
+      console.log('VRM Export: Using binary data from parsed GLB, size:', binaryBuffer.byteLength);
+    }
+    // Fallback: try to extract from buffers array (for backward compatibility)
+    else if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
       const buffer = gltfData.buffers[0];
-      if (buffer && buffer.data) {
+      
+      // When binary: false is used, buffers have 'uri' property with data URL
+      if (buffer && buffer.uri) {
+        console.log('VRM Export: Extracting binary data from data URI');
+        // Extract base64 data from data URI
+        const base64Data = buffer.uri.split(',')[1];
+        const binaryString = atob(base64Data);
+        binaryBuffer = new ArrayBuffer(binaryString.length);
+        const binaryView = new Uint8Array(binaryBuffer);
+        for (let i = 0; i < binaryString.length; i++) {
+          binaryView[i] = binaryString.charCodeAt(i);
+        }
+        console.log('VRM Export: Extracted binary data from URI, size:', binaryBuffer.byteLength);
+      }
+      // Direct buffer data (if available)
+      else if (buffer && buffer.data) {
         binaryBuffer = buffer.data;
-        console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
+        console.log('VRM Export: Using direct binary data, size:', binaryBuffer.byteLength);
       }
     }
     
-    // If no binary data from GLTF, try to extract from the model directly
-    if (binaryBuffer.byteLength === 0 && gltfData) {
-      console.warn('VRM Export: No binary data found in GLTF, creating minimal buffer');
-      // Create a minimal buffer with some data to ensure the file isn't empty
-      binaryBuffer = new ArrayBuffer(1024);
-      const binaryView = new Uint8Array(binaryBuffer);
-      // Fill with some pattern instead of zeros
-      for (let i = 0; i < binaryView.length; i++) {
-        binaryView[i] = (i % 256);
-      }
+    // If no binary data found, log error - this shouldn't happen
+    if (binaryBuffer.byteLength === 0) {
+      console.error('VRM Export: No binary data found in GLTF export! The exported VRM will not contain model geometry.');
+      throw new Error('Failed to extract binary buffer data from GLTF export');
     }
     
     // Ensure JSON is padded to 4-byte boundary
@@ -728,6 +772,59 @@ export class VRMExporter {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  /**
+   * Parse a GLB ArrayBuffer to extract JSON and binary data
+   * @param {ArrayBuffer} glbArrayBuffer - The GLB file as ArrayBuffer
+   * @returns {Object} Object containing the parsed GLTF JSON and binary data
+   */
+  parseGLB(glbArrayBuffer) {
+    const dataView = new DataView(glbArrayBuffer);
+    
+    // Read GLB header
+    const magic = dataView.getUint32(0, true);
+    const version = dataView.getUint32(4, true);
+    const length = dataView.getUint32(8, true);
+    
+    if (magic !== 0x46546C67) { // "glTF" in ASCII
+      throw new Error('Invalid GLB file: wrong magic number');
+    }
+    
+    console.log('VRM Export: Parsing GLB - version:', version, 'length:', length);
+    
+    let offset = 12; // After header
+    let jsonData = null;
+    let binaryData = null;
+    
+    // Read chunks
+    while (offset < length) {
+      const chunkLength = dataView.getUint32(offset, true);
+      const chunkType = dataView.getUint32(offset + 4, true);
+      offset += 8;
+      
+      if (chunkType === 0x4E4F534A) { // "JSON" chunk
+        const jsonBytes = new Uint8Array(glbArrayBuffer, offset, chunkLength);
+        const jsonString = new TextDecoder().decode(jsonBytes);
+        jsonData = JSON.parse(jsonString);
+        console.log('VRM Export: Found JSON chunk, size:', chunkLength);
+      } else if (chunkType === 0x004E4942) { // "BIN\0" chunk
+        binaryData = glbArrayBuffer.slice(offset, offset + chunkLength);
+        console.log('VRM Export: Found BIN chunk, size:', chunkLength);
+      }
+      
+      offset += chunkLength;
+    }
+    
+    if (!jsonData) {
+      throw new Error('Invalid GLB file: no JSON chunk found');
+    }
+    
+    // Return the parsed data
+    return {
+      ...jsonData,
+      binaryData: binaryData
+    };
   }
 
   /**
