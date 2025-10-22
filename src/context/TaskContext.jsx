@@ -250,8 +250,21 @@ export const TaskProvider = ({ children }) => {
 
   // Clear completed tasks
   const clearCompletedTasks = () => {
+    console.log('TaskContext: clearCompletedTasks called');
     if (taskManagerRef.current) {
+      // Get completed tasks before clearing
+      const completedTasks = taskManagerRef.current.getTasksByStatus('completed');
+      console.log('TaskContext: Found completed tasks:', completedTasks.length);
+      
+      // Clear from TaskManager
       taskManagerRef.current.clearCompletedTasks();
+      
+      // Update React state directly
+      setTasks(prev => {
+        const filtered = prev.filter(task => task.status !== 'completed');
+        console.log('TaskContext: Filtered tasks:', filtered.length);
+        return filtered;
+      });
     }
   };
 
