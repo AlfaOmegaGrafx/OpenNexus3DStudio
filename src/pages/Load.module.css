@@ -115,7 +115,6 @@
 }
 
 .buttonContainer .buttonLeft {
-    float: left;
     padding: 8px 16px;
     background: #3a3a3a;
     color: #ccc;
@@ -146,7 +145,6 @@
 }
 
 .buttonContainer .buttonRight {
-    float: Right;
     padding: 8px 16px;
     background: #007acc;
     color: white;
@@ -359,13 +357,15 @@
 .container {
   padding: 20px;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   background: #1a1a1a;
   color: #ffffff;
   display: flex;
   flex-direction: column;
   border-radius: 8px;
   border: 1px solid #555;
+  justify-content: space-between;
+  box-sizing: border-box;
 }
 
 .sectionTitle {
@@ -389,11 +389,22 @@
 }
 
 .walletSection {
-  margin-bottom: 20px;
+  margin: auto 0;
   text-align: center;
   display: flex;
   justify-content: center;
   align-items: center;
+  flex: 1;
+  justify-content: center;
+}
+
+.buttonContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #555;
 }
 
 .walletButton {
@@ -434,6 +445,8 @@
 
 .charactersSection {
   margin-bottom: 20px;
+  overflow: hidden;
+  flex-shrink: 1;
 }
 
 .charactersSection h3 {
@@ -447,6 +460,8 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 15px;
   margin-bottom: 20px;
+  overflow: hidden;
+  max-height: 300px;
 }
 
 .characterCard {
