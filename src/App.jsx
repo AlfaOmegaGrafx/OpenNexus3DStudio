@@ -10,6 +10,8 @@ import RenderModeSelector from './components/RenderModeSelector';
 import APIStatus from './components/APIStatus';
 import GLBExport from './components/GLBExport';
 import VRMExport from './components/VRMExport';
+import TextureExtractor from './components/TextureExtractor';
+import ErrorBoundary from './components/ErrorBoundary';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
@@ -811,6 +813,9 @@ function AppContent() {
           />
           <GLBExport />
           <VRMExport />
+          <ErrorBoundary showDetails={false}>
+            <TextureExtractor />
+          </ErrorBoundary>
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}
