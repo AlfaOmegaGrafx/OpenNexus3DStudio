@@ -36,64 +36,64 @@ const TextureExtractor = () => {
         return;
       }
 
-    // Texture type configurations
-    const textureTypes = [
-      { key: 'map', name: 'Diffuse/Albedo', icon: '🎨' },
-      { key: 'normalMap', name: 'Normal Map', icon: '🗺️' },
-      { key: 'roughnessMap', name: 'Roughness', icon: '✨' },
-      { key: 'metalnessMap', name: 'Metalness', icon: '🔩' },
-      { key: 'emissiveMap', name: 'Emissive', icon: '💡' },
-      { key: 'aoMap', name: 'Ambient Occlusion', icon: '🌑' },
-      { key: 'lightMap', name: 'Light Map', icon: '☀️' },
-      { key: 'bumpMap', name: 'Bump Map', icon: '⛰️' },
-      { key: 'displacementMap', name: 'Displacement', icon: '📐' },
-      { key: 'alphaMap', name: 'Alpha/Transparency', icon: '👁️' },
-      { key: 'envMap', name: 'Environment', icon: '🌍' }
-    ];
+      // Texture type configurations
+      const textureTypes = [
+        { key: 'map', name: 'Diffuse/Albedo', icon: '🎨' },
+        { key: 'normalMap', name: 'Normal Map', icon: '🗺️' },
+        { key: 'roughnessMap', name: 'Roughness', icon: '✨' },
+        { key: 'metalnessMap', name: 'Metalness', icon: '🔩' },
+        { key: 'emissiveMap', name: 'Emissive', icon: '💡' },
+        { key: 'aoMap', name: 'Ambient Occlusion', icon: '🌑' },
+        { key: 'lightMap', name: 'Light Map', icon: '☀️' },
+        { key: 'bumpMap', name: 'Bump Map', icon: '⛰️' },
+        { key: 'displacementMap', name: 'Displacement', icon: '📐' },
+        { key: 'alphaMap', name: 'Alpha/Transparency', icon: '👁️' },
+        { key: 'envMap', name: 'Environment', icon: '🌍' }
+      ];
 
-    // Traverse model to find all materials and textures
-    model.traverse((child) => {
-      if (child.isMesh && child.material) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        
-        materials.forEach((material) => {
-          textureTypes.forEach(({ key, name, icon }) => {
-            const texture = material[key];
-            
-            if (texture && !processedTextures.has(texture.uuid)) {
-              processedTextures.add(texture.uuid);
+      // Traverse model to find all materials and textures
+      model.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          
+          materials.forEach((material) => {
+            textureTypes.forEach(({ key, name, icon }) => {
+              const texture = material[key];
               
-              // Convert texture to data URL
-              const textureData = convertTextureToDataURL(texture);
-              
-              if (textureData) {
-                textures.push({
-                  uuid: texture.uuid,
-                  name: texture.name || `${material.name || 'Material'}_${name}`,
-                  type: name,
-                  typeIcon: icon,
-                  materialName: material.name || 'Unnamed Material',
-                  meshName: child.name || 'Unnamed Mesh',
-                  dataUrl: textureData.dataUrl,
-                  width: textureData.width,
-                  height: textureData.height,
-                  format: textureData.format,
-                  texture: texture,
-                  wrapS: texture.wrapS,
-                  wrapT: texture.wrapT,
-                  magFilter: texture.magFilter,
-                  minFilter: texture.minFilter,
-                  flipY: texture.flipY,
-                  encoding: texture.encoding
-                });
+              if (texture && !processedTextures.has(texture.uuid)) {
+                processedTextures.add(texture.uuid);
                 
-                console.log(`✅ Extracted: ${icon} ${name} from ${material.name || 'material'}`);
+                // Convert texture to data URL
+                const textureData = convertTextureToDataURL(texture);
+                
+                if (textureData) {
+                  textures.push({
+                    uuid: texture.uuid,
+                    name: texture.name || `${material.name || 'Material'}_${name}`,
+                    type: name,
+                    typeIcon: icon,
+                    materialName: material.name || 'Unnamed Material',
+                    meshName: child.name || 'Unnamed Mesh',
+                    dataUrl: textureData.dataUrl,
+                    width: textureData.width,
+                    height: textureData.height,
+                    format: textureData.format,
+                    texture: texture,
+                    wrapS: texture.wrapS,
+                    wrapT: texture.wrapT,
+                    magFilter: texture.magFilter,
+                    minFilter: texture.minFilter,
+                    flipY: texture.flipY,
+                    encoding: texture.encoding
+                  });
+                  
+                  console.log(`✅ Extracted: ${icon} ${name} from ${material.name || 'material'}`);
+                }
               }
-            }
+            });
           });
-        });
-      }
-    });
+        }
+      });
 
       console.log(`🎨 Total textures extracted: ${textures.length}`);
       setExtractedTextures(textures);
