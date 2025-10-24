@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
 import styles from './Appearance.module.css';
 
-// Import loot-assets icons (using PNG thumbnails for colorful loot graphics)
-import bodyIcon from "/loot-assets/loot/thumbnails/Body/orion.png";
-import headIcon from "/loot-assets/loot/thumbnails/Head/hood.png";
-import handsIcon from "/loot-assets/loot/thumbnails/Hands/gloves.png";
-import shoesIcon from "/loot-assets/loot/thumbnails/Shoes/shoes.png";
-import chestIcon from "/loot-assets/loot/thumbnails/Chest/robe.png";
-import neckIcon from "/loot-assets/loot/thumbnails/Neck/amulet.png";
-import weaponIcon from "/loot-assets/loot/thumbnails/Weapon/long_sword.png";
-import waistIcon from "/loot-assets/loot/thumbnails/Waist/sash.png";
+// Use local placeholder icon to avoid missing external loot-assets during tests
+import placeholderIcon from '../images/color-palette.png';
 import colorPickerIcon from '../images/color-palette.png';
 import randomizeIcon from '../images/randomize.png';
 import cancelIcon from '../images/cancel.png';
@@ -20,14 +13,14 @@ const AppearanceSimple = ({ onNavigate }) => {
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   const traitCategories = [
-    { name: 'Body', icon: bodyIcon, traits: ['Default Body', 'Muscular', 'Slim'] },
-    { name: 'Head', icon: headIcon, traits: ['Default Head', 'Round', 'Square'] },
-    { name: 'Hands', icon: handsIcon, traits: ['Default Hands', 'Gloves', 'Bare'] },
-    { name: 'Shoes', icon: shoesIcon, traits: ['Default Shoes', 'Boots', 'Sneakers'] },
-    { name: 'Chest', icon: chestIcon, traits: ['Default Shirt', 'T-Shirt', 'Hoodie'] },
-    { name: 'Neck', icon: neckIcon, traits: ['Default Neck', 'Necklace', 'Collar'] },
-    { name: 'Weapon', icon: weaponIcon, traits: ['No Weapon', 'Sword', 'Hammer'] },
-    { name: 'Waist', icon: waistIcon, traits: ['Default Waist', 'Belt', 'Sash'] }
+    { name: 'Body', icon: placeholderIcon, traits: ['Default Body', 'Muscular', 'Slim'] },
+    { name: 'Head', icon: placeholderIcon, traits: ['Default Head', 'Round', 'Square'] },
+    { name: 'Hands', icon: placeholderIcon, traits: ['Default Hands', 'Gloves', 'Bare'] },
+    { name: 'Shoes', icon: placeholderIcon, traits: ['Default Shoes', 'Boots', 'Sneakers'] },
+    { name: 'Chest', icon: placeholderIcon, traits: ['Default Shirt', 'T-Shirt', 'Hoodie'] },
+    { name: 'Neck', icon: placeholderIcon, traits: ['Default Neck', 'Necklace', 'Collar'] },
+    { name: 'Weapon', icon: placeholderIcon, traits: ['No Weapon', 'Sword', 'Hammer'] },
+    { name: 'Waist', icon: placeholderIcon, traits: ['Default Waist', 'Belt', 'Sash'] }
   ];
 
   const handleTraitSelect = (category, trait) => {

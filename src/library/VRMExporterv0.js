@@ -1,6 +1,5 @@
 import { BufferAttribute, Euler, Vector3 } from "three";
 import { VRMExpressionPresetName } from "@pixiv/three-vrm";
-import { encodeToKTX2 } from 'ktx2-encoder';
 import { KtxDecoder } from "./ktx";
 import { KTXTools } from "./ktxtools";
 
@@ -911,7 +910,14 @@ function getNodes(parentNode) {
 
   // Initialize the KTX decoder/compressor
 
-const ktxTools = new KTXTools();
+// Lazily initialize KTX tools to avoid test/runtime side effects on import
+let ktxTools = null;
+function getKtxTools() {
+    if (!ktxTools) {
+        ktxTools = new KTXTools();
+    }
+    return ktxTools;
+}
 
 async function imageBitmap2ktx2(image) {
     // Create ImageBitmap from the image
@@ -937,7 +943,7 @@ async function imageBitmap2ktx2(image) {
 
   // Compress the image data to KTX2 format
   // reference https://github.khronos.org/KTX-Software/ktxtools/ktx_create.html
-  const ktx2Data = await ktxTools.compress(pixelData, canvas.width, canvas.height, 4, {
+  const ktx2Data = await getKtxTools().compress(pixelData, canvas.width, canvas.height, 4, {
     //basisu_options: {
         normalMap : false,
 

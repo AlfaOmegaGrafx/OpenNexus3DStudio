@@ -63,6 +63,52 @@ global.HTMLCanvasElement.prototype.getContext = function(contextId) {
   return null
 }
 
+// Provide a minimal window OffscreenCanvas polyfill used by ktx tools
+if (typeof global.OffscreenCanvas === 'undefined') {
+  global.OffscreenCanvas = class OffscreenCanvas {
+    constructor(width, height) {
+      this.width = width
+      this.height = height
+      this.canvas = {
+        getContext: () => ({
+          getImageData: () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 }),
+          putImageData: () => {},
+          drawImage: () => {},
+        })
+      }
+    }
+    getContext() {
+      return {
+        getImageData: () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 }),
+        putImageData: () => {},
+        drawImage: () => {},
+      }
+    }
+  }
+}
+
+// Provide LIBKTX as a no-op factory to satisfy KtxDecoder.init in tests
+if (typeof global.LIBKTX === 'undefined') {
+  global.LIBKTX = async () => ({
+    GL: {
+      createContext: () => ({}),
+      makeContextCurrent: () => {}
+    },
+    UastcFlags: { LEVEL_DEFAULT: { value: 0 }, LEVEL_FASTER: { value: 0 }, LEVEL_FASTEST: { value: 0 }, LEVEL_SLOWER: { value: 0 }, LEVEL_VERYSLOW: { value: 0 } },
+    SupercmpScheme: { NONE: 0, ZSTD: 1, ZLIB: 2, BASIS_LZ: 3 },
+    TranscodeTarget: {
+      RGBA8888: 0, ASTC_4x4_RGBA: 1, BC7_RGBA: 2, BC1_OR_3: 3, PVRTC1_4_RGBA: 4, ETC: 5
+    },
+    ErrorCode: { SUCCESS: 0 },
+    ktxTexture: class {
+      constructor() { this.baseWidth = 1; this.baseHeight = 1; this.dataSize = 4; this.isSRGB = false; this.needsTranscoding = false }
+      glUpload() { return { texture: {} } }
+      transcodeBasis() { return 0 }
+    },
+    ktxBasisParams: class {}
+  })
+}
+
 // Mock URL.createObjectURL
 global.URL.createObjectURL = (blob) => `blob:${blob.type}`
 global.URL.revokeObjectURL = () => {}

@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Mock RGBELoader first to avoid hoist ordering issues
+vi.mock('three/examples/jsm/loaders/RGBELoader.js', () => ({
+  RGBELoader: vi.fn(() => ({ load: vi.fn() }))
+}));
 import { SceneManager } from '../library/sceneManager';
 
 // Mock Three.js
@@ -25,6 +29,7 @@ vi.mock('three', () => ({
   })),
   Color: vi.fn(),
   AmbientLight: vi.fn(() => ({ castShadow: false })),
+  PointLight: vi.fn(() => ({ position: { set: vi.fn() } })),
   DirectionalLight: vi.fn(() => ({
     position: { set: vi.fn() },
     castShadow: true,
@@ -33,6 +38,7 @@ vi.mock('three', () => ({
       camera: { near: 0.5, far: 50 }
     }
   })),
+  HemisphereLight: vi.fn(() => ({ position: { set: vi.fn() } })),
   GridHelper: vi.fn(),
   AxesHelper: vi.fn(),
   Box3: vi.fn(() => ({
@@ -67,11 +73,7 @@ vi.mock('three/examples/jsm/loaders/FBXLoader.js', () => ({
   }))
 }));
 
-vi.mock('three/examples/jsm/loaders/RGBELoader.js', () => ({
-  RGBELoader: vi.fn(() => ({
-    load: vi.fn()
-  }))
-}));
+// (defined above before SceneManager import)
 
 vi.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
   OrbitControls: vi.fn(() => ({
@@ -89,8 +91,8 @@ describe('SceneManager', () => {
   beforeEach(() => {
     sceneManager = new SceneManager();
     mockContainer = document.createElement('div');
-    mockContainer.clientWidth = 800;
-    mockContainer.clientHeight = 600;
+    Object.defineProperty(mockContainer, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(mockContainer, 'clientHeight', { value: 600, configurable: true });
     mockContainer.appendChild = vi.fn();
   });
 
@@ -181,13 +183,11 @@ describe('SceneManager', () => {
     it('should load HDR environment successfully', async () => {
       await sceneManager.initialize(mockContainer);
       
-      // Mock the RGBELoader load method
-      const mockRGBELoader = require('three/examples/jsm/loaders/RGBELoader.js').RGBELoader;
+      // Mock the RGBELoader load method using the mocked constructor
+      const { RGBELoader } = require('three/examples/jsm/loaders/RGBELoader.js');
       const mockLoad = vi.fn();
-      mockRGBELoader.mockImplementation(() => ({ load: mockLoad }));
-      
+      RGBELoader.mockImplementation(() => ({ load: mockLoad }));
       sceneManager.loadHDREnvironment('./test.hdr', 0.8);
-      
       expect(mockLoad).toHaveBeenCalledWith(
         './test.hdr',
         expect.any(Function),
@@ -199,15 +199,13 @@ describe('SceneManager', () => {
     it('should handle HDR loading errors gracefully', async () => {
       await sceneManager.initialize(mockContainer);
       
-      const mockRGBELoader = require('three/examples/jsm/loaders/RGBELoader.js').RGBELoader;
+      const { RGBELoader } = require('three/examples/jsm/loaders/RGBELoader.js');
       const mockLoad = vi.fn();
-      mockRGBELoader.mockImplementation(() => ({ load: mockLoad }));
-      
+      RGBELoader.mockImplementation(() => ({ load: mockLoad }));
       // Mock console.error to avoid test output
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       
       sceneManager.loadHDREnvironment('./invalid.hdr');
-      
       expect(mockLoad).toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
