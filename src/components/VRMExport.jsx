@@ -1482,7 +1482,20 @@ const VRMExport = () => {
   }, [sceneManager?.currentVRM]);
 
   const handleExport = async () => {
-    if (!currentModel) {
+    // Use the correct model reference - prefer currentVRM if available, fallback to currentModel
+    const modelToExport = sceneManager?.currentVRM?.scene || currentModel;
+    
+    console.log('🔍 VRM Export Debug:', {
+      hasSceneManager: !!sceneManager,
+      hasCurrentVRM: !!sceneManager?.currentVRM,
+      hasCurrentVRMScene: !!sceneManager?.currentVRM?.scene,
+      hasCurrentModel: !!currentModel,
+      modelToExport: modelToExport,
+      modelType: modelToExport?.type,
+      modelChildren: modelToExport?.children?.length
+    });
+    
+    if (!modelToExport) {
       alert('No model to export');
       return;
     }
@@ -1501,7 +1514,7 @@ const VRMExport = () => {
 
       // Create humanoid bones if needed
       const humanoidBones = exportOptions.includeHumanoidBones 
-        ? vrmExporter.createDefaultHumanoidBones(currentModel)
+        ? vrmExporter.createDefaultHumanoidBones(modelToExport)
         : {};
 
       // Create expressions if needed
@@ -1509,7 +1522,7 @@ const VRMExport = () => {
         ? vrmExporter.createDefaultExpressions()
         : {};
 
-      const result = await vrmExporter.exportToVRM(currentModel, {
+      const result = await vrmExporter.exportToVRM(modelToExport, {
         filename: exportOptions.filename,
         vrmVersion: exportOptions.vrmVersion,
         metadata,

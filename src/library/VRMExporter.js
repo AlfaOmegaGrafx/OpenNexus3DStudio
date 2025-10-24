@@ -96,7 +96,7 @@ export class VRMExporter {
       }
 
       // Create VRM 0.0 file structure manually
-      const vrmFile = await this.createVRM0File(gltfData, {
+      const glbData = await this.createVRM0File(gltfData, {
         vrmVersion,
         metadata,
         humanoidBones,
@@ -105,8 +105,6 @@ export class VRMExporter {
         screenshot,
         blendShapes: extractedBlendShapes
       });
-
-      const glbData = vrmFile;
 
       // Create blob and download
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
@@ -498,9 +496,9 @@ export class VRMExporter {
       return Array.isArray(data) ? data : defaultValue;
     };
 
-      console.log('VRM Export: Creating VRM file with GLTF data:', {
-        hasScenes: !!gltfData.scenes,
-        hasNodes: !!gltfData.nodes,
+    console.log('VRM Export: Creating VRM file with GLTF data:', {
+      hasScenes: !!gltfData.scenes,
+      hasNodes: !!gltfData.nodes,
         hasMeshes: !!gltfData.meshes,
         hasMaterials: !!gltfData.materials,
         hasBuffers: !!gltfData.buffers,
@@ -515,6 +513,19 @@ export class VRMExporter {
       // Convert extracted blend shapes to VRM blendShapeGroups format
       const blendShapeGroups = this.convertBlendShapesToVRM(vrmData.blendShapes || []);
       console.log('VRM Export: Converted blend shape groups:', blendShapeGroups.length);
+      
+      console.log('VRM Export: Creating VRM file with GLTF data:', {
+        hasScenes: !!gltfData.scenes,
+        hasNodes: !!gltfData.nodes,
+        hasMeshes: !!gltfData.meshes,
+        hasMaterials: !!gltfData.materials,
+        hasBuffers: !!gltfData.buffers,
+      hasSkins: !!gltfData.skins,
+      hasAnimations: !!gltfData.animations,
+      bufferCount: gltfData.buffers?.length || 0,
+      skinsCount: gltfData.skins?.length || 0,
+      animationsCount: gltfData.animations?.length || 0
+    });
 
     // Create complete VRM 0.0 GLTF structure with embedded model data
     const vrmFile = {
@@ -616,13 +627,25 @@ export class VRMExporter {
     // Convert to JSON string with proper formatting
     const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
     
+    // Additional validation: Check for any non-printable characters in JSON
+    const hasNonPrintableChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(jsonString);
+    if (hasNonPrintableChars) {
+      console.warn('VRM Export: JSON contains non-printable characters, cleaning...');
+      // Remove non-printable characters except for valid JSON whitespace
+      const cleanedJsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+      console.log('VRM Export: Cleaned JSON length:', cleanedJsonString.length, 'vs original:', jsonString.length);
+    }
+    
     // Validate JSON before proceeding
     try {
-      JSON.parse(jsonString);
-      console.log('VRM Export: JSON validation successful');
+      const parsedJson = JSON.parse(jsonString);
+      console.log('VRM Export: JSON validation successful, length:', jsonString.length);
     } catch (error) {
       console.error('VRM Export: JSON validation failed:', error);
       console.error('VRM Export: Invalid JSON at position:', error.message);
+      console.error('VRM Export: JSON string around error position:', 
+        jsonString.substring(Math.max(0, error.message.match(/\d+/)?.[0] - 50 || 0), 
+        (error.message.match(/\d+/)?.[0] || 0) + 50));
       throw new Error(`Invalid JSON structure: ${error.message}`);
     }
     
@@ -633,21 +656,25 @@ export class VRMExporter {
     if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
       const buffer = gltfData.buffers[0];
       if (buffer && buffer.data) {
-        binaryBuffer = buffer.data;
-        console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
+        // Validate that the buffer data is actually an ArrayBuffer
+        if (buffer.data instanceof ArrayBuffer) {
+          binaryBuffer = buffer.data;
+          console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
+        } else {
+          console.warn('VRM Export: Buffer data is not ArrayBuffer, type:', typeof buffer.data, buffer.data.constructor.name);
+          // Try to convert to ArrayBuffer if it's a Uint8Array
+          if (buffer.data instanceof Uint8Array) {
+            binaryBuffer = buffer.data.buffer.slice(buffer.data.byteOffset, buffer.data.byteOffset + buffer.data.byteLength);
+            console.log('VRM Export: Converted Uint8Array to ArrayBuffer, size:', binaryBuffer.byteLength);
+          }
+        }
       }
     }
     
-    // If no binary data from GLTF, try to extract from the model directly
-    if (binaryBuffer.byteLength === 0 && gltfData) {
-      console.warn('VRM Export: No binary data found in GLTF, creating minimal buffer');
-      // Create a minimal buffer with some data to ensure the file isn't empty
-      binaryBuffer = new ArrayBuffer(1024);
-      const binaryView = new Uint8Array(binaryBuffer);
-      // Fill with some pattern instead of zeros
-      for (let i = 0; i < binaryView.length; i++) {
-        binaryView[i] = (i % 256);
-      }
+    // If no binary data from GLTF, create empty buffer (don't add fake data)
+    if (binaryBuffer.byteLength === 0) {
+      console.log('VRM Export: No binary data found in GLTF, creating empty buffer');
+      binaryBuffer = new ArrayBuffer(0);
     }
     
     // Ensure JSON is padded to 4-byte boundary
@@ -686,7 +713,7 @@ export class VRMExporter {
                        jsonChunkHeader.byteLength + 
                        paddedJsonBuffer.length + 
                        (binaryChunkHeader ? binaryChunkHeader.byteLength : 0) + 
-                       binaryBuffer.byteLength;
+                       (binaryBuffer.byteLength > 0 ? binaryBuffer.byteLength : 0);
     
     // Create final GLB buffer
     const glbBuffer = new ArrayBuffer(totalLength);
@@ -715,6 +742,7 @@ export class VRMExporter {
       
       // Copy binary data
       glbView.set(new Uint8Array(binaryBuffer), offset);
+      offset += binaryBuffer.byteLength;
     }
     
     console.log('VRM Export: Final GLB size:', glbBuffer.byteLength);

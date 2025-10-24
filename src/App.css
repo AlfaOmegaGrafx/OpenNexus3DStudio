@@ -2450,3 +2450,313 @@
   margin: 0 1px;
   flex-shrink: 0;
 }
+
+/* CharacterStudio Overlay Styles */
+.character-studio-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.character-studio-overlay-title {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  z-index: 1001;
+}
+
+.overlay-status {
+  background: #00ff00;
+  color: #000000;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.character-studio-overlay-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.overlay-info {
+  text-align: center;
+  color: #ffffff;
+  max-width: 500px;
+}
+
+.overlay-info p {
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  color: #a0a0a0;
+}
+
+.overlay-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.overlay-features span {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  color: #3b82f6;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.overlay-features span:hover {
+  background: rgba(59, 130, 246, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Interactive Overlay Buttons */
+.overlay-section {
+  margin-bottom: 2rem;
+}
+
+.overlay-section h4 {
+  color: #ffffff;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #3a3a3a;
+  padding-bottom: 0.5rem;
+}
+
+.overlay-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.overlay-button {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 1rem;
+  color: #3b82f6;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 60px;
+}
+
+.overlay-button:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.overlay-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(107, 114, 128, 0.1);
+  border-color: #6b7280;
+  color: #6b7280;
+}
+
+/* Button-specific styling */
+.vrm-button {
+  border-color: #8b5cf6;
+  color: #a78bfa;
+}
+
+.vrm-button:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.2);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.glb-button {
+  border-color: #06b6d4;
+  color: #22d3ee;
+}
+
+.glb-button:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.2);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+
+.material-button {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.material-button:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.2);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.blend-button {
+  border-color: #ec4899;
+  color: #f472b6;
+}
+
+.blend-button:hover:not(:disabled) {
+  background: rgba(236, 72, 153, 0.2);
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+}
+
+.core3d-generate-button {
+  border-color: #10b981;
+  color: #34d399;
+}
+
+.core3d-generate-button:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.core3d-export-button {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.core3d-export-button:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.2);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+/* Loot Assets Button Styling */
+.loot-load-button {
+  border-color: #8b5cf6;
+  color: #a78bfa;
+}
+
+.loot-load-button:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.2);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.loot-character-button {
+  border-color: #06b6d4;
+  color: #22d3ee;
+}
+
+.loot-character-button:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.2);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+
+.loot-random-button {
+  border-color: #ec4899;
+  color: #f472b6;
+}
+
+.loot-random-button:hover:not(:disabled) {
+  background: rgba(236, 72, 153, 0.2);
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+}
+
+.loot-export-button {
+  border-color: #10b981;
+  color: #34d399;
+}
+
+.loot-export-button:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Status Information */
+.overlay-status-info {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.status-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-label {
+  color: #a0a0a0;
+  font-weight: 500;
+}
+
+.status-value {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Responsive overlay */
+@media (max-width: 768px) {
+  .character-studio-overlay-title {
+    font-size: 1rem;
+    top: 0.5rem;
+    left: 0.5rem;
+  }
+  
+  .overlay-info {
+    padding: 1rem;
+  }
+  
+  .overlay-features {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .overlay-features span {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  
+  .overlay-buttons {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  
+  .overlay-button {
+    padding: 0.75rem;
+    font-size: 0.8rem;
+    min-height: 50px;
+  }
+  
+  .overlay-section h4 {
+    font-size: 0.9rem;
+  }
+  
+  .status-item {
+    font-size: 0.8rem;
+  }
+}

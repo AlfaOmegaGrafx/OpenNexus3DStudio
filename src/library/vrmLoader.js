@@ -10,14 +10,13 @@ export class VRMLoader {
   constructor() {
     this.gltfLoader = new GLTFLoader();
     // Register VRM loader plugin with fallback for missing humanoid bones
-    if (this.gltfLoader.register) {
-      this.gltfLoader.register((parser) => {
-        return new VRMLoaderPlugin(parser, { 
-          autoUpdateHumanBones: false, // Disable strict humanoid bone checking
-          strictHumanoidBones: false   // Allow VRM models without humanoid bones
-        });
+    // Always register the VRM plugin - it's essential for VRM file recognition
+    this.gltfLoader.register((parser) => {
+      return new VRMLoaderPlugin(parser, { 
+        autoUpdateHumanBones: false, // Disable strict humanoid bone checking
+        strictHumanoidBones: false   // Allow VRM models without humanoid bones
       });
-    }
+    });
     
     this.eventListeners = new Map();
   }
@@ -42,8 +41,13 @@ export class VRMLoader {
       // Try to load the VRM file with fallback for missing humanoid bones
       let gltf;
       try {
+        console.log('🔍 VRM Loader: Attempting to load VRM file...');
         gltf = await this.loadGLTF(source);
+        console.log('🔍 VRM Loader: GLTF loaded successfully');
+        console.log('🔍 VRM Loader: GLTF userData:', gltf.userData);
+        console.log('🔍 VRM Loader: GLTF userData.vrm:', gltf.userData?.vrm);
       } catch (error) {
+        console.error('🔍 VRM Loader: Failed to load VRM:', error);
         // If VRM loading fails due to missing humanoid bones, try fallback approach
         if (error.message.includes('humanoid bones are required') && allowMissingHumanoidBones) {
           console.warn('VRM loading failed due to missing humanoid bones, attempting fallback...');
