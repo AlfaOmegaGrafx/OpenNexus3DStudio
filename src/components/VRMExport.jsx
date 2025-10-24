@@ -1490,13 +1490,22 @@ const VRMExport = () => {
     try {
       setIsExporting(true);
       
-      // Create VRM metadata
+      // Create VRM metadata - use extracted metadata if available, otherwise use form values
       const metadata = {
-        title: exportOptions.title,
-        author: exportOptions.author,
-        version: exportOptions.version,
-        allowedUserName: exportOptions.allowedUserName,
-        commercialUssageName: exportOptions.commercialUssageName
+        title: exportOptions.title || vrmMetadata?.title || 'Open3DStudio Export',
+        author: exportOptions.author || vrmMetadata?.author || 'Open3DStudio',
+        version: exportOptions.version || vrmMetadata?.version || '1.0.0',
+        allowedUserName: exportOptions.allowedUserName || vrmMetadata?.allowedUserName || 'Everyone',
+        commercialUssageName: exportOptions.commercialUssageName || vrmMetadata?.commercialUssageName || 'Allow',
+        contactInformation: vrmMetadata?.contactInformation || '',
+        reference: vrmMetadata?.reference || '',
+        texture: vrmMetadata?.texture !== undefined ? vrmMetadata.texture : -1,
+        violentUssageName: vrmMetadata?.violentUssageName || 'Disallow',
+        sexualUssageName: vrmMetadata?.sexualUssageName || 'Disallow',
+        otherPermissionUrl: vrmMetadata?.otherPermissionUrl || '',
+        licenseUrl: vrmMetadata?.licenseUrl || '',
+        otherLicenseUrl: vrmMetadata?.otherLicenseUrl || '',
+        metaVersion: vrmMetadata?.metaVersion || '0'
       };
 
       // Create humanoid bones if needed
@@ -1509,13 +1518,26 @@ const VRMExport = () => {
         ? vrmExporter.createDefaultExpressions()
         : {};
 
+      // Get VRM data from sceneManager if available
+      const vrmData = sceneManager?.currentVRM || null;
+      
+      console.log('VRM Export: Starting export with options:', {
+        filename: exportOptions.filename,
+        vrmVersion: exportOptions.vrmVersion,
+        optimize: exportOptions.optimize,
+        hasVrmData: !!vrmData,
+        hasMetadata: !!vrmMetadata
+      });
+
       const result = await vrmExporter.exportToVRM(currentModel, {
         filename: exportOptions.filename,
         vrmVersion: exportOptions.vrmVersion,
         metadata,
         humanoidBones,
         expressions,
-        optimize: exportOptions.optimize
+        optimize: exportOptions.optimize,
+        vrmData: vrmData,
+        createTextureAtlas: false // Can be made configurable
       });
       
       // Show success message

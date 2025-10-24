@@ -738,8 +738,30 @@ export async function combine(model,avatar, options) {
  * @returns {Array} Array of blendshapeTraits
  */
 function getAllBlendShapeTraits(avatar){
-    const blendShapes = Object.values(avatar).filter((a)=>a)[0]?.traitInfo.manifestData.getAllBlendShapeTraits() || [];
-    return blendShapes;
+    if (!avatar) {
+        console.warn('getAllBlendShapeTraits: avatar is undefined');
+        return [];
+    }
+    
+    try {
+        const avatarValues = Object.values(avatar).filter((a)=>a);
+        if (avatarValues.length === 0) {
+            console.warn('getAllBlendShapeTraits: no valid avatar values found');
+            return [];
+        }
+        
+        const firstAvatar = avatarValues[0];
+        if (!firstAvatar?.traitInfo?.manifestData?.getAllBlendShapeTraits) {
+            console.warn('getAllBlendShapeTraits: manifestData or getAllBlendShapeTraits method not found');
+            return [];
+        }
+        
+        const blendShapes = firstAvatar.traitInfo.manifestData.getAllBlendShapeTraits() || [];
+        return blendShapes;
+    } catch (error) {
+        console.error('getAllBlendShapeTraits error:', error);
+        return [];
+    }
 }
 /**
  * 
@@ -747,53 +769,69 @@ function getAllBlendShapeTraits(avatar){
  * @returns 
  */
 function getVRMBoundExpressionMorphs(avatar){
-    console.warn("expression maps are currently only being take from the frist vrm found that contains blendshapes");
-    const expressionMaps = Object.values(avatar).map((t)=>t?.vrm).filter((t)=>t?.expressionManager?.expressionMap?.aa?._binds.length > 0).map((vrm) => vrm.expressionManager?.expressionMap);
-    /**
-     * @type {Object.<string, {index:number, primitives:string[]}>}
-     */
-    const VRMBoundMorphs = {};
-    /**
-     * @type {string[]}
-     */
-    let expressionNameDone = []
-    // Iterate through maps of expressions of each VRM
-    for(const expressionMap of expressionMaps){
-        if(!expressionMap) continue;
-        // Iterate through each expression in the map
-        for(const expression of Object.values(expressionMap)){
-            // Skip if the expression has already been processed
-            if(expressionNameDone.includes(expression.expressionName)) continue;
-            expressionNameDone.push(expression.expressionName)
-            // Get the bound Blendshape from the expression
-            /**
-             *type VRMExpressionMorphTargetBind from pixiv VRM but cjs wont export it?
-             * @type {Object[]}
-             */
-            const bounds = expression._binds
-            if(!bounds || bounds.length == 0) continue;
-            bounds.forEach((bound) => {
-                /**
-                 * @param {number} morphTargetIndex 
-                 * @returns {[string, number]}
-                 */
-                function getPrimitiveWithMorphTargetIndex(morphTargetIndex){
-                    const primitiveDictionaries = bound.primitives.map((p) => p.morphTargetDictionary).filter((d) => !!d);
-                    const dictionary = primitiveDictionaries.find((dict) => Object.values(dict).includes(morphTargetIndex))
-                    if(!dictionary) return;
-                    return Object.entries(dictionary).find(([, value]) => value == morphTargetIndex);
-                }
-
-                const primitiveKeyIndex = getPrimitiveWithMorphTargetIndex(bound.index);
-                if(!primitiveKeyIndex) return;
-                // Add the morph target and index to the VRMBoundMorphs object
-                VRMBoundMorphs[primitiveKeyIndex[0]] = {index:primitiveKeyIndex[1],
-                    primitives:bound.primitives.map((p) => p.id)
-                };
-            })
-        }
+    if (!avatar) {
+        console.warn('getVRMBoundExpressionMorphs: avatar is undefined');
+        return {};
     }
-    return VRMBoundMorphs
+    
+    try {
+        console.warn("expression maps are currently only being take from the frist vrm found that contains blendshapes");
+        const expressionMaps = Object.values(avatar).map((t)=>t?.vrm).filter((t)=>t?.expressionManager?.expressionMap?.aa?._binds.length > 0).map((vrm) => vrm.expressionManager?.expressionMap);
+        
+        if (expressionMaps.length === 0) {
+            console.warn('getVRMBoundExpressionMorphs: no expression maps found in avatar');
+            return {};
+        }
+        
+        /**
+         * @type {Object.<string, {index:number, primitives:string[]}>}
+         */
+        const VRMBoundMorphs = {};
+        /**
+         * @type {string[]}
+         */
+        let expressionNameDone = []
+        // Iterate through maps of expressions of each VRM
+        for(const expressionMap of expressionMaps){
+            if(!expressionMap) continue;
+            // Iterate through each expression in the map
+            for(const expression of Object.values(expressionMap)){
+                // Skip if the expression has already been processed
+                if(expressionNameDone.includes(expression.expressionName)) continue;
+                expressionNameDone.push(expression.expressionName)
+                // Get the bound Blendshape from the expression
+                /**
+                 *type VRMExpressionMorphTargetBind from pixiv VRM but cjs wont export it?
+                 * @type {Object[]}
+                 */
+                const bounds = expression._binds
+                if(!bounds || bounds.length == 0) continue;
+                bounds.forEach((bound) => {
+                    /**
+                     * @param {number} morphTargetIndex 
+                     * @returns {[string, number]}
+                     */
+                    function getPrimitiveWithMorphTargetIndex(morphTargetIndex){
+                        const primitiveDictionaries = bound.primitives.map((p) => p.morphTargetDictionary).filter((d) => !!d);
+                        const dictionary = primitiveDictionaries.find((dict) => Object.values(dict).includes(morphTargetIndex))
+                        if(!dictionary) return;
+                        return Object.entries(dictionary).find(([, value]) => value == morphTargetIndex);
+                    }
+
+                    const primitiveKeyIndex = getPrimitiveWithMorphTargetIndex(bound.index);
+                    if(!primitiveKeyIndex) return;
+                    // Add the morph target and index to the VRMBoundMorphs object
+                    VRMBoundMorphs[primitiveKeyIndex[0]] = {index:primitiveKeyIndex[1],
+                        primitives:bound.primitives.map((p) => p.id)
+                    };
+                })
+            }
+        }
+        return VRMBoundMorphs
+    } catch (error) {
+        console.error('getVRMBoundExpressionMorphs error:', error);
+        return {};
+    }
   }
 
 function mergeMorphTargetInfluences({ meshes, sourceMorphTargetDictionaries, destMorphTargetDictionary }) {

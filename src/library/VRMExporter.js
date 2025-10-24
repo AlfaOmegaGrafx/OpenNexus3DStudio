@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { downloadVRM, downloadVRMWithAvatar } from './download-utils';
 
 export class VRMExporter {
   constructor() {
@@ -25,7 +26,9 @@ export class VRMExporter {
       expressions = {},
       materials = [],
       screenshot = null,
-      optimize = true
+      optimize = true,
+      createTextureAtlas = false,
+      vrmData = null
     } = options;
 
     try {
@@ -44,12 +47,33 @@ export class VRMExporter {
         children: model.children?.length || 0,
         geometry: model.geometry ? 'has geometry' : 'no geometry',
         material: model.material ? 'has material' : 'no material',
-        materials: model.materials ? model.materials.length : 0
+        materials: model.materials ? model.materials.length : 0,
+        optimize,
+        createTextureAtlas
       });
+
+      // If optimization is requested and vrmData is provided, use the advanced export system
+      if (optimize && vrmData) {
+        const exportOptions = {
+          isVrm0: vrmVersion === '0.0',
+          createTextureAtlas,
+          optimized: true,
+          vrmMeta: metadata,
+          screenshot,
+          ...options
+        };
+
+        // Use the download-utils export system which handles optimization
+        await downloadVRM(model, vrmData, filename.replace('.vrm', ''), exportOptions);
+        
+        this.emit('vrmExportComplete', { model, filename });
+        return { filename };
+      }
 
       // Create a scene and export as GLTF first
       const scene = new THREE.Scene();
-      scene.add(model);
+      const modelClone = model.clone();
+      scene.add(modelClone);
       
       // Export as standard GLTF with proper binary data
       const gltfData = await this.gltfExporter.parseAsync(scene, {
@@ -111,6 +135,7 @@ export class VRMExporter {
       
       // Clean up
       URL.revokeObjectURL(url);
+      scene.remove(modelClone);
       
       return { blob, filename, url };
     } catch (error) {
