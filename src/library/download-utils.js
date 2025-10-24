@@ -126,10 +126,14 @@ export function downloadVRMWithAvatar(model, avatar, fileName, options){
     const downloadFileName = `${
       fileName && fileName !== "" ? fileName : "AvatarCreatorModel"
     }`
-    getVRMData(model, avatar, options).then((vrm)=>{
+    try{
+      const vrm = await getVRMData(model, avatar, options);
       saveArrayBuffer(vrm, `${downloadFileName}.vrm`)
       resolve();
-    })
+    }catch(err){
+      console.error('downloadVRMWithAvatar failed', err);
+      reject(err);
+    }
   });
 }
 

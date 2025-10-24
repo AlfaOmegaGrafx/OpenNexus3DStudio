@@ -339,7 +339,8 @@ export async function combineNoAtlas(model,avatar, options) {
          */
         const morphTargetsProcess = {
             merge:new Set(),
-            keep:new Set(VRMBoundMorphs),
+            // Keep VRM-bound morphs by name. Using keys avoids Set from receiving a non-iterable object.
+            keep:new Set(Object.keys(VRMBoundMorphs || {})),
             remove: new Set()
         }
         /**
@@ -738,8 +739,17 @@ export async function combine(model,avatar, options) {
  * @returns {Array} Array of blendshapeTraits
  */
 function getAllBlendShapeTraits(avatar){
-    const blendShapes = Object.values(avatar).filter((a)=>a)[0]?.traitInfo.manifestData.getAllBlendShapeTraits() || [];
-    return blendShapes;
+    try{
+        // Find any trait that exposes manifestData.getAllBlendShapeTraits
+        const source = Object.values(avatar).find((a)=>a?.traitInfo?.manifestData?.getAllBlendShapeTraits);
+        if(!source) return [];
+        const getter = source.traitInfo.manifestData.getAllBlendShapeTraits;
+        const traits = typeof getter === 'function' ? getter.call(source.traitInfo.manifestData) : [];
+        return Array.isArray(traits) ? traits : [];
+    }catch(err){
+        console.warn('merge-geometry:getAllBlendShapeTraits missing manifest, continuing without manifest blendshapes');
+        return [];
+    }
 }
 /**
  * 

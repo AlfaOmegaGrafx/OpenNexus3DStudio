@@ -681,6 +681,7 @@ export default class VRMExporterv0 {
         console.log(outputSecondaryAnimation);
 
 
+        // Ensure thumbnail is embedded and referenced correctly
         outputVrmMeta.texture = icon ? outputImages.length - 1 : undefined;
         const bufferViews = await Promise.all(
             images.map(async (image) => ({
