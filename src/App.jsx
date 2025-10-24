@@ -3,6 +3,7 @@ import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
 import { AudioProvider } from './context/AudioContext';
 import { SoundProvider } from './context/SoundContext';
+import { Core3DProvider } from './context/Core3DContext';
 import Scene3D from './components/Scene3D';
 import TaskManager from './components/TaskManager';
 import CombinedImport from './components/CombinedImport';
@@ -10,6 +11,9 @@ import RenderModeSelector from './components/RenderModeSelector';
 import APIStatus from './components/APIStatus';
 import GLBExport from './components/GLBExport';
 import VRMExport from './components/VRMExport';
+import TextureExtractor from './components/TextureExtractor';
+import Core3DPanel from './components/Core3DPanel';
+import ErrorBoundary from './components/ErrorBoundary';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
@@ -811,6 +815,10 @@ function AppContent() {
           />
           <GLBExport />
           <VRMExport />
+          <Core3DPanel />
+          <ErrorBoundary showDetails={false}>
+            <TextureExtractor />
+          </ErrorBoundary>
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}
@@ -845,58 +853,8 @@ function AppContent() {
           <Scene3D 
             model={currentModel}
             renderMode={renderMode}
+            showCharacterStudioOverlay={!characterStudioSidebarCollapsed && characterStudioViewportVisible}
           />
-          
-          {/* CharacterStudio 3D Renderer - Overlay on main viewport */}
-          <div 
-            className="character-studio-viewport-overlay"
-            style={{
-              opacity: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 1 : 0,
-              visibility: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'visible' : 'hidden',
-              transform: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.95)',
-              display: (!characterStudioSidebarCollapsed && characterStudioViewportVisible) ? 'flex' : 'none',
-              transition: 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease'
-            }}
-          >
-            <div className="character-studio-viewport-title">
-              CharacterStudio 3D View 
-              <span style={{ 
-                color: !characterStudioSidebarCollapsed ? '#00ff00' : '#ff0000',
-                fontSize: '12px',
-                marginLeft: '10px'
-              }}>
-                {!characterStudioSidebarCollapsed ? 'VISIBLE' : 'HIDDEN'}
-              </span>
-            </div>
-            <div 
-              id="character-studio-scene" 
-              className="character-studio-viewport-canvas"
-              style={{ width: '100%', height: '625px', background: 'transparent' }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                  console.log('📁 File dropped on CharacterStudio renderer:', files[0].name);
-                  // Handle file drop - could sync with main scene or load directly
-                }
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              onDragEnter={(e) => e.preventDefault()}
-            />
-            {!characterStudioInitialized && (
-              <div style={{ 
-                position: 'absolute', 
-                top: '50%', 
-                left: '50%', 
-                transform: 'translate(-50%, -50%)', 
-                color: '#ccc', 
-                fontSize: '14px',
-                textAlign: 'center'
-              }}>
-                Initializing CharacterStudio 3D Renderer...
-              </div>
-            )}
-          </div>
         </div>
 
         {/* CharacterStudio Sidebar */}
@@ -1004,7 +962,9 @@ function App() {
       <SoundProvider>
         <SceneProvider>
           <TaskProvider>
-            <AppContent />
+            <Core3DProvider>
+              <AppContent />
+            </Core3DProvider>
           </TaskProvider>
         </SceneProvider>
       </SoundProvider>

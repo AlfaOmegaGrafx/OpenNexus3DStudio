@@ -47,6 +47,10 @@ export class VRMExporter {
         materials: model.materials ? model.materials.length : 0
       });
 
+      // Extract blend shapes and morph targets from model before export
+      const extractedBlendShapes = this.extractBlendShapes(model);
+      console.log('VRM Export: Extracted blend shapes:', extractedBlendShapes.length);
+
       // Create a scene and export as GLTF first
       const scene = new THREE.Scene();
       scene.add(model);
@@ -88,16 +92,15 @@ export class VRMExporter {
       }
 
       // Create VRM 0.0 file structure manually
-      const vrmFile = await this.createVRM0File(gltfData, {
+      const glbData = await this.createVRM0File(gltfData, {
         vrmVersion,
         metadata,
         humanoidBones,
         expressions,
         materials,
-        screenshot
+        screenshot,
+        blendShapes: extractedBlendShapes
       });
-
-      const glbData = vrmFile;
 
       // Create blob and download
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
@@ -473,7 +476,11 @@ export class VRMExporter {
       images: gltfData.images || [],
       accessors: gltfData.accessors || [],
       bufferViews: gltfData.bufferViews || [],
-      buffers: gltfData.buffers || []
+      buffers: gltfData.buffers || [],
+      // CRITICAL: Include skins array for skeleton/bone data
+      skins: gltfData.skins || [],
+      // Also include animations if present
+      animations: gltfData.animations || []
     };
 
     // Convert to GLB format
@@ -554,7 +561,7 @@ export class VRMExporter {
             custom: vrmData.expressions?.custom || {}
           },
           blendShapeMaster: {
-            blendShapeGroups: vrmData.blendShapeMaster?.blendShapeGroups || []
+            blendShapeGroups: blendShapeGroups.length > 0 ? blendShapeGroups : (vrmData.blendShapeMaster?.blendShapeGroups || [])
           },
           secondaryAnimation: {
             boneGroups: vrmData.secondaryAnimation?.boneGroups || [],
@@ -586,7 +593,9 @@ export class VRMExporter {
       nodesCount: vrmFile.nodes?.length || 0,
       meshesCount: vrmFile.meshes?.length || 0,
       materialsCount: vrmFile.materials?.length || 0,
-      buffersCount: vrmFile.buffers?.length || 0
+      buffersCount: vrmFile.buffers?.length || 0,
+      skinsCount: vrmFile.skins?.length || 0,
+      animationsCount: vrmFile.animations?.length || 0
     });
 
     // Convert to proper GLB binary format with embedded binary data
@@ -609,13 +618,25 @@ export class VRMExporter {
     // Convert to JSON string with proper formatting
     const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
     
+    // Additional validation: Check for any non-printable characters in JSON
+    const hasNonPrintableChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(jsonString);
+    if (hasNonPrintableChars) {
+      console.warn('VRM Export: JSON contains non-printable characters, cleaning...');
+      // Remove non-printable characters except for valid JSON whitespace
+      const cleanedJsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+      console.log('VRM Export: Cleaned JSON length:', cleanedJsonString.length, 'vs original:', jsonString.length);
+    }
+    
     // Validate JSON before proceeding
     try {
-      JSON.parse(jsonString);
-      console.log('VRM Export: JSON validation successful');
+      const parsedJson = JSON.parse(jsonString);
+      console.log('VRM Export: JSON validation successful, length:', jsonString.length);
     } catch (error) {
       console.error('VRM Export: JSON validation failed:', error);
       console.error('VRM Export: Invalid JSON at position:', error.message);
+      console.error('VRM Export: JSON string around error position:', 
+        jsonString.substring(Math.max(0, error.message.match(/\d+/)?.[0] - 50 || 0), 
+        (error.message.match(/\d+/)?.[0] || 0) + 50));
       throw new Error(`Invalid JSON structure: ${error.message}`);
     }
     
@@ -695,7 +716,7 @@ export class VRMExporter {
                        jsonChunkHeader.byteLength + 
                        paddedJsonBuffer.length + 
                        (binaryChunkHeader ? binaryChunkHeader.byteLength : 0) + 
-                       binaryBuffer.byteLength;
+                       (binaryBuffer.byteLength > 0 ? binaryBuffer.byteLength : 0);
     
     // Create final GLB buffer
     const glbBuffer = new ArrayBuffer(totalLength);
@@ -724,6 +745,7 @@ export class VRMExporter {
       
       // Copy binary data
       glbView.set(new Uint8Array(binaryBuffer), offset);
+      offset += binaryBuffer.byteLength;
     }
     
     console.log('VRM Export: Final GLB size:', glbBuffer.byteLength);
@@ -1093,6 +1115,149 @@ export class VRMExporter {
     };
 
     return expressions;
+  }
+
+  /**
+   * Convert blend shapes to VRM blendShapeGroups format
+   * @param {Array} blendShapes - Extracted blend shapes
+   * @returns {Array} VRM blend shape groups
+   */
+  convertBlendShapesToVRM(blendShapes) {
+    const blendShapeGroups = [];
+    
+    // VRM preset blend shape names mapping
+    const presetNames = {
+      'happy': 'joy',
+      'angry': 'angry',
+      'sad': 'sorrow',
+      'surprised': 'fun',
+      'relaxed': 'neutral',
+      'blink': 'blink',
+      'blinkLeft': 'blink_l',
+      'blinkRight': 'blink_r',
+      'aa': 'a',
+      'ih': 'i',
+      'ou': 'u',
+      'ee': 'e',
+      'oh': 'o'
+    };
+
+    blendShapes.forEach(blendShape => {
+      // Check if this is a preset blend shape
+      const presetName = presetNames[blendShape.name.toLowerCase()] || 'unknown';
+      
+      blendShapeGroups.push({
+        name: blendShape.name,
+        presetName: presetName,
+        binds: blendShape.binds || [],
+        isBinary: false,
+        materialValues: [],
+        overrideBlink: 'none',
+        overrideLookAt: 'none',
+        overrideMouth: 'none'
+      });
+    });
+
+    console.log(`🔄 Converted ${blendShapeGroups.length} blend shapes to VRM format`);
+    return blendShapeGroups;
+  }
+
+  /**
+   * Extract blend shapes and morph targets from model
+   * @param {Object} model - Three.js model
+   * @returns {Array} Array of blend shape data
+   */
+  extractBlendShapes(model) {
+    const blendShapes = [];
+    const processedNames = new Set();
+
+    if (!model) return blendShapes;
+
+    // Traverse model to find all meshes with morph targets
+    model.traverse((child) => {
+      if (child.isMesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
+        console.log(`🔍 Found mesh with ${child.morphTargetInfluences.length} morph targets: ${child.name}`);
+        
+        if (child.morphTargetDictionary) {
+          const morphTargetNames = Object.keys(child.morphTargetDictionary);
+          console.log(`📋 Morph target dictionary has ${morphTargetNames.length} entries`);
+          
+          morphTargetNames.forEach(morphName => {
+            if (!processedNames.has(morphName)) {
+              const morphIndex = child.morphTargetDictionary[morphName];
+              
+              blendShapes.push({
+                name: morphName,
+                mesh: child.name,
+                index: morphIndex,
+                weight: child.morphTargetInfluences[morphIndex] || 0,
+                // Store morph target data for VRM export
+                binds: [{
+                  mesh: 0, // Will be updated during GLTF processing
+                  index: morphIndex,
+                  weight: 100 // VRM uses 0-100 scale
+                }]
+              });
+              
+              processedNames.add(morphName);
+              console.log(`✅ Added blend shape: ${morphName} (index: ${morphIndex})`);
+            }
+          });
+        }
+      }
+    });
+
+    console.log(`🎭 Total blend shapes extracted: ${blendShapes.length}`);
+    return blendShapes;
+  }
+
+  /**
+   * Extract all textures from model materials
+   * @param {Object} model - Three.js model
+   * @returns {Array} Array of texture data
+   */
+  extractTextures(model) {
+    const textures = [];
+    const processedTextures = new Set();
+
+    if (!model) return textures;
+
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        
+        materials.forEach(material => {
+          // Check all possible texture maps
+          const textureProperties = [
+            'map', 'normalMap', 'roughnessMap', 'metalnessMap', 
+            'emissiveMap', 'aoMap', 'lightMap', 'bumpMap',
+            'displacementMap', 'alphaMap', 'envMap'
+          ];
+          
+          textureProperties.forEach(prop => {
+            const texture = material[prop];
+            if (texture && texture.image && !processedTextures.has(texture.uuid)) {
+              textures.push({
+                uuid: texture.uuid,
+                name: texture.name || `${prop}_texture`,
+                type: prop,
+                image: texture.image,
+                wrapS: texture.wrapS,
+                wrapT: texture.wrapT,
+                magFilter: texture.magFilter,
+                minFilter: texture.minFilter,
+                flipY: texture.flipY
+              });
+              processedTextures.add(texture.uuid);
+              console.log(`🖼️ Extracted texture: ${texture.name || prop} from material: ${material.name}`);
+            }
+          });
+        });
+      }
+    });
+
+    console.log(`🎨 Total textures extracted: ${textures.length}`);
+    return textures;
   }
 
   /**
