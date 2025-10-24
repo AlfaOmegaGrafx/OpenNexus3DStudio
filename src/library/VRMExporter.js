@@ -71,7 +71,9 @@ export class VRMExporter {
         embedImages: true,
         maxTextureSize: 4096,
         forceIndices: false,
-        forcePowerOfTwoTextures: false
+        forcePowerOfTwoTextures: false,
+        // CRITICAL: Include morph targets for blend shapes/expressions
+        includeExtra: true
       });
       
       // Parse the GLB to extract JSON and binary chunks
@@ -90,12 +92,40 @@ export class VRMExporter {
         binaryData: gltfData.binaryData ? gltfData.binaryData.byteLength : 0
       });
       
+      // Debug: Check mesh structure for morph targets
+      if (gltfData.meshes && gltfData.meshes.length > 0) {
+        gltfData.meshes.forEach((mesh, idx) => {
+          const hasMorphTargets = mesh.primitives?.some(prim => prim.targets && prim.targets.length > 0);
+          const morphTargetCount = mesh.primitives?.reduce((sum, prim) => sum + (prim.targets?.length || 0), 0) || 0;
+          console.log(`VRM Export: Mesh ${idx} (${mesh.name || 'unnamed'}):`, {
+            primitives: mesh.primitives?.length || 0,
+            hasMorphTargets,
+            morphTargetCount,
+            extras: mesh.extras
+          });
+        });
+      }
+      
       // Debug: Check how images are stored
       if (gltfData.images && gltfData.images.length > 0) {
         console.log('VRM Export: First image structure:', gltfData.images[0]);
         const hasBufferViews = gltfData.images.filter(img => img.bufferView !== undefined).length;
         const hasDataURIs = gltfData.images.filter(img => img.uri && img.uri.startsWith('data:')).length;
         console.log(`VRM Export: Images with bufferView: ${hasBufferViews}, with data URIs: ${hasDataURIs}`);
+      }
+      
+      // Debug: Check material-texture connections
+      if (gltfData.materials && gltfData.materials.length > 0) {
+        gltfData.materials.forEach((mat, idx) => {
+          const hasBaseColorTexture = !!mat.pbrMetallicRoughness?.baseColorTexture;
+          const textureIndex = mat.pbrMetallicRoughness?.baseColorTexture?.index;
+          console.log(`VRM Export: Material ${idx} (${mat.name || 'unnamed'}):`, {
+            hasBaseColorTexture,
+            textureIndex,
+            hasNormalTexture: !!mat.normalTexture,
+            hasEmissiveTexture: !!mat.emissiveTexture
+          });
+        });
       }
 
       // Debug binary data
@@ -663,7 +693,7 @@ export class VRMExporter {
       scene: 0,
       scenes: ensureArray(gltfData.scenes, [{ nodes: [0] }]),
       nodes: ensureArray(gltfData.nodes, [{ name: "Root" }]),
-      meshes: ensureArray(gltfData.meshes),
+      meshes: this.ensureMeshExtras(ensureArray(gltfData.meshes)),
       materials: ensureArray(gltfData.materials),
       textures: ensureArray(gltfData.textures),
       images: cleanImages, // Use cleaned images without data URIs
@@ -947,6 +977,38 @@ export class VRMExporter {
       ...jsonData,
       binaryData: binaryData
     };
+  }
+
+  /**
+   * Ensure mesh extras include targetNames for morph targets
+   * @param {Array} meshes - Array of mesh objects
+   * @returns {Array} Meshes with proper extras
+   */
+  ensureMeshExtras(meshes) {
+    return meshes.map(mesh => {
+      if (!mesh.primitives) return mesh;
+      
+      // Check if any primitive has targets (morph targets)
+      const primitives = mesh.primitives.map(primitive => {
+        if (primitive.targets && primitive.targets.length > 0) {
+          // Ensure extras.targetNames exists
+          if (!primitive.extras) {
+            primitive.extras = {};
+          }
+          if (!primitive.extras.targetNames) {
+            // Generate targetNames if not present
+            primitive.extras.targetNames = primitive.targets.map((_, idx) => `morphTarget_${idx}`);
+          }
+          console.log(`VRM Export: Mesh "${mesh.name || 'unnamed'}" has ${primitive.targets.length} morph targets:`, primitive.extras.targetNames);
+        }
+        return primitive;
+      });
+      
+      return {
+        ...mesh,
+        primitives
+      };
+    });
   }
 
   /**
