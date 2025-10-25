@@ -402,6 +402,11 @@ export class VRMLoader {
       
       vrm.scene.scale.setScalar(scale);
       vrm.scene.position.sub(center.multiplyScalar(scale));
+      
+      // Fix VRM model orientation - rotate to face forward
+      vrm.scene.rotation.y = Math.PI;
+      console.log('🔄 VRM model rotated to face forward during normalization');
+      console.log('🔄 VRM scene rotation after fix:', vrm.scene.rotation);
     }
   }
 
@@ -569,8 +574,27 @@ export class VRMLoader {
       console.log(`📷 Emissive map processed: ${material.emissiveMap.image?.src || 'embedded'}`);
     }
     
+    // Force aggressive texture processing for VRM materials
+    const textureMaps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'];
+    textureMaps.forEach(mapType => {
+      if (material[mapType]) {
+        const texture = material[mapType];
+        texture.needsUpdate = true;
+        texture.flipY = false;
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        console.log(`🔧 Aggressive texture processing for ${mapType}: ${texture.image?.src || 'embedded'}`);
+      }
+    });
+    
     // Ensure material needs update for proper rendering
     material.needsUpdate = true;
+    material.wireframe = false;
+    material.transparent = false;
+    material.opacity = 1.0;
     
     // Set proper material properties for VRM
     if (material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial') {
@@ -583,6 +607,10 @@ export class VRMLoader {
     }
     
     console.log(`✅ VRM material processed successfully: ${material.type}`);
+    console.log(`✅ Material wireframe: ${material.wireframe}, transparent: ${material.transparent}, opacity: ${material.opacity}`);
+    if (material.map) {
+      console.log(`✅ Main texture: needsUpdate=${material.map.needsUpdate}, flipY=${material.map.flipY}`);
+    }
   }
 
   /**

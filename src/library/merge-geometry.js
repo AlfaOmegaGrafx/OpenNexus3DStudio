@@ -308,7 +308,9 @@ export async function combineNoAtlas(model,avatar, options) {
     const meshes = findChildrenByType(model, "SkinnedMesh");
     // Get VRM-bound morphTargets so we don't remove or merge them.
     const VRMBoundMorphs = getVRMBoundExpressionMorphs(avatar)
-    const blendShapesFromManifest = getAllBlendShapeTraits(avatar).map((trait) => trait.id);
+    const blendShapeTraits = getAllBlendShapeTraits(avatar);
+    const blendShapesFromManifest = Array.isArray(blendShapeTraits) ? 
+      blendShapeTraits.map((trait) => trait?.id).filter(Boolean) : [];
 
     meshes.forEach(originalMesh => {
         const clonedMesh = originalMesh.clone(); // Clone the original mesh
@@ -339,7 +341,8 @@ export async function combineNoAtlas(model,avatar, options) {
          */
         const morphTargetsProcess = {
             merge:new Set(),
-            keep:new Set(VRMBoundMorphs),
+            // Keep VRM-bound morphs by name. Using keys avoids Set from receiving a non-iterable object.
+            keep:new Set(Object.keys(VRMBoundMorphs || {})),
             remove: new Set()
         }
         /**
@@ -738,8 +741,32 @@ export async function combine(model,avatar, options) {
  * @returns {Array} Array of blendshapeTraits
  */
 function getAllBlendShapeTraits(avatar){
-    const blendShapes = Object.values(avatar).filter((a)=>a)[0]?.traitInfo.manifestData.getAllBlendShapeTraits() || [];
-    return blendShapes;
+    try{
+        // Check if avatar is valid and has the expected structure
+        if (!avatar || typeof avatar !== 'object') {
+            console.warn('merge-geometry:getAllBlendShapeTraits - avatar is not a valid object');
+            return [];
+        }
+        
+        // Find any trait that exposes manifestData.getAllBlendShapeTraits
+        const source = Object.values(avatar).find((a)=>a?.traitInfo?.manifestData?.getAllBlendShapeTraits);
+        if(!source) {
+            console.warn('merge-geometry:getAllBlendShapeTraits - no source found with getAllBlendShapeTraits method');
+            return [];
+        }
+        
+        const getter = source.traitInfo.manifestData.getAllBlendShapeTraits;
+        if (typeof getter !== 'function') {
+            console.warn('merge-geometry:getAllBlendShapeTraits - getAllBlendShapeTraits is not a function');
+            return [];
+        }
+        
+        const traits = getter.call(source.traitInfo.manifestData);
+        return Array.isArray(traits) ? traits : [];
+    }catch(err){
+        console.warn('merge-geometry:getAllBlendShapeTraits missing manifest, continuing without manifest blendshapes', err);
+        return [];
+    }
 }
 /**
  * 
