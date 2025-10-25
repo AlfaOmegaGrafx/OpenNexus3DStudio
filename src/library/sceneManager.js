@@ -75,13 +75,27 @@ export class SceneManager {
       this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
       this.camera.position.set(0, 1.5, 3); // Position camera to look at a human-sized model
 
-      // Create renderer
-      this.renderer = new THREE.WebGLRenderer({ 
-        antialias: enableAntialias,
-        alpha: true
-      });
+      // Create renderer with fallback for WebGL context creation
+      try {
+        this.renderer = new THREE.WebGLRenderer({ 
+          antialias: enableAntialias,
+          alpha: true,
+          powerPreference: "high-performance"
+        });
+        console.log('✅ SceneManager: WebGL renderer created successfully');
+      } catch (error) {
+        console.warn('⚠️ SceneManager: WebGL renderer creation failed, trying fallback...', error);
+        // Fallback with minimal settings
+        this.renderer = new THREE.WebGLRenderer({ 
+          antialias: false,
+          alpha: true,
+          powerPreference: "default"
+        });
+        console.log('✅ SceneManager: WebGL renderer created with fallback settings');
+      }
+      
       this.renderer.setSize(width, height);
-      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
       
       if (enableShadows) {
         this.renderer.shadowMap.enabled = true;
@@ -91,10 +105,20 @@ export class SceneManager {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.0;
 
-      // Create controls
+      // Create enhanced controls with better UX
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.05;
+      this.controls.enableZoom = true;
+      this.controls.enableRotate = true;
+      this.controls.enablePan = true;
+      this.controls.autoRotate = false;
+      this.controls.autoRotateSpeed = 2.0;
+      this.controls.minDistance = 0.5;
+      this.controls.maxDistance = 50;
+      this.controls.minPolarAngle = 0;
+      this.controls.maxPolarAngle = Math.PI;
+      this.controls.target.set(0, 1, 0); // Look at human height
 
       // Setup lighting
       this.setupLighting();
@@ -108,68 +132,123 @@ export class SceneManager {
       this.addHelpers();
 
       // Mount renderer
-      container.appendChild(this.renderer.domElement);
+      try {
+        container.appendChild(this.renderer.domElement);
+        console.log('✅ SceneManager: Renderer DOM element added to container');
+      } catch (error) {
+        console.error('❌ SceneManager: Failed to add renderer to container:', error);
+        throw new Error(`Failed to add renderer to container: ${error.message}`);
+      }
 
       // Setup resize handler
       this.setupResizeHandler();
 
       this.isInitialized = true;
+      console.log('✅ SceneManager: Scene initialized successfully');
+      console.log('✅ SceneManager: Scene details:', {
+        scene: !!this.scene,
+        camera: !!this.camera,
+        renderer: !!this.renderer,
+        controls: !!this.controls,
+        container: container.tagName,
+        dimensions: { width, height }
+      });
+      
       this.emit('initialized', { scene: this.scene, camera: this.camera, renderer: this.renderer });
       
       return { scene: this.scene, camera: this.camera, renderer: this.renderer, controls: this.controls };
     } catch (error) {
-      console.error('Failed to initialize scene:', error);
+      console.error('❌ SceneManager: Failed to initialize scene:', error);
+      console.error('❌ SceneManager: Error details:', {
+        message: error.message,
+        stack: error.stack,
+        container: container,
+        options: options
+      });
       throw error;
     }
   }
 
   /**
-   * Setup scene lighting
+   * Setup scene lighting with enhanced professional lighting setup
    */
   setupLighting() {
+    // Store lights for dynamic control
+    this.lights = {
+      ambient: [],
+      directional: [],
+      point: [],
+      hemisphere: []
+    };
+
     // Enhanced Ambient light - much brighter overall illumination
     const ambientLight = new THREE.AmbientLight(0x606060, 1.2);
+    ambientLight.name = 'mainAmbient';
     this.scene.add(ambientLight);
+    this.lights.ambient.push(ambientLight);
 
     // Additional soft ambient light for extra brightness
     const softAmbientLight = new THREE.AmbientLight(0x808080, 0.6);
+    softAmbientLight.name = 'softAmbient';
     this.scene.add(softAmbientLight);
+    this.lights.ambient.push(softAmbientLight);
 
-    // 3-Point Lighting Setup
+    // Professional 3-Point Lighting Setup with enhanced shadows
     
     // 1. Key Light (Main light) - Front and slightly to the right
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.name = 'keyLight';
     keyLight.position.set(5, 8, 3);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.mapSize.width = 4096; // Increased shadow resolution
+    keyLight.shadow.mapSize.height = 4096;
     keyLight.shadow.camera.near = 0.5;
     keyLight.shadow.camera.far = 50;
     keyLight.shadow.camera.left = -10;
     keyLight.shadow.camera.right = 10;
     keyLight.shadow.camera.top = 10;
     keyLight.shadow.camera.bottom = -10;
+    keyLight.shadow.bias = -0.0001; // Reduce shadow acne
     this.scene.add(keyLight);
+    this.lights.directional.push(keyLight);
 
     // 2. Fill Light (Softer light) - Front and slightly to the left
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    fillLight.name = 'fillLight';
     fillLight.position.set(-3, 5, 2);
     this.scene.add(fillLight);
+    this.lights.directional.push(fillLight);
 
     // 3. Rim Light (Back light) - Behind the model
     const rimLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    rimLight.name = 'rimLight';
     rimLight.position.set(-2, 3, -5);
     this.scene.add(rimLight);
+    this.lights.directional.push(rimLight);
 
     // Additional accent light for better illumination
     const accentLight = new THREE.PointLight(0xffffff, 0.7, 20);
+    accentLight.name = 'accentLight';
     accentLight.position.set(0, 10, 0);
+    accentLight.castShadow = true;
+    accentLight.shadow.mapSize.width = 2048;
+    accentLight.shadow.mapSize.height = 2048;
     this.scene.add(accentLight);
+    this.lights.point.push(accentLight);
 
     // Soft hemisphere light for natural ambient lighting
     const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1d, 0.8);
+    hemisphereLight.name = 'hemisphereLight';
     hemisphereLight.position.set(0, 10, 0);
     this.scene.add(hemisphereLight);
+    this.lights.hemisphere.push(hemisphereLight);
+
+    // Add subtle rim lighting for better model definition
+    const rimLight2 = new THREE.DirectionalLight(0x4a90e2, 0.6);
+    rimLight2.name = 'rimLight2';
+    rimLight2.position.set(2, 2, -3);
+    this.scene.add(rimLight2);
+    this.lights.directional.push(rimLight2);
   }
 
   /**
@@ -2498,10 +2577,10 @@ export class SceneManager {
     console.log('Model size:', size);
     console.log('Max dimension:', maxDim);
 
-    // Use default distance if model has no size
-    const distance = maxDim > 0 ? maxDim * 2 : 3;
+    // Use much closer distance for detailed viewing (reduced from 1.5x to 1.0x)
+    const distance = maxDim > 0 ? maxDim * 1.0 : 1.5;
     const cameraPosition = center.clone();
-    cameraPosition.y += distance * 0.5; // Above the model
+    cameraPosition.y += distance * 0.2; // Slightly above the model
     cameraPosition.z += distance; // Behind the model
 
     // Set camera position and target
@@ -2515,12 +2594,20 @@ export class SceneManager {
 
 
   /**
-   * Set render mode
+   * Set render mode with auto-focus
    * @param {string} mode - Render mode (solid, wireframe, skeleton, partColorize, rendered)
    */
   setRenderMode(mode) {
     this.renderMode = mode;
     this.updateRenderMode(mode);
+    
+    // Auto-focus on model when changing render modes for better viewing
+    if (this.currentModel) {
+      setTimeout(() => {
+        this.focusOnModel();
+      }, 100); // Small delay to ensure render mode is applied first
+    }
+    
     this.emit('renderModeChanged', { mode });
   }
 
@@ -2651,6 +2738,10 @@ export class SceneManager {
       if (child.isMesh) {
         switch (mode) {
           case 'solid':
+            // Restore original material if it exists (e.g., coming from UV mode)
+            if (child.userData.originalMaterial) {
+              child.material = child.userData.originalMaterial.clone();
+            }
             child.material.wireframe = false;
             child.material.transparent = false;
             child.material.opacity = 1.0;
@@ -2725,11 +2816,39 @@ export class SceneManager {
             child.material.transparent = false;
             child.material.opacity = 1.0;
             break;
-          case 'rendered':
-            // Restore original materials for rendered mode
-            this.restoreOriginalMaterials();
-            // Clear bone visualization
-            this.clearBoneVisualization();
+          case 'normal':
+            // Normal map visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            if (child.material.normalMap) {
+              child.material.map = child.material.normalMap;
+              child.material.color.setHex(0x808080);
+            }
+            break;
+          case 'uv':
+            // UV map visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            child.material.color.setHex(0xffffff);
+            // Create UV visualization material
+            const uvMaterial = new THREE.MeshBasicMaterial({
+              map: this.createUVTexture(),
+              side: THREE.DoubleSide
+            });
+            // Store the original material before replacing
+            if (!child.userData.originalMaterial) {
+              child.userData.originalMaterial = child.material.clone();
+            }
+            child.material = uvMaterial;
+            break;
+          case 'depth':
+            // Depth visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            child.material.color.setHex(0xffffff);
             break;
         }
       }
@@ -2743,6 +2862,211 @@ export class SceneManager {
       console.log('Scene:', this.scene);
       this.createBoneVisualization();
     }
+  }
+
+  /**
+   * Create UV visualization texture
+   */
+  createUVTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    
+    // Create UV grid pattern
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    
+    // Draw UV grid
+    for (let i = 0; i <= 8; i++) {
+      const x = (i / 8) * 512;
+      const y = (i / 8) * 512;
+      
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    return texture;
+  }
+
+  /**
+   * Set lighting intensity for all lights
+   * @param {number} intensity - Lighting intensity multiplier
+   */
+  setLightingIntensity(intensity) {
+    if (!this.lights) return;
+    
+    // Adjust ambient lights
+    this.lights.ambient.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust directional lights
+    this.lights.directional.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust point lights
+    this.lights.point.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust hemisphere lights
+    this.lights.hemisphere.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+  }
+
+  /**
+   * Toggle specific light types
+   * @param {string} lightType - Type of light to toggle ('ambient', 'directional', 'point', 'hemisphere')
+   * @param {boolean} enabled - Whether to enable or disable
+   */
+  toggleLightType(lightType, enabled) {
+    if (!this.lights || !this.lights[lightType]) return;
+    
+    this.lights[lightType].forEach(light => {
+      light.visible = enabled;
+    });
+  }
+
+  /**
+   * Set camera to predefined positions with smooth animation and auto-focus
+   * @param {string} position - Camera position ('front', 'back', 'left', 'right', 'top', 'bottom')
+   * @param {number} duration - Animation duration in milliseconds (default: 1000ms)
+   */
+  setCameraPosition(position, duration = 1000) {
+    if (!this.camera || !this.controls) return;
+    
+    // First, focus on the model to get proper distance
+    this.focusOnModel();
+    
+    // Get the model's bounding box for proper positioning
+    let modelCenter = new THREE.Vector3(0, 1, 0);
+    let modelSize = 2; // Default size
+    
+    if (this.currentModel) {
+      const box = new THREE.Box3().setFromObject(this.currentModel);
+      if (!box.isEmpty()) {
+        modelCenter = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        modelSize = Math.max(size.x, size.y, size.z);
+      }
+    }
+    
+    // Calculate distance based on model size for very close-up view
+    const distance = Math.max(modelSize * 1.0, 1.0);
+    
+    const positions = {
+      front: { x: modelCenter.x, y: modelCenter.y, z: modelCenter.z + distance },
+      back: { x: modelCenter.x, y: modelCenter.y, z: modelCenter.z - distance },
+      left: { x: modelCenter.x - distance, y: modelCenter.y, z: modelCenter.z },
+      right: { x: modelCenter.x + distance, y: modelCenter.y, z: modelCenter.z },
+      top: { x: modelCenter.x, y: modelCenter.y + distance, z: modelCenter.z },
+      bottom: { x: modelCenter.x, y: modelCenter.y - distance, z: modelCenter.z }
+    };
+    
+    const targetPos = positions[position];
+    if (!targetPos) return;
+    
+    // Store current position and target
+    const startPosition = this.camera.position.clone();
+    const startTarget = this.controls.target.clone();
+    const endPosition = new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z);
+    const endTarget = modelCenter.clone();
+    
+    // Animation variables
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing function (ease-in-out)
+      const easeInOut = progress < 0.5 
+        ? 2 * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      
+      // Interpolate position
+      this.camera.position.lerpVectors(startPosition, endPosition, easeInOut);
+      
+      // Interpolate target
+      this.controls.target.lerpVectors(startTarget, endTarget, easeInOut);
+      
+      // Update controls
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Ensure final position is exact
+        this.camera.position.copy(endPosition);
+        this.controls.target.copy(endTarget);
+        this.controls.update();
+        
+        console.log(`🎬 Camera animated to ${position} view with close-up focus`);
+      }
+    };
+    
+    // Start animation
+    console.log(`🎬 Animating camera to ${position} view with close-up focus...`);
+    animate();
+  }
+
+  /**
+   * Enable/disable auto-rotation
+   * @param {boolean} enabled - Whether to enable auto-rotation
+   * @param {number} speed - Rotation speed (default: 2.0)
+   */
+  setAutoRotation(enabled, speed = 2.0) {
+    if (this.controls) {
+      this.controls.autoRotate = enabled;
+      this.controls.autoRotateSpeed = speed;
+    }
+  }
+
+  /**
+   * Set renderer tone mapping and exposure
+   * @param {string} toneMapping - Tone mapping type ('ACESFilmic', 'Reinhard', 'Cineon', 'Linear')
+   * @param {number} exposure - Exposure value
+   */
+  setToneMapping(toneMapping, exposure = 1.0) {
+    if (!this.renderer) return;
+    
+    const toneMappingTypes = {
+      'ACESFilmic': THREE.ACESFilmicToneMapping,
+      'Reinhard': THREE.ReinhardToneMapping,
+      'Cineon': THREE.CineonToneMapping,
+      'Linear': THREE.LinearToneMapping
+    };
+    
+    this.renderer.toneMapping = toneMappingTypes[toneMapping] || THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = exposure;
   }
 
   /**

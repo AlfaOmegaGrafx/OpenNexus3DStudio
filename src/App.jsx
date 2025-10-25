@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
 import { AudioProvider } from './context/AudioContext';
@@ -17,6 +17,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
+import SceneControlsCompact from './components/SceneControlsCompact';
 import { sceneInitializer } from './library/sceneInitializer';
 import { sharedHDRManager } from './library/sharedHDRManager';
 
@@ -50,17 +51,20 @@ function AppContent() {
   
   // Synchronized hamburger handlers - when one expands, the other collapses
   const handleLeftHamburgerClick = () => {
-    if (sidebarCollapsed) {
-      // Left hamburger is expanding - collapse right hamburger and main viewport
-      setSidebarCollapsed(false);
-      setCharacterStudioSidebarCollapsed(true);
-      // Main viewport expands when left hamburger expands
-    } else {
-      // Left hamburger is collapsing - expand right hamburger and collapse main viewport
-      setSidebarCollapsed(true);
-      setCharacterStudioSidebarCollapsed(false);
-      // Main viewport collapses when left hamburger collapses
-    }
+    // Use React's batching to update all states simultaneously for better performance
+    startTransition(() => {
+      if (sidebarCollapsed) {
+        // Left hamburger is expanding - collapse right hamburger and main viewport
+        setSidebarCollapsed(false);
+        setCharacterStudioSidebarCollapsed(true);
+        // Main viewport expands when left hamburger expands
+      } else {
+        // Left hamburger is collapsing - expand right hamburger and collapse main viewport
+        setSidebarCollapsed(true);
+        setCharacterStudioSidebarCollapsed(false);
+        // Main viewport collapses when left hamburger collapses
+      }
+    });
   };
 
   const handleRightHamburgerClick = () => {
@@ -687,6 +691,23 @@ function AppContent() {
 
         </div>
       </header>
+
+      {/* Scene Controls Row - Below Header */}
+      <div className="scene-controls-row">
+        <div className="scene-controls-container">
+          <div className="scene-controls-label">🎨 Scene Controls:</div>
+          <SceneControlsCompact
+            sceneManager={sceneManager}
+            onRenderModeChange={(mode) => {
+              console.log(`🎨 Render mode changed to: ${mode}`);
+              updateRenderMode(mode);
+            }}
+            onLightingChange={(lighting) => {
+              console.log('💡 Lighting changed:', lighting);
+            }}
+          />
+        </div>
+      </div>
 
       {/* Anchored Hamburger Menus */}
       <button

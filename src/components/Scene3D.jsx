@@ -14,7 +14,8 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
     initializeScene,
     updateRenderMode,
     startRenderLoop,
-    exportModel
+    exportModel,
+    sceneManager
   } = useScene();
 
   const {
@@ -34,14 +35,31 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
   // Initialize scene when component mounts
   useEffect(() => {
     if (mountRef.current && !isInitialized) {
+      console.log('🎬 Scene3D: Initializing 3D scene...');
+      console.log('🎬 Scene3D: Container dimensions:', {
+        width: mountRef.current.clientWidth,
+        height: mountRef.current.clientHeight
+      });
+      
       initializeScene(mountRef.current, {
         width: mountRef.current.clientWidth,
         height: mountRef.current.clientHeight
       }).then(() => {
+        console.log('✅ Scene3D: Scene initialized successfully');
         setIsInitialized(true);
         startRenderLoop();
+        console.log('🎬 Scene3D: Render loop started');
       }).catch(error => {
-        console.error('Failed to initialize scene:', error);
+        console.error('❌ Scene3D: Failed to initialize scene:', error);
+        console.error('❌ Scene3D: Error details:', {
+          message: error.message,
+          stack: error.stack,
+          container: mountRef.current,
+          dimensions: {
+            width: mountRef.current?.clientWidth,
+            height: mountRef.current?.clientHeight
+          }
+        });
       });
     }
   }, [initializeScene, startRenderLoop, isInitialized]);
@@ -52,6 +70,35 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
       updateRenderMode(renderMode);
     }
   }, [renderMode, currentRenderMode, updateRenderMode]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (mountRef.current && isInitialized) {
+        console.log('🔄 Scene3D: Handling window resize...');
+        const container = mountRef.current;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        console.log('🔄 Scene3D: New dimensions:', { width, height });
+        
+        // Update camera aspect ratio
+        if (sceneManager && sceneManager.camera) {
+          sceneManager.camera.aspect = width / height;
+          sceneManager.camera.updateProjectionMatrix();
+        }
+        
+        // Update renderer size
+        if (sceneManager && sceneManager.renderer) {
+          sceneManager.renderer.setSize(width, height);
+          console.log('✅ Scene3D: Renderer resized successfully');
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isInitialized, sceneManager]);
 
   // Button handlers for CharacterStudio features
   const handleVRMExport = async () => {
@@ -208,6 +255,7 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
         className="scene-viewport"
         style={{ width: '100%', height: '100%' }}
       />
+      
       
       {/* CharacterStudio Overlay - Integrated into main viewer */}
       {showCharacterStudioOverlay && (
