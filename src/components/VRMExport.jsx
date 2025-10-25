@@ -1111,8 +1111,31 @@ const VRMExport = () => {
                                 throw new Error('Image data is empty or invalid');
                               }
                               
+                              // Check if ArrayBuffer is too large for direct conversion
+                              if (imageData.byteLength > 10 * 1024 * 1024) { // 10MB limit
+                                console.log(`⚠️ Method 22 - ArrayBuffer too large for direct conversion (${imageData.byteLength} bytes), skipping direct method`);
+                                throw new Error('ArrayBuffer too large for direct conversion');
+                              }
+                              
                               const mimeType = thumbnailImageRef.mimeType || 'image/jpeg';
-                              const base64String = btoa(String.fromCharCode(...new Uint8Array(imageData)));
+                              
+                              // Optimized base64 conversion for large buffers
+                              let base64String;
+                              if (imageData.byteLength > 1024 * 1024) { // 1MB threshold
+                                console.log(`🔍 Method 22 - Using chunked base64 conversion for large buffer`);
+                                const uint8Array = new Uint8Array(imageData);
+                                const chunkSize = 1024 * 1024; // 1MB chunks
+                                let result = '';
+                                
+                                for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                                  const chunk = uint8Array.slice(i, i + chunkSize);
+                                  result += btoa(String.fromCharCode(...chunk));
+                                }
+                                base64String = result;
+                              } else {
+                                base64String = btoa(String.fromCharCode(...new Uint8Array(imageData)));
+                              }
+                              
                               console.log(`🔍 Method 22 - Base64 string length:`, base64String?.length);
                               console.log(`🔍 Method 22 - Base64 string starts with:`, base64String?.substring(0, 50));
                               
@@ -1143,6 +1166,12 @@ const VRMExport = () => {
                               
                               // Fallback to FileReader if direct creation fails
                               try {
+                                // Check if blob is too large for FileReader
+                                if (blob.size > 50 * 1024 * 1024) { // 50MB limit
+                                  console.log(`⚠️ Method 22 - Blob too large for FileReader (${blob.size} bytes), skipping FileReader fallback`);
+                                  throw new Error('Blob too large for FileReader');
+                                }
+                                
                                 const reader = new FileReader();
                                 const dataUrl = await Promise.race([
                                   new Promise((resolve, reject) => {
@@ -1188,9 +1217,9 @@ const VRMExport = () => {
                                   }),
                                   new Promise((_, reject) => {
                                     setTimeout(() => {
-                                      console.log(`❌ Method 22 - FileReader timeout for ArrayBuffer after 5 seconds`);
+                                      console.log(`❌ Method 22 - FileReader timeout for ArrayBuffer after 10 seconds`);
                                       reject(new Error('FileReader timeout for ArrayBuffer'));
-                                    }, 5000);
+                                    }, 10000); // Increased timeout to 10 seconds
                                   })
                                 ]);
                                 
@@ -1205,6 +1234,35 @@ const VRMExport = () => {
                                 }
                               } catch (fileReaderError) {
                                 console.log(`❌ Method 22 - ArrayBuffer FileReader fallback also failed:`, fileReaderError);
+                                
+                                // Final fallback: Create a simple placeholder thumbnail
+                                try {
+                                  console.log(`🔄 Method 22 - Creating placeholder thumbnail as final fallback`);
+                                  const canvas = document.createElement('canvas');
+                                  canvas.width = 256;
+                                  canvas.height = 256;
+                                  const ctx = canvas.getContext('2d');
+                                  
+                                  // Create a simple gradient background
+                                  const gradient = ctx.createLinearGradient(0, 0, 256, 256);
+                                  gradient.addColorStop(0, '#4a90e2');
+                                  gradient.addColorStop(1, '#357abd');
+                                  ctx.fillStyle = gradient;
+                                  ctx.fillRect(0, 0, 256, 256);
+                                  
+                                  // Add text
+                                  ctx.fillStyle = 'white';
+                                  ctx.font = '16px Arial';
+                                  ctx.textAlign = 'center';
+                                  ctx.fillText('VRM Model', 128, 128);
+                                  ctx.fillText('Thumbnail', 128, 150);
+                                  
+                                  const placeholderDataUrl = canvas.toDataURL('image/png');
+                                  extractedMetadata.thumbnail = placeholderDataUrl;
+                                  console.log(`✅ Method 22 - Created placeholder thumbnail as fallback`);
+                                } catch (placeholderError) {
+                                  console.log(`❌ Method 22 - Even placeholder creation failed:`, placeholderError);
+                                }
                               }
                             }
                           } catch (error) {

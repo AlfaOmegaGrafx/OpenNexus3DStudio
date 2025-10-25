@@ -281,6 +281,71 @@ export class SceneManager {
       console.log('Model processed, adding to scene...');
       this.scene.add(this.currentModel);
 
+      // Restore VRM reference if this is a VRM model
+      if (model && model.userData && model.userData.vrm) {
+        this.currentVRM = model.userData.vrm;
+        console.log('🔍 VRM reference restored after processing:', !!this.currentVRM);
+        
+        // Fix VRM model orientation - rotate to face forward
+        if (this.currentModel && this.currentModel.rotation) {
+          this.currentModel.rotation.y = Math.PI; // Rotate 180 degrees to face forward
+          console.log('🔄 VRM model rotated to face forward in scene manager');
+          console.log('🔄 Scene manager rotation after fix:', this.currentModel.rotation);
+        }
+        
+        // Force VRM material restoration after processing
+        this.forceVRMMaterialRestoration();
+        
+        // Additional VRM texture debugging and restoration
+        setTimeout(() => {
+          this.debugVRMTextures();
+          this.validateVRMTextures();
+          this.recreateVRMMaterials();
+          this.forceVRMTextureBinding();
+          this.forceVRMMaterialRestoration();
+          this.forceRendererUpdate();
+          // Force solid mode to ensure textures are visible
+          this.updateRenderMode('solid');
+        }, 100);
+        
+        // Final attempt after a longer delay
+        setTimeout(() => {
+          this.recreateVRMMaterials();
+          this.forceVRMTextureBinding();
+          this.forceVRMMaterialRestoration();
+          this.forceRendererUpdate();
+          // Force solid mode again to ensure textures are visible
+          this.updateRenderMode('solid');
+          // Force a final render
+          if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+          }
+        }, 500);
+        
+        // Ultimate attempt - force everything after 1 second
+        setTimeout(() => {
+          console.log('🚀 Ultimate VRM fix attempt...');
+          this.currentModel.traverse((child) => {
+            if (child.isMesh && child.material) {
+              console.log(`🚀 Ultimate fix for: ${child.name}`);
+              child.material.wireframe = false;
+              child.material.transparent = false;
+              child.material.opacity = 1.0;
+              child.material.needsUpdate = true;
+              if (child.material.map) {
+                child.material.map.needsUpdate = true;
+                child.material.map.flipY = false;
+              }
+            }
+          });
+          this.updateRenderMode('solid');
+          if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+          }
+          console.log('🚀 Ultimate VRM fix completed');
+        }, 1000);
+      }
+
       // Store original materials for render mode restoration
       this.storeOriginalMaterials();
 
@@ -720,21 +785,31 @@ export class SceneManager {
     material.userData.isVRMMaterial = true;
     
     // Ensure material is properly configured for rendering
-    if (material.map && !material.map.needsUpdate) {
+    if (material.map) {
       material.map.needsUpdate = true;
+      material.map.flipY = false; // VRM textures should not be flipped
     }
-    if (material.normalMap && !material.normalMap.needsUpdate) {
+    if (material.normalMap) {
       material.normalMap.needsUpdate = true;
+      material.normalMap.flipY = false;
     }
-    if (material.roughnessMap && !material.roughnessMap.needsUpdate) {
+    if (material.roughnessMap) {
       material.roughnessMap.needsUpdate = true;
+      material.roughnessMap.flipY = false;
     }
-    if (material.metalnessMap && !material.metalnessMap.needsUpdate) {
+    if (material.metalnessMap) {
       material.metalnessMap.needsUpdate = true;
+      material.metalnessMap.flipY = false;
     }
-    if (material.emissiveMap && !material.emissiveMap.needsUpdate) {
+    if (material.emissiveMap) {
       material.emissiveMap.needsUpdate = true;
+      material.emissiveMap.flipY = false;
     }
+    
+    // Ensure proper material properties for solid rendering
+    material.wireframe = false;
+    material.transparent = false;
+    material.opacity = 1.0;
     
     // Ensure material needs update
     material.needsUpdate = true;
@@ -760,19 +835,24 @@ export class SceneManager {
         // Ensure all textures are properly updated
         if (child.material.map) {
           child.material.map.needsUpdate = true;
+          child.material.map.flipY = false; // VRM textures should not be flipped
           console.log(`📷 Updated texture map for: ${child.name}`);
         }
         if (child.material.normalMap) {
           child.material.normalMap.needsUpdate = true;
+          child.material.normalMap.flipY = false;
         }
         if (child.material.roughnessMap) {
           child.material.roughnessMap.needsUpdate = true;
+          child.material.roughnessMap.flipY = false;
         }
         if (child.material.metalnessMap) {
           child.material.metalnessMap.needsUpdate = true;
+          child.material.metalnessMap.flipY = false;
         }
         if (child.material.emissiveMap) {
           child.material.emissiveMap.needsUpdate = true;
+          child.material.emissiveMap.flipY = false;
         }
         
         // Check if this is a VRM material and ensure proper properties
@@ -785,11 +865,341 @@ export class SceneManager {
           this.ensureVRMMaterialProperties(child.material);
         }
         
+        // Ensure proper material properties for solid rendering
+        child.material.wireframe = false;
+        child.material.transparent = false;
+        child.material.opacity = 1.0;
+        
+        // Force texture coordinate update
+        if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+          child.geometry.attributes.uv.needsUpdate = true;
+        }
+        
         console.log(`✅ Material restoration completed for: ${child.name}`);
       }
     });
     
     console.log('✅ Material restoration completed');
+  }
+
+  /**
+   * Force VRM material restoration with aggressive texture binding
+   */
+  forceVRMMaterialRestoration() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Force VRM material restoration...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Force processing VRM mesh: ${child.name}`);
+        
+        // Force material recreation for VRM materials
+        if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
+          console.log(`🎨 Force VRM material restoration for: ${child.name}`);
+          
+          // Force texture binding
+          if (child.material.map) {
+            child.material.map.needsUpdate = true;
+            child.material.map.flipY = false;
+            child.material.map.generateMipmaps = true;
+            child.material.map.minFilter = THREE.LinearMipmapLinearFilter;
+            child.material.map.magFilter = THREE.LinearFilter;
+            child.material.map.wrapS = THREE.RepeatWrapping;
+            child.material.map.wrapT = THREE.RepeatWrapping;
+            console.log(`📷 Force texture binding for: ${child.name}`);
+          }
+          
+          // Force all texture maps
+          [child.material.normalMap, child.material.roughnessMap, child.material.metalnessMap, child.material.emissiveMap].forEach((texture, index) => {
+            if (texture) {
+              texture.needsUpdate = true;
+              texture.flipY = false;
+              texture.generateMipmaps = true;
+              texture.minFilter = THREE.LinearMipmapLinearFilter;
+              texture.magFilter = THREE.LinearFilter;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+            }
+          });
+          
+          // Force material properties
+          child.material.needsUpdate = true;
+          child.material.wireframe = false;
+          child.material.transparent = false;
+          child.material.opacity = 1.0;
+          
+          // Force geometry UV update
+          if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+            child.geometry.attributes.uv.needsUpdate = true;
+          }
+          
+          // Force material recreation if texture is not working
+          if (child.material.map && !child.material.map.image) {
+            console.log(`⚠️ Texture has no image, forcing recreation for: ${child.name}`);
+            // Try to force texture recreation
+            child.material.map.dispose();
+            child.material.map = null;
+            child.material.needsUpdate = true;
+          }
+          
+          // Force material recreation if it's still not working
+          if (child.material.map && child.material.map.image && child.material.map.image.width === 0) {
+            console.log(`⚠️ Texture image not loaded, forcing material recreation for: ${child.name}`);
+            // Force material recreation
+            const oldMaterial = child.material;
+            child.material = oldMaterial.clone();
+            child.material.needsUpdate = true;
+            oldMaterial.dispose();
+          }
+          
+          console.log(`✅ Force VRM material restoration completed for: ${child.name}`);
+        }
+      }
+    });
+    
+    console.log('✅ Force VRM material restoration completed');
+  }
+
+  /**
+   * Debug VRM textures to see what's happening
+   */
+  debugVRMTextures() {
+    if (!this.currentModel) return;
+    
+    console.log('🔍 Debugging VRM textures...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Mesh: ${child.name}`);
+        console.log(`  Material type: ${child.material.type}`);
+        console.log(`  Material needsUpdate: ${child.material.needsUpdate}`);
+        console.log(`  Material wireframe: ${child.material.wireframe}`);
+        console.log(`  Material transparent: ${child.material.transparent}`);
+        console.log(`  Material opacity: ${child.material.opacity}`);
+        
+        if (child.material.map) {
+          console.log(`  Map texture: ${child.material.map.image?.src || 'embedded'}`);
+          console.log(`  Map needsUpdate: ${child.material.map.needsUpdate}`);
+          console.log(`  Map flipY: ${child.material.map.flipY}`);
+          console.log(`  Map format: ${child.material.map.format}`);
+          console.log(`  Map type: ${child.material.map.type}`);
+        } else {
+          console.log(`  No map texture found`);
+        }
+        
+        if (child.material.color) {
+          console.log(`  Material color: ${child.material.color.getHexString()}`);
+        }
+        
+        console.log(`  Material userData:`, child.material.userData);
+        console.log('---');
+      }
+    });
+  }
+
+  /**
+   * Force renderer update to refresh materials
+   */
+  forceRendererUpdate() {
+    if (!this.renderer) return;
+    
+    console.log('🔧 Force renderer update...');
+    
+    // Force renderer to update
+    this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
+    
+    // Force material updates
+    if (this.currentModel) {
+      this.currentModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.needsUpdate = true;
+          if (child.material.map) {
+            child.material.map.needsUpdate = true;
+          }
+        }
+      });
+    }
+    
+    // Force render
+    this.renderer.render(this.scene, this.camera);
+    
+    console.log('✅ Force renderer update completed');
+  }
+
+  /**
+   * Validate and fix VRM textures
+   */
+  validateVRMTextures() {
+    if (!this.currentModel) return;
+    
+    console.log('🔍 Validating VRM textures...');
+    let fixedCount = 0;
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if (child.material.map) {
+          const texture = child.material.map;
+          if (!texture.image || texture.image.width === 0) {
+            console.log(`⚠️ Invalid texture found for: ${child.name}`);
+            // Try to force texture recreation
+            texture.needsUpdate = true;
+            texture.flipY = false;
+            texture.generateMipmaps = true;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            fixedCount++;
+          }
+        }
+      }
+    });
+    
+    console.log(`✅ VRM texture validation completed. Fixed ${fixedCount} textures.`);
+  }
+
+  /**
+   * Force VRM texture binding - more aggressive approach
+   */
+  forceVRMTextureBinding() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Force VRM texture binding...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Force binding textures for: ${child.name}`);
+        
+        // Force all texture maps to be properly bound
+        const textureMaps = [
+          'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'
+        ];
+        
+        textureMaps.forEach(mapType => {
+          if (child.material[mapType]) {
+            const texture = child.material[mapType];
+            console.log(`📷 Force binding ${mapType} for: ${child.name}`);
+            
+            // Force texture properties
+            texture.needsUpdate = true;
+            texture.flipY = false;
+            texture.generateMipmaps = true;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            
+            // Force texture to be bound to GPU
+            if (this.renderer) {
+              this.renderer.initTexture(texture);
+            }
+          }
+        });
+        
+        // Force material update
+        child.material.needsUpdate = true;
+        child.material.wireframe = false;
+        child.material.transparent = false;
+        child.material.opacity = 1.0;
+        
+        // Force geometry UV update
+        if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+          child.geometry.attributes.uv.needsUpdate = true;
+        }
+        
+        console.log(`✅ Force texture binding completed for: ${child.name}`);
+      }
+    });
+    
+    console.log('✅ Force VRM texture binding completed');
+  }
+
+  /**
+   * Completely recreate VRM materials to fix texture issues
+   */
+  recreateVRMMaterials() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Recreating VRM materials...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔄 Recreating material for: ${child.name}`);
+        
+        // Store original material properties
+        const originalMaterial = child.material;
+        const materialType = originalMaterial.type;
+        
+        // Create new material with same properties
+        let newMaterial;
+        if (materialType === 'MeshStandardMaterial') {
+          newMaterial = new THREE.MeshStandardMaterial({
+            map: originalMaterial.map,
+            normalMap: originalMaterial.normalMap,
+            roughnessMap: originalMaterial.roughnessMap,
+            metalnessMap: originalMaterial.metalnessMap,
+            emissiveMap: originalMaterial.emissiveMap,
+            color: originalMaterial.color,
+            roughness: originalMaterial.roughness,
+            metalness: originalMaterial.metalness,
+            emissive: originalMaterial.emissive,
+            transparent: false,
+            opacity: 1.0,
+            wireframe: false
+          });
+        } else {
+          newMaterial = new THREE.MeshBasicMaterial({
+            map: originalMaterial.map,
+            color: originalMaterial.color,
+            transparent: false,
+            opacity: 1.0,
+            wireframe: false
+          });
+        }
+        
+        // Copy userData
+        newMaterial.userData = { ...originalMaterial.userData };
+        
+        // Force texture updates
+        if (newMaterial.map) {
+          newMaterial.map.needsUpdate = true;
+          newMaterial.map.flipY = false;
+        }
+        if (newMaterial.normalMap) {
+          newMaterial.normalMap.needsUpdate = true;
+          newMaterial.normalMap.flipY = false;
+        }
+        if (newMaterial.roughnessMap) {
+          newMaterial.roughnessMap.needsUpdate = true;
+          newMaterial.roughnessMap.flipY = false;
+        }
+        if (newMaterial.metalnessMap) {
+          newMaterial.metalnessMap.needsUpdate = true;
+          newMaterial.metalnessMap.flipY = false;
+        }
+        if (newMaterial.emissiveMap) {
+          newMaterial.emissiveMap.needsUpdate = true;
+          newMaterial.emissiveMap.flipY = false;
+        }
+        
+        // Replace material
+        child.material = newMaterial;
+        child.material.needsUpdate = true;
+        
+        // Dispose old material
+        originalMaterial.dispose();
+        
+        console.log(`✅ Material recreated for: ${child.name}`);
+        console.log(`✅ New material wireframe: ${newMaterial.wireframe}, transparent: ${newMaterial.transparent}`);
+        if (newMaterial.map) {
+          console.log(`✅ New material texture: needsUpdate=${newMaterial.map.needsUpdate}, flipY=${newMaterial.map.flipY}`);
+        }
+      }
+    });
+    
+    console.log('✅ VRM materials recreation completed');
   }
 
   /**
@@ -2248,8 +2658,42 @@ export class SceneManager {
             if (child.userData.originalColor) {
               child.material.color.copy(child.userData.originalColor);
             }
+            
+            // Enhanced VRM material handling for solid mode
+            if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
+              console.log(`🎨 Processing VRM material for solid mode: ${child.name}`);
+              this.ensureVRMMaterialProperties(child.material);
+              
+              // Force aggressive texture binding for VRM materials
+              if (child.material.map) {
+                child.material.map.needsUpdate = true;
+                child.material.map.flipY = false;
+                child.material.map.generateMipmaps = true;
+                child.material.map.minFilter = THREE.LinearMipmapLinearFilter;
+                child.material.map.magFilter = THREE.LinearFilter;
+                child.material.map.wrapS = THREE.RepeatWrapping;
+                child.material.map.wrapT = THREE.RepeatWrapping;
+              }
+            }
+            
+            // Force material and texture updates for solid rendering
+            child.material.needsUpdate = true;
+            if (child.material.map) {
+              child.material.map.needsUpdate = true;
+              child.material.map.flipY = false;
+            }
+            if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+              child.geometry.attributes.uv.needsUpdate = true;
+            }
+            
             // Clear bone visualization
             this.clearBoneVisualization();
+            
+            // Force VRM model to face forward
+            if (this.currentModel && this.currentVRM) {
+              this.currentModel.rotation.y = Math.PI;
+              console.log('🔄 VRM model orientation fixed for solid mode');
+            }
             break;
           case 'wireframe':
             child.material.wireframe = true;
