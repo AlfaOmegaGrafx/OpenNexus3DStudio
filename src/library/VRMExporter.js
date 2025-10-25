@@ -72,6 +72,9 @@ export class VRMExporter {
       const scene = new THREE.Scene();
       scene.add(model);
       
+      // Clone textures to prevent immutable texture errors
+      this.cloneTexturesForExport(model);
+      
       // Export as GLB (binary: true) to get proper bufferViews for images and geometry
       const glbArrayBuffer = await this.gltfExporter.parseAsync(scene, {
         binary: true,
@@ -195,6 +198,86 @@ export class VRMExporter {
     this.processVRMMaterials(model, materials);
 
     return model;
+  }
+
+  /**
+   * Clone textures to prevent immutable texture errors during export
+   * @param {Object} model - Model to process
+   */
+  cloneTexturesForExport(model) {
+    console.log('🔄 VRM Export: Cloning textures to prevent immutable errors...');
+    
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const material = child.material;
+        
+        // Clone the material to avoid modifying the original
+        if (!material.userData.originalMaterial) {
+          material.userData.originalMaterial = material.clone();
+        }
+        
+        // Clone textures to prevent immutable errors
+        if (material.map) {
+          material.map = material.map.clone();
+          material.map.needsUpdate = true;
+        }
+        if (material.normalMap) {
+          material.normalMap = material.normalMap.clone();
+          material.normalMap.needsUpdate = true;
+        }
+        if (material.roughnessMap) {
+          material.roughnessMap = material.roughnessMap.clone();
+          material.roughnessMap.needsUpdate = true;
+        }
+        if (material.metalnessMap) {
+          material.metalnessMap = material.metalnessMap.clone();
+          material.metalnessMap.needsUpdate = true;
+        }
+        if (material.aoMap) {
+          material.aoMap = material.aoMap.clone();
+          material.aoMap.needsUpdate = true;
+        }
+        if (material.emissiveMap) {
+          material.emissiveMap = material.emissiveMap.clone();
+          material.emissiveMap.needsUpdate = true;
+        }
+        if (material.bumpMap) {
+          material.bumpMap = material.bumpMap.clone();
+          material.bumpMap.needsUpdate = true;
+        }
+        if (material.displacementMap) {
+          material.displacementMap = material.displacementMap.clone();
+          material.displacementMap.needsUpdate = true;
+        }
+        if (material.alphaMap) {
+          material.alphaMap = material.alphaMap.clone();
+          material.alphaMap.needsUpdate = true;
+        }
+        if (material.envMap) {
+          material.envMap = material.envMap.clone();
+          material.envMap.needsUpdate = true;
+        }
+        
+        // Handle array of materials
+        if (Array.isArray(material)) {
+          material.forEach((mat, index) => {
+            if (mat.map) {
+              mat.map = mat.map.clone();
+              mat.map.needsUpdate = true;
+            }
+            // Clone other texture properties as needed
+            if (mat.normalMap) {
+              mat.normalMap = mat.normalMap.clone();
+              mat.normalMap.needsUpdate = true;
+            }
+          });
+        }
+        
+        material.needsUpdate = true;
+      }
+    });
+    
+    console.log('✅ VRM Export: Texture cloning completed');
   }
 
   /**

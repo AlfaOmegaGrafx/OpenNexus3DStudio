@@ -1617,6 +1617,32 @@ export class SceneManager {
         newPosition: this.currentModel.position
       });
     }
+    
+    // Ensure model is facing forward (not backwards)
+    this.ensureModelOrientation();
+  }
+
+  /**
+   * Ensure model is properly oriented (facing forward)
+   */
+  ensureModelOrientation() {
+    if (!this.currentModel) return;
+    
+    // Check if this is a VRM model that might need orientation correction
+    if (this.currentVRM && this.currentVRM.scene) {
+      // VRM models should face forward (negative Z direction in Three.js)
+      // If the model is facing backwards, rotate it 180 degrees
+      const forward = new THREE.Vector3(0, 0, -1);
+      const modelForward = new THREE.Vector3();
+      this.currentModel.getWorldDirection(modelForward);
+      
+      // Check if model is facing backwards (positive Z direction)
+      if (modelForward.z > 0.5) {
+        console.log('🔄 Model is facing backwards, rotating 180 degrees');
+        this.currentModel.rotation.y += Math.PI;
+        console.log('🔄 Model rotation after correction:', this.currentModel.rotation);
+      }
+    }
   }
 
   /**

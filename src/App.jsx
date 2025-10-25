@@ -695,7 +695,6 @@ function AppContent() {
       {/* Scene Controls Row - Below Header */}
       <div className="scene-controls-row">
         <div className="scene-controls-container">
-          <div className="scene-controls-label">🎨 Scene Controls:</div>
           <SceneControlsCompact
             sceneManager={sceneManager}
             onRenderModeChange={(mode) => {
