@@ -412,7 +412,16 @@ function parseVRM (glbModel, avatar, options){
 
   const metadataMerged = GetMetadataFromAvatar(avatar, vrmMeta, vrmName);
 
-
+  // Store original model position and rotation before export
+  const originalPosition = glbModel.position.clone();
+  const originalRotation = glbModel.rotation.clone();
+  const originalScale = glbModel.scale.clone();
+  
+  console.log('🔄 Storing original model transform for export:', {
+    position: originalPosition,
+    rotation: originalRotation,
+    scale: originalScale
+  });
 
   return new Promise(async (resolve) => {
     /**
@@ -430,10 +439,27 @@ function parseVRM (glbModel, avatar, options){
       if (child.isSkinnedMesh) skinnedMesh = child;
     })
     const reverseBonesXZ = () => {
-      for (let i = 0; i < skinnedMesh.skeleton.bones.length;i++){
+      // Store original bone positions before transformation
+      const originalBonePositions = new Map();
+      for (let i = 0; i < skinnedMesh.skeleton.bones.length; i++) {
         const bone = skinnedMesh.skeleton.bones[i];
-        bone.position.x *= -1;
-        bone.position.z *= -1;
+        originalBonePositions.set(bone.name, {
+          position: bone.position.clone(),
+          rotation: bone.rotation.clone(),
+          quaternion: bone.quaternion.clone()
+        });
+      }
+
+      // Apply bone transformations more carefully
+      for (let i = 0; i < skinnedMesh.skeleton.bones.length; i++) {
+        const bone = skinnedMesh.skeleton.bones[i];
+        
+        // Only reverse X and Z for specific bones that need it
+        // Skip root bones and hips to maintain proper orientation
+        if (bone.name !== 'hips' && bone.name !== 'root' && bone.parent) {
+          bone.position.x *= -1;
+          bone.position.z *= -1;
+        }
       }
 
       skinnedMesh.skeleton.bones.forEach(bone => {
@@ -443,6 +469,8 @@ function parseVRM (glbModel, avatar, options){
       skinnedMesh.skeleton.calculateInverses();
       skinnedMesh.skeleton.computeBoneTexture();
       skinnedMesh.skeleton.update();
+      
+      console.log('🔄 Bone transformation applied during export');
     }
     reverseBonesXZ();
     
@@ -456,11 +484,21 @@ function parseVRM (glbModel, avatar, options){
     if(isOutputVRM0){
       // VRM 0.0
       exporter.parse(vrmData, glbModel, screenshot, rootSpringBones, options.ktxCompression, scale, (vrm) => {
+        // Restore original model position after export
+        glbModel.position.copy(originalPosition);
+        glbModel.rotation.copy(originalRotation);
+        glbModel.scale.copy(originalScale);
+        console.log('✅ Model transform restored after export');
         resolve(vrm)
       })
     }else{
       // VRM 1.0 has a different amount of parameters
       exporter.parse(vrmData, glbModel, screenshot, (vrm) => {
+        // Restore original model position after export
+        glbModel.position.copy(originalPosition);
+        glbModel.rotation.copy(originalRotation);
+        glbModel.scale.copy(originalScale);
+        console.log('✅ Model transform restored after export');
         resolve(vrm)
       })
     }

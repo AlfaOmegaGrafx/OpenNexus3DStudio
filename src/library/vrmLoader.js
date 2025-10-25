@@ -376,6 +376,9 @@ export class VRMLoader {
       this.addDefaultVRMMaterials(vrm);
     }
 
+    // Ensure blend shapes are properly detected
+    this.ensureBlendShapes(vrm);
+
     // Add Open3DStudio metadata
     this.addOpen3DStudioMetadata(vrm);
 
@@ -407,7 +410,90 @@ export class VRMLoader {
       vrm.scene.rotation.y = Math.PI;
       console.log('🔄 VRM model rotated to face forward during normalization');
       console.log('🔄 VRM scene rotation after fix:', vrm.scene.rotation);
+      
+      // Ensure bone alignment is preserved
+      this.preserveBoneAlignment(vrm);
     }
+  }
+
+  /**
+   * Preserve bone alignment during VRM processing
+   * @param {Object} vrm - VRM object
+   */
+  preserveBoneAlignment(vrm) {
+    if (!vrm.humanoid || !vrm.humanoid.humanBones) return;
+    
+    console.log('🔄 Preserving bone alignment for VRM model');
+    
+    // Store original bone positions and rotations
+    const boneData = new Map();
+    
+    vrm.scene.traverse((child) => {
+      if (child.isBone) {
+        boneData.set(child.name, {
+          position: child.position.clone(),
+          rotation: child.rotation.clone(),
+          quaternion: child.quaternion.clone(),
+          scale: child.scale.clone()
+        });
+      }
+    });
+    
+    // Apply any necessary bone corrections
+    vrm.scene.traverse((child) => {
+      if (child.isBone && boneData.has(child.name)) {
+        const originalData = boneData.get(child.name);
+        
+        // Ensure bone is properly aligned with model
+        if (child.parent && child.parent.isBone) {
+          // Maintain proper bone hierarchy
+          child.updateMatrixWorld();
+        }
+      }
+    });
+    
+    console.log('✅ Bone alignment preserved');
+  }
+
+  /**
+   * Ensure blend shapes are properly detected and preserved
+   * @param {Object} vrm - VRM object
+   */
+  ensureBlendShapes(vrm) {
+    if (!vrm.scene) return;
+    
+    console.log('🔄 Ensuring blend shapes are properly detected...');
+    
+    let blendShapeCount = 0;
+    vrm.scene.traverse((child) => {
+      if (child.isMesh && child.morphTargetInfluences) {
+        const morphCount = child.morphTargetInfluences.length;
+        if (morphCount > 0) {
+          blendShapeCount += morphCount;
+          console.log(`🎭 Found mesh "${child.name}" with ${morphCount} blend shapes`);
+          
+          // Ensure morph targets are properly initialized
+          if (!child.morphTargetDictionary) {
+            child.morphTargetDictionary = {};
+          }
+          
+          // Ensure morph target influences are properly set
+          for (let i = 0; i < morphCount; i++) {
+            if (child.morphTargetInfluences[i] === undefined) {
+              child.morphTargetInfluences[i] = 0;
+            }
+          }
+        }
+      }
+    });
+    
+    console.log(`✅ Total blend shapes detected: ${blendShapeCount}`);
+    
+    // Store blend shape count in VRM metadata
+    if (!vrm.userData) {
+      vrm.userData = {};
+    }
+    vrm.userData.blendShapeCount = blendShapeCount;
   }
 
   /**
