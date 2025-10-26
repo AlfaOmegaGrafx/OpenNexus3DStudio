@@ -17,6 +17,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
+import SceneControlsCompact from './components/SceneControlsCompact';
 import { sceneInitializer } from './library/sceneInitializer';
 import { sharedHDRManager } from './library/sharedHDRManager';
 
@@ -480,7 +481,7 @@ function AppContent() {
           </div>
 
           {/* Render Modes */}
-          <div className="header-section three-button-section">
+          <div className="header-section four-button-section">
             <div className="header-section-title">Render</div>
             <div className="header-controls-group">
               <button 
@@ -588,6 +589,13 @@ function AppContent() {
               >
                 🦴 Skeleton
               </button>
+              <button 
+                className={`header-btn ${renderModeStates.partColorize ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('partColorize')}
+                title="Part Colorize Mode"
+              >
+                🌈 Parts
+              </button>
             </div>
           </div>
 
@@ -687,6 +695,28 @@ function AppContent() {
 
         </div>
       </header>
+
+      {/* Scene Controls Row - Below Header */}
+      <div className="scene-controls-row">
+        <div className="scene-controls-container">
+          <SceneControlsCompact
+            sceneManager={sceneManager}
+            onRenderModeChange={(mode) => {
+              console.log(`🎨 Render mode changed to: ${mode}`);
+              updateRenderMode(mode);
+            }}
+            onLightingChange={(lighting) => {
+              console.log('💡 Lighting changed:', lighting);
+            }}
+            renderModeStates={renderModeStates}
+            skeletonActive={skeletonActive}
+            onSkeletonClick={() => {
+              console.log('🦴 Skeleton button clicked');
+              setSkeletonActive(!skeletonActive);
+            }}
+          />
+        </div>
+      </div>
 
       {/* Anchored Hamburger Menus */}
       <button

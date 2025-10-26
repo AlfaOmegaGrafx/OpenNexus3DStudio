@@ -72,11 +72,95 @@ export class ScreenshotManager {
   cameraFrameManager
 
   constructor(characterManager, scene) {
-    this.renderer = new THREE.WebGLRenderer({
-      preserveDrawingBuffer: true,
-      antialias: true,
-      alpha:true
-    });
+    // Create renderer with comprehensive WebGL fallback
+    let renderer;
+    const rendererConfigs = [
+      // High-performance configuration for screenshots
+      {
+        name: 'High Performance Screenshot',
+        config: {
+          preserveDrawingBuffer: true,
+          antialias: true,
+          alpha: true,
+          powerPreference: "high-performance",
+          failIfMajorPerformanceCaveat: false
+        }
+      },
+      // Balanced configuration
+      {
+        name: 'Balanced Screenshot',
+        config: {
+          preserveDrawingBuffer: true,
+          antialias: false,
+          alpha: true,
+          powerPreference: "default",
+          failIfMajorPerformanceCaveat: false
+        }
+      },
+      // Low-power configuration
+      {
+        name: 'Low Power Screenshot',
+        config: {
+          preserveDrawingBuffer: true,
+          antialias: false,
+          alpha: true,
+          powerPreference: "low-power",
+          failIfMajorPerformanceCaveat: false
+        }
+      },
+      // Minimal configuration
+      {
+        name: 'Minimal Screenshot',
+        config: {
+          preserveDrawingBuffer: true,
+          antialias: false,
+          alpha: false,
+          powerPreference: "low-power",
+          failIfMajorPerformanceCaveat: false,
+          depth: true,
+          stencil: false
+        }
+      },
+      // Ultra-minimal configuration
+      {
+        name: 'Ultra Minimal Screenshot',
+        config: {
+          preserveDrawingBuffer: true,
+          antialias: false,
+          alpha: false,
+          powerPreference: "low-power",
+          failIfMajorPerformanceCaveat: false,
+          depth: false,
+          stencil: false
+        }
+      },
+      // Last resort - basic renderer
+      {
+        name: 'Basic Screenshot',
+        config: {}
+      }
+    ];
+
+    let lastError = null;
+    for (const rendererConfig of rendererConfigs) {
+      try {
+        console.log(`🔄 ScreenshotManager: Trying ${rendererConfig.name} configuration...`);
+        renderer = new THREE.WebGLRenderer(rendererConfig.config);
+        console.log(`✅ ScreenshotManager: ${rendererConfig.name} renderer created successfully`);
+        break;
+      } catch (error) {
+        console.warn(`⚠️ ScreenshotManager: ${rendererConfig.name} failed:`, error.message);
+        lastError = error;
+        continue;
+      }
+    }
+
+    if (!renderer) {
+      console.error('❌ ScreenshotManager: All WebGL configurations failed');
+      throw new Error(`ScreenshotManager: WebGL is not supported. Last error: ${lastError?.message}. Screenshot functionality will be unavailable.`);
+    }
+    
+    this.renderer = renderer;
     this.renderer.setClearAlpha(0);
     this.renderer.premultipliedAlpha = false;
     this.scene = scene;

@@ -1283,50 +1283,6 @@ export class CharacterManager {
     }
 
     /**
-     * Sets up wireframe material for a mesh.
-     * @private
-     * @param {THREE.Mesh} mesh - Mesh to set up
-     */
-    _setupWireframeMaterial(mesh){
-      // Set Wireframe material with random colors for each material the object has
-      mesh.origMat = mesh.material;
-
-      const getRandomColor = ()  => {
-        const minRGBValue = 0.1; // Minimum RGB value to ensure colorful colors
-        const r = minRGBValue + Math.random() * (1 - minRGBValue);
-        const g = minRGBValue + Math.random() * (1 - minRGBValue);
-        const b = minRGBValue + Math.random() * (1 - minRGBValue);
-        return new THREE.Color(r, g, b);
-      }
-
-      const debugMat = new THREE.MeshBasicMaterial( {
-                    color: getRandomColor(),
-                    wireframe: true,
-        wireframeLinewidth:0.2
-                } );
-
-      const origMat = mesh.material;
-      mesh.setDebugMode = (debug) => { 
-        if (debug){
-          if (mesh.material.length){
-            mesh.material[0] = debugMat;
-            mesh.material[1] = debugMat;
-          }
-          else{
-            mesh.material = debugMat;
-          }
-        }
-        else{
-          mesh.material = origMat;
-        }
-      }
-
-      // if (debugMode){
-      //   mesh.setDebugMode(true);
-      // }
-      
-    }
-    /**
      * Sets up the VRM model basic setup.
      * @private
      * @param {Object} m - VRM model

@@ -103,11 +103,6 @@ web_modules/
 
 # Optional eslint cache
 .eslintcache
-<<<<<<< HEAD
-lerna-debug.log
-.vscode
-=======
-<<<<<<< HEAD
 
 # Microbundle cache
 .rpt2_cache/
@@ -125,7 +120,6 @@ lerna-debug.log
 .yarn-integrity
 
 # dotenv environment variables
-
 .env
 .env.local
 .env.production
@@ -283,9 +277,20 @@ fabric.properties
 # Documentation here: https://yarnpkg.com/features/zero-installs
 #!/.yarn/cache
 /.pnp.*
-=======
-lerna-debug.log
-.vscode
 
 # Docusaurus build output
 .docusaurus/
+
+# Scene Controls Backup Files
+src/components/SceneControlsBackup.jsx
+src/styles/SceneControlsBackup.css
+docs/SceneControlsIntegration.md
+scripts/restore-scene-controls.js
+scripts/restore-scene-controls.bat
+restore-scene-controls.js
+SCENE_CONTROLS_BACKUP.md
+
+# LOCKED FILES - DO NOT DELETE
+# MONETIZATION_ROADMAP.md - LOCKED FILE - DO NOT DELETE
+# MONETIZATION_ROADMAP_BACKUP.md - BACKUP FILE - DO NOT DELETE
+# protect-monetization-roadmap.js - PROTECTION SCRIPT - DO NOT DELETE

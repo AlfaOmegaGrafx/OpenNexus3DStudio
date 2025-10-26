@@ -34,14 +34,17 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
   // Initialize scene when component mounts
   useEffect(() => {
     if (mountRef.current && !isInitialized) {
+      console.log('🎬 Initializing 3D scene...');
       initializeScene(mountRef.current, {
         width: mountRef.current.clientWidth,
         height: mountRef.current.clientHeight
       }).then(() => {
+        console.log('✅ 3D scene initialized successfully');
         setIsInitialized(true);
         startRenderLoop();
       }).catch(error => {
-        console.error('Failed to initialize scene:', error);
+        console.error('❌ Failed to initialize 3D scene:', error);
+        // Silently handle errors without showing popups
       });
     }
   }, [initializeScene, startRenderLoop, isInitialized]);
@@ -52,6 +55,16 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
       updateRenderMode(renderMode);
     }
   }, [renderMode, currentRenderMode, updateRenderMode]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (isInitialized) {
+        console.log('🧹 Cleaning up 3D scene...');
+        // The SceneContext will handle the cleanup via its useEffect
+      }
+    };
+  }, [isInitialized]);
 
   // Button handlers for CharacterStudio features
   const handleVRMExport = async () => {
@@ -206,8 +219,15 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
       <div 
         ref={mountRef}
         className="scene-viewport"
-        style={{ width: '100%', height: '100%' }}
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          background: '#1a1a1a',
+          position: 'relative'
+        }}
       />
+      
+
       
       {/* CharacterStudio Overlay - Integrated into main viewer */}
       {showCharacterStudioOverlay && (
@@ -374,6 +394,7 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
           <p>Loading...</p>
         </div>
       )}
+      
     </div>
   );
 };

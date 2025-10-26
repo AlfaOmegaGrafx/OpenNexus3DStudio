@@ -1,0 +1,407 @@
+/* WebGL Troubleshooting Guide Styles */
+.troubleshooting-guide-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  backdrop-filter: blur(8px);
+}
+
+.troubleshooting-guide-dialog {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 1px solid #444;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  max-width: 1000px;
+  width: 95%;
+  max-height: 90vh;
+  overflow: hidden;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.troubleshooting-guide-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  border-bottom: 1px solid #444;
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+}
+
+.troubleshooting-guide-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #4ecdc4;
+}
+
+.troubleshooting-guide-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.troubleshooting-guide-close:hover {
+  background: #444;
+  color: #fff;
+}
+
+.troubleshooting-guide-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.troubleshooting-guide-sidebar {
+  width: 250px;
+  background: #1a1a1a;
+  border-right: 1px solid #333;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
+.troubleshooting-guide-nav {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  color: #ccc;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.troubleshooting-guide-nav:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.troubleshooting-guide-nav.active {
+  background: #2a2a2a;
+  color: #4ecdc4;
+  border-left-color: #4ecdc4;
+}
+
+.nav-icon {
+  font-size: 1.2rem;
+  margin-right: 12px;
+  width: 20px;
+  text-align: center;
+}
+
+.nav-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.troubleshooting-guide-main {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  background: #1a1a1a;
+}
+
+.troubleshooting-section h3 {
+  margin: 0 0 20px 0;
+  color: #4ecdc4;
+  font-size: 1.3rem;
+  border-bottom: 2px solid #333;
+  padding-bottom: 8px;
+}
+
+.troubleshooting-section h4 {
+  margin: 20px 0 12px 0;
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.troubleshooting-section p {
+  margin: 0 0 16px 0;
+  line-height: 1.6;
+  color: #e0e0e0;
+}
+
+.troubleshooting-section ol,
+.troubleshooting-section ul {
+  margin: 0 0 20px 0;
+  padding-left: 20px;
+  color: #ccc;
+}
+
+.troubleshooting-section li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+/* Quick Diagnostics */
+.quick-diagnostics {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.diagnostic-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+}
+
+.diagnostic-item:last-child {
+  border-bottom: none;
+}
+
+.diagnostic-label {
+  font-weight: 500;
+  color: #fff;
+}
+
+.diagnostic-value {
+  color: #4ecdc4;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+/* Common Solutions */
+.common-solutions {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+/* Browser Tabs */
+.browser-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.browser-tab {
+  padding: 8px 16px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #ccc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.browser-tab:hover {
+  background: #444;
+  color: #fff;
+}
+
+.browser-tab.active {
+  background: #4ecdc4;
+  color: #1a1a1a;
+  border-color: #4ecdc4;
+}
+
+.browser-steps {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.general-browser-tips {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+/* Driver Sections */
+.driver-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.driver-section {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.driver-section h4 {
+  color: #4ecdc4;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+}
+
+/* System Sections */
+.system-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.system-section {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.system-section h4 {
+  color: #4ecdc4;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+}
+
+/* Advanced Sections */
+.advanced-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.advanced-section {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.advanced-section h4 {
+  color: #4ecdc4;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+}
+
+.command-examples {
+  margin: 16px 0;
+}
+
+.command-example {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.command-example strong {
+  color: #4ecdc4;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.command-example code {
+  background: #333;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  display: block;
+  word-break: break-all;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .troubleshooting-guide-dialog {
+    width: 98%;
+    margin: 10px;
+    max-height: 95vh;
+  }
+  
+  .troubleshooting-guide-content {
+    flex-direction: column;
+  }
+  
+  .troubleshooting-guide-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #333;
+    padding: 16px 0;
+  }
+  
+  .troubleshooting-guide-nav {
+    padding: 10px 16px;
+  }
+  
+  .troubleshooting-guide-main {
+    padding: 20px;
+  }
+  
+  .driver-sections,
+  .system-sections {
+    grid-template-columns: 1fr;
+  }
+  
+  .browser-tabs {
+    flex-direction: column;
+  }
+  
+  .browser-tab {
+    text-align: center;
+  }
+}
+
+/* Animation for dialog appearance */
+@keyframes troubleshooting-guide-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.troubleshooting-guide-dialog {
+  animation: troubleshooting-guide-fade-in 0.3s ease-out;
+}
+
+/* Scrollbar styling for webkit browsers */
+.troubleshooting-guide-main::-webkit-scrollbar,
+.troubleshooting-guide-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.troubleshooting-guide-main::-webkit-scrollbar-track,
+.troubleshooting-guide-sidebar::-webkit-scrollbar-track {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.troubleshooting-guide-main::-webkit-scrollbar-thumb,
+.troubleshooting-guide-sidebar::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.troubleshooting-guide-main::-webkit-scrollbar-thumb:hover,
+.troubleshooting-guide-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}

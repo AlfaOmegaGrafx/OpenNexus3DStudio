@@ -1,0 +1,297 @@
+/* WebGL Error Handler Styles */
+.webgl-error-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.webgl-error-dialog {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 1px solid #444;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.webgl-error-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  border-bottom: 1px solid #444;
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border-radius: 12px 12px 0 0;
+}
+
+.webgl-error-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ff6b6b;
+}
+
+.webgl-error-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.webgl-error-close:hover {
+  background: #444;
+  color: #fff;
+}
+
+.webgl-error-content {
+  padding: 24px;
+}
+
+.webgl-error-message {
+  margin-bottom: 20px;
+}
+
+.webgl-error-message p {
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+  color: #e0e0e0;
+}
+
+.webgl-error-solutions {
+  margin-bottom: 24px;
+}
+
+.webgl-error-solutions h3 {
+  margin: 0 0 12px 0;
+  color: #4ecdc4;
+  font-size: 1.1rem;
+}
+
+.webgl-error-solutions ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #ccc;
+}
+
+.webgl-error-solutions li {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.webgl-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.webgl-error-retry,
+.webgl-error-details {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 120px;
+}
+
+.webgl-error-retry {
+  background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+  color: white;
+}
+
+.webgl-error-retry:hover {
+  background: linear-gradient(135deg, #44a08d 0%, #3d8b7a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(78, 205, 196, 0.3);
+}
+
+.webgl-error-details {
+  background: #444;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+.webgl-error-details:hover {
+  background: #555;
+  border-color: #666;
+}
+
+.webgl-error-troubleshooting {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 160px;
+}
+
+.webgl-error-troubleshooting:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.webgl-error-details-content {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.webgl-error-details-content h4 {
+  margin: 0 0 16px 0;
+  color: #4ecdc4;
+  font-size: 1rem;
+}
+
+.webgl-error-tech-info {
+  margin-bottom: 20px;
+}
+
+.webgl-error-tech-info p {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+}
+
+.webgl-error-advanced-solutions {
+  margin-bottom: 20px;
+}
+
+.webgl-error-advanced-solutions h4 {
+  margin: 0 0 12px 0;
+  color: #4ecdc4;
+  font-size: 1rem;
+}
+
+.webgl-error-advanced-solutions ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #ccc;
+}
+
+.webgl-error-advanced-solutions li {
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.webgl-error-system-info {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+}
+
+.webgl-error-copy-info {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+}
+
+.webgl-error-copy-info:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.webgl-error-help-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #999;
+  font-style: italic;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .webgl-error-dialog {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .webgl-error-header {
+    padding: 16px 20px;
+  }
+  
+  .webgl-error-header h2 {
+    font-size: 1.3rem;
+  }
+  
+  .webgl-error-content {
+    padding: 20px;
+  }
+  
+  .webgl-error-actions {
+    flex-direction: column;
+  }
+  
+  .webgl-error-retry,
+  .webgl-error-details {
+    width: 100%;
+  }
+}
+
+/* Animation for dialog appearance */
+@keyframes webgl-error-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.webgl-error-dialog {
+  animation: webgl-error-fade-in 0.3s ease-out;
+}
+
+/* Scrollbar styling for webkit browsers */
+.webgl-error-dialog::-webkit-scrollbar {
+  width: 8px;
+}
+
+.webgl-error-dialog::-webkit-scrollbar-track {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.webgl-error-dialog::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.webgl-error-dialog::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
