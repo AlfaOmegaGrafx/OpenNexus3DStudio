@@ -356,6 +356,8 @@ export class VRMLoader {
       setupBones = true
     } = options;
 
+    console.log('🔄 VRM Loader: Processing VRM model...');
+
     // Normalize the model
     if (normalize) {
       this.normalizeVRM(vrm);
@@ -371,6 +373,9 @@ export class VRMLoader {
       this.processVRMBlendShapes(vrm);
     }
 
+    // Ensure blend shapes are properly detected
+    this.ensureBlendShapes(vrm);
+
     // Add default materials if needed
     if (addDefaultMaterials) {
       this.addDefaultVRMMaterials(vrm);
@@ -379,6 +384,7 @@ export class VRMLoader {
     // Add Open3DStudio metadata
     this.addOpen3DStudioMetadata(vrm);
 
+    console.log('✅ VRM Loader: VRM model processing completed');
     return vrm;
   }
 
@@ -583,6 +589,49 @@ export class VRMLoader {
     }
     
     console.log(`✅ VRM material processed successfully: ${material.type}`);
+  }
+
+  /**
+   * Ensure blend shapes are properly detected and preserved
+   * @param {Object} vrm - VRM object
+   */
+  ensureBlendShapes(vrm) {
+    if (!vrm.scene) return;
+
+    console.log('🔄 VRM Loader: Ensuring blend shapes are properly detected...');
+    let blendShapeCount = 0;
+
+    vrm.scene.traverse((child) => {
+      if (child.isMesh && child.morphTargetInfluences) {
+        const morphCount = child.morphTargetInfluences.length;
+        if (morphCount > 0) {
+          blendShapeCount += morphCount;
+          console.log(`🎭 Found mesh "${child.name}" with ${morphCount} blend shapes`);
+          
+          // Ensure morphTargetDictionary exists
+          if (!child.morphTargetDictionary) {
+            child.morphTargetDictionary = {};
+            for (let i = 0; i < morphCount; i++) {
+              child.morphTargetDictionary[`morphTarget_${i}`] = i;
+            }
+          }
+          
+          // Initialize morph target influences if undefined
+          for (let i = 0; i < morphCount; i++) {
+            if (child.morphTargetInfluences[i] === undefined) {
+              child.morphTargetInfluences[i] = 0;
+            }
+          }
+        }
+      }
+    });
+
+    console.log(`✅ VRM Loader: Total blend shapes detected: ${blendShapeCount}`);
+    
+    if (!vrm.userData) {
+      vrm.userData = {};
+    }
+    vrm.userData.blendShapeCount = blendShapeCount;
   }
 
   /**

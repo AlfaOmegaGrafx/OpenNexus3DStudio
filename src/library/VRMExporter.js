@@ -47,9 +47,15 @@ export class VRMExporter {
         materials: model.materials ? model.materials.length : 0
       });
 
+      // Preserve model transform and positioning before export
+      this.preserveModelTransform(model);
+      
       // Extract blend shapes and morph targets from model before export
       const extractedBlendShapes = this.extractBlendShapes(model);
       console.log('VRM Export: Extracted blend shapes:', extractedBlendShapes.length);
+
+      // Clone textures to prevent immutable texture errors
+      this.cloneTexturesForExport(model);
 
       // Create a scene and export as GLTF first
       const scene = new THREE.Scene();
@@ -820,6 +826,133 @@ export class VRMExporter {
   }
 
   /**
+   * Preserve model transform during export to maintain correct orientation and positioning
+   * @param {Object} model - Model to process
+   */
+  preserveModelTransform(model) {
+    console.log('🔄 VRM Export: Preserving model transform...');
+    
+    // Store original model transform
+    const originalTransform = {
+      position: model.position.clone(),
+      rotation: model.rotation.clone(),
+      quaternion: model.quaternion.clone(),
+      scale: model.scale.clone()
+    };
+
+    // Ensure model is properly oriented (facing forward)
+    const modelForward = new THREE.Vector3();
+    model.getWorldDirection(modelForward);
+    
+    // If model is facing backwards, we need to preserve this orientation in the export
+    if (modelForward.z > 0.5) {
+      console.log('🔄 Export: Model is facing backwards, preserving this orientation');
+    } else {
+      console.log('✅ Export: Model is facing forward, preserving this orientation');
+    }
+
+    // Ensure model is positioned correctly (feet on ground)
+    const box = new THREE.Box3().setFromObject(model);
+    if (!box.isEmpty() && isFinite(box.min.y) && isFinite(box.max.y)) {
+      const modelBottom = box.min.y;
+      if (modelBottom > 0) {
+        console.log('🔄 Export: Adjusting model position to ensure feet touch ground');
+        model.position.y -= modelBottom;
+      }
+    }
+
+    // Store the transform in userData for reference
+    model.userData.originalTransform = originalTransform;
+    model.userData.exportTransform = {
+      position: model.position.clone(),
+      rotation: model.rotation.clone(),
+      quaternion: model.quaternion.clone(),
+      scale: model.scale.clone()
+    };
+
+    console.log('✅ VRM Export: Model transform preserved');
+  }
+
+  /**
+   * Clone textures to prevent immutable texture errors during export
+   * @param {Object} model - Model to process
+   */
+  cloneTexturesForExport(model) {
+    console.log('🔄 VRM Export: Cloning textures to prevent immutable errors...');
+    
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const material = child.material;
+        
+        // Clone the material to avoid modifying the original
+        if (!material.userData.originalMaterial) {
+          material.userData.originalMaterial = material.clone();
+        }
+
+        // Clone textures to prevent immutable errors
+        if (material.map) {
+          material.map = material.map.clone();
+          material.map.needsUpdate = true;
+        }
+        if (material.normalMap) {
+          material.normalMap = material.normalMap.clone();
+          material.normalMap.needsUpdate = true;
+        }
+        if (material.roughnessMap) {
+          material.roughnessMap = material.roughnessMap.clone();
+          material.roughnessMap.needsUpdate = true;
+        }
+        if (material.metalnessMap) {
+          material.metalnessMap = material.metalnessMap.clone();
+          material.metalnessMap.needsUpdate = true;
+        }
+        if (material.aoMap) {
+          material.aoMap = material.aoMap.clone();
+          material.aoMap.needsUpdate = true;
+        }
+        if (material.emissiveMap) {
+          material.emissiveMap = material.emissiveMap.clone();
+          material.emissiveMap.needsUpdate = true;
+        }
+        if (material.bumpMap) {
+          material.bumpMap = material.bumpMap.clone();
+          material.bumpMap.needsUpdate = true;
+        }
+        if (material.displacementMap) {
+          material.displacementMap = material.displacementMap.clone();
+          material.displacementMap.needsUpdate = true;
+        }
+        if (material.alphaMap) {
+          material.alphaMap = material.alphaMap.clone();
+          material.alphaMap.needsUpdate = true;
+        }
+        if (material.envMap) {
+          material.envMap = material.envMap.clone();
+          material.envMap.needsUpdate = true;
+        }
+
+        material.needsUpdate = true;
+
+        // Handle array of materials
+        if (Array.isArray(material)) {
+          material.forEach((mat, index) => {
+            if (mat.map) {
+              mat.map = mat.map.clone();
+              mat.map.needsUpdate = true;
+            }
+            if (mat.normalMap) {
+              mat.normalMap = mat.normalMap.clone();
+              mat.normalMap.needsUpdate = true;
+            }
+          });
+        }
+      }
+    });
+
+    console.log('✅ VRM Export: Texture cloning completed');
+  }
+
+  /**
    * Create default humanoid bones structure for VRM
    * @param {Object} model - Three.js model to analyze
    * @returns {Object} Humanoid bones mapping
@@ -1114,13 +1247,24 @@ export class VRMExporter {
   extractBlendShapes(model) {
     const blendShapes = [];
     const processedNames = new Set();
+    let totalBlendShapes = 0;
 
     if (!model) return blendShapes;
+
+    console.log('🔄 VRM Export: Extracting blend shapes...');
 
     // Traverse model to find all meshes with morph targets
     model.traverse((child) => {
       if (child.isMesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
         console.log(`🔍 Found mesh with ${child.morphTargetInfluences.length} morph targets: ${child.name}`);
+        totalBlendShapes += child.morphTargetInfluences.length;
+        
+        // Ensure morph targets are properly initialized
+        for (let i = 0; i < child.morphTargetInfluences.length; i++) {
+          if (child.morphTargetInfluences[i] === undefined) {
+            child.morphTargetInfluences[i] = 0;
+          }
+        }
         
         if (child.morphTargetDictionary) {
           const morphTargetNames = Object.keys(child.morphTargetDictionary);
@@ -1135,6 +1279,7 @@ export class VRMExporter {
                 mesh: child.name,
                 index: morphIndex,
                 weight: child.morphTargetInfluences[morphIndex] || 0,
+                isActive: (child.morphTargetInfluences[morphIndex] || 0) > 0,
                 // Store morph target data for VRM export
                 binds: [{
                   mesh: 0, // Will be updated during GLTF processing
@@ -1144,14 +1289,40 @@ export class VRMExporter {
               });
               
               processedNames.add(morphName);
-              console.log(`✅ Added blend shape: ${morphName} (index: ${morphIndex})`);
+              console.log(`✅ Added blend shape: ${morphName} (index: ${morphIndex}, weight: ${child.morphTargetInfluences[morphIndex] || 0})`);
             }
           });
+        } else {
+          // Handle meshes without morphTargetDictionary
+          console.log(`⚠️ Mesh "${child.name}" has morph targets but no dictionary`);
+          for (let i = 0; i < child.morphTargetInfluences.length; i++) {
+            const morphName = `morphTarget_${i}`;
+            if (!processedNames.has(morphName)) {
+              blendShapes.push({
+                name: morphName,
+                mesh: child.name,
+                index: i,
+                weight: child.morphTargetInfluences[i] || 0,
+                isActive: (child.morphTargetInfluences[i] || 0) > 0,
+                binds: [{
+                  mesh: 0,
+                  index: i,
+                  weight: 100
+                }]
+              });
+              processedNames.add(morphName);
+            }
+          }
         }
       }
     });
 
-    console.log(`🎭 Total blend shapes extracted: ${blendShapes.length}`);
+    console.log(`🎭 Total blend shapes extracted: ${blendShapes.length} from ${totalBlendShapes} morph targets`);
+    
+    // Store blend shape count in model userData for reference
+    model.userData.blendShapeCount = totalBlendShapes;
+    model.userData.extractedBlendShapes = blendShapes;
+    
     return blendShapes;
   }
 
