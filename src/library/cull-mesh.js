@@ -231,7 +231,7 @@ const getDistanceInOut = (distanceArr) => {
     return [distIn, distOut]
 }
 
-const getIndexBuffer = (index, vertexData, normalsData, faceNormals, intersectModels, distanceArr, debug = false) =>{
+const getIndexBuffer = (index, vertexData, normalsData, faceNormals, intersectModels, distanceArr) =>{
 
     const indexCustomArr = [];
     const distArr = getDistanceInOut(distanceArr);
@@ -283,7 +283,6 @@ const getIndexBuffer = (index, vertexData, normalsData, faceNormals, intersectMo
             
             if (hitObjs.length === 0){
                 // no object is interfering with the view of this vertex, so its visible
-                //if (debug) DebugRay(origin, direction.clone().multiplyScalar(-1) , raycaster.far, 0xffff00,mainScene );
                 for (let k = 0; k < 3 ; k++){
                     indexCustomArr.push(index[idxBase+k])
                 }
@@ -350,8 +349,6 @@ const getIndexBuffer = (index, vertexData, normalsData, faceNormals, intersectMo
                         }
                     }
                 }
-                if (debug)
-                    DebugRay(origin, direction.clone().multiplyScalar(-1) , raycaster.far, 0xff0000,mainScene );
             }
         }
     }
@@ -404,7 +401,6 @@ export const DisplayMeshIfVisible = async(mesh, traitModel) => {
 
             if (raycaster.intersectObjects( traitMeshes, false, intersections ).length === 0){
                 
-                //DebugRay(origin, direction,raycaster.far, 0xff0000,mesh );
                 for (let k = 0; k < 3 ; k++){
                     indexCustomArr.push(index[i+k])
                 }
@@ -417,28 +413,4 @@ export const DisplayMeshIfVisible = async(mesh, traitModel) => {
     const buffer = new BufferAttribute(indexArr,1,false);
 
     mesh.geometry.setIndex(buffer);
-}
-
-function DebugRay(origin, direction, length, color, scene){
-    if (scene.lines == null)
-        scene.lines = [];
-
-    let endPoint = new Vector3();
-    endPoint.addVectors ( origin, direction.clone().multiplyScalar( length ) );
-
-    const points = []
-    points.push( origin );
-    points.push( endPoint );
-    const geometry = new BufferGeometry().setFromPoints( points );
-
-    const cols = [];
-    cols.push(new Color(0x000000));
-    cols.push(new Color(0xffffff)); 
-
-    let material = new LineBasicMaterial( {color:color } );
-    var line = new Line( geometry, material );
-
-    line.renderOrder = 100;
-    scene.add( line );
-    scene.lines.push(line);
 }

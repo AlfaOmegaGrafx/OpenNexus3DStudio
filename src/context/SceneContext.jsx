@@ -144,6 +144,13 @@ export const SceneProvider = ({ children }) => {
     }
   };
 
+  // Stop render loop
+  const stopRenderLoop = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.stopRenderLoop();
+    }
+  };
+
   // Get scene data
   const getSceneData = () => {
     if (sceneManagerRef.current) {
@@ -155,6 +162,79 @@ export const SceneProvider = ({ children }) => {
       };
     }
     return null;
+  };
+
+  // Scene control methods
+  const setLighting = (preset) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setLighting(preset);
+    }
+  };
+
+  const setLightIntensity = (intensity) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setLightIntensity(intensity);
+    }
+  };
+
+  const setCameraMode = (mode) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setCameraMode(mode);
+    }
+  };
+
+  const resetCamera = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.resetCamera();
+    }
+  };
+
+  const setView = (view) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setView(view);
+    }
+  };
+
+  const toggleStats = (show) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.toggleStats(show);
+    }
+  };
+
+  const toggleAutoRotate = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.toggleAutoRotate();
+    }
+  };
+
+  const takeScreenshot = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.takeScreenshot();
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.toggleFullscreen();
+    }
+  };
+
+  const setAutoTone = (enabled) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setAutoTone(enabled);
+    }
+  };
+
+  const setToneMapping = (mapping) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setToneMapping(mapping);
+    }
+  };
+
+  const setExposure = (exposure) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setExposure(exposure);
+    }
   };
 
   // Load HDR environment
@@ -187,8 +267,23 @@ export const SceneProvider = ({ children }) => {
     clearModel,
     exportModel,
     startRenderLoop,
+    stopRenderLoop,
     getSceneData,
     loadHDREnvironment,
+    
+    // Scene Controls
+    setLighting,
+    setLightIntensity,
+    setCameraMode,
+    resetCamera,
+    setView,
+    toggleStats,
+    toggleAutoRotate,
+    takeScreenshot,
+    toggleFullscreen,
+    setAutoTone,
+    setToneMapping,
+    setExposure,
     
     // Refs
     containerRef,

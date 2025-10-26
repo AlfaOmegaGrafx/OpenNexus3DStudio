@@ -13,6 +13,7 @@ import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
 import { VRMExpressionPresetName } from '@pixiv/three-vrm';
 import { sharedHDRManager } from './sharedHDRManager.js';
+import { createSoftwareRenderer, isSoftwareRenderingSupported } from './softwareRenderer.js';
 
 export class SceneManager {
   constructor() {
@@ -20,23 +21,25 @@ export class SceneManager {
     this.camera = null;
     this.renderer = null;
     this.controls = null;
-      this.currentModel = null;
-      this.renderMode = 'solid';
-      this.isInitialized = false;
-      this.selectedBoneName = null;
-      
-      // Multi-selection support
-      this.selectedBones = new Set();
-      this.boundingBoxSelection = {
-        isActive: false,
-        startX: 0,
-        startY: 0,
-        endX: 0,
-        endY: 0,
-        boxElement: null
-      };
-      
-      // Loaders
+    this.currentModel = null;
+    this.renderMode = 'solid';
+    this.isInitialized = false;
+    this.selectedBoneName = null;
+    this.animationId = null;
+    this.isRendering = false;
+    
+    // Multi-selection support
+    this.selectedBones = new Set();
+    this.boundingBoxSelection = {
+      isActive: false,
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+      boxElement: null
+    };
+    
+    // Loaders
     this.gltfLoader = new GLTFLoader();
     this.objLoader = new OBJLoader();
     this.fbxLoader = new FBXLoader();
@@ -50,6 +53,93 @@ export class SceneManager {
     // VRM Loader and Exporter
     this.vrmLoader = new VRMLoader();
     this.vrmExporter = new VRMExporter();
+  }
+
+  /**
+   * Check WebGL support and capabilities
+   */
+  checkWebGLSupport() {
+    const canvas = document.createElement('canvas');
+    let gl = null;
+    let contextType = null;
+    
+    // Try different WebGL context types
+    const contextTypes = [
+      { name: 'webgl2', getContext: () => canvas.getContext('webgl2') },
+      { name: 'webgl', getContext: () => canvas.getContext('webgl') },
+      { name: 'experimental-webgl', getContext: () => canvas.getContext('experimental-webgl') }
+    ];
+    
+    for (const context of contextTypes) {
+      try {
+        gl = context.getContext();
+        if (gl) {
+          contextType = context.name;
+          break;
+        }
+      } catch (e) {
+        console.warn(`Failed to get ${context.name} context:`, e);
+      }
+    }
+    
+    if (!gl) {
+      return {
+        supported: false,
+        reason: 'WebGL not supported',
+        fallback: 'Software rendering',
+        recommendations: [
+          'Update your browser to the latest version',
+          'Update your graphics drivers',
+          'Enable hardware acceleration in browser settings',
+          'Try a different browser (Chrome, Firefox, Edge)',
+          'Check if WebGL is disabled in browser settings'
+        ]
+      };
+    }
+
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
+    const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
+
+    // Check for specific problematic configurations
+    const isSandboxed = vendor.includes('Disabled') || renderer.includes('Disabled');
+    const isVirtualMachine = vendor.includes('VMware') || vendor.includes('VirtualBox');
+    const isSoftwareRenderer = renderer.includes('Software') || renderer.includes('Mesa');
+    
+    // Test basic WebGL functionality
+    let functionalityTest = 'unknown';
+    try {
+      const testProgram = gl.createProgram();
+      gl.deleteProgram(testProgram);
+      functionalityTest = 'basic';
+    } catch (e) {
+      functionalityTest = 'limited';
+    }
+    
+    return {
+      supported: true,
+      contextType,
+      vendor,
+      renderer,
+      version: gl.getParameter(gl.VERSION),
+      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS),
+      isSandboxed,
+      isVirtualMachine,
+      isSoftwareRenderer,
+      functionalityTest,
+      recommendations: isSandboxed ? [
+        'WebGL is disabled in your browser',
+        'Enable hardware acceleration',
+        'Disable browser security restrictions',
+        'Try running in a different browser profile'
+      ] : isVirtualMachine ? [
+        'Running in virtual machine may limit WebGL performance',
+        'Enable 3D acceleration in VM settings',
+        'Update VM graphics drivers'
+      ] : []
+    };
   }
 
   /**
@@ -73,15 +163,116 @@ export class SceneManager {
 
       // Create camera
       this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      this.camera.position.set(0, 1.5, 3); // Position camera to look at a human-sized model
+      this.camera.position.set(0, 1.5, 1.5); // Position camera closer to look at a human-sized model
 
-      // Create renderer
-      this.renderer = new THREE.WebGLRenderer({ 
-        antialias: enableAntialias,
-        alpha: true
-      });
+      // Check WebGL support
+      const webglSupport = this.checkWebGLSupport();
+      console.log('🔍 WebGL Support Check:', webglSupport);
+
+      // Create renderer with comprehensive WebGL fallback
+      let renderer;
+      const rendererConfigs = [
+        // High-performance configuration
+        {
+          name: 'High Performance',
+          config: {
+            antialias: enableAntialias,
+            alpha: true,
+            powerPreference: "high-performance",
+            failIfMajorPerformanceCaveat: false,
+            preserveDrawingBuffer: true
+          }
+        },
+        // Balanced configuration
+        {
+          name: 'Balanced',
+          config: {
+            antialias: false,
+            alpha: true,
+            powerPreference: "default",
+            failIfMajorPerformanceCaveat: false,
+            preserveDrawingBuffer: true
+          }
+        },
+        // Low-power configuration
+        {
+          name: 'Low Power',
+          config: {
+            antialias: false,
+            alpha: true,
+            powerPreference: "low-power",
+            failIfMajorPerformanceCaveat: false,
+            preserveDrawingBuffer: true
+          }
+        },
+        // Minimal configuration
+        {
+          name: 'Minimal',
+          config: {
+            antialias: false,
+            alpha: false,
+            powerPreference: "low-power",
+            failIfMajorPerformanceCaveat: false,
+            preserveDrawingBuffer: false,
+            depth: true,
+            stencil: false
+          }
+        },
+        // Ultra-minimal configuration
+        {
+          name: 'Ultra Minimal',
+          config: {
+            antialias: false,
+            alpha: false,
+            powerPreference: "low-power",
+            failIfMajorPerformanceCaveat: false,
+            preserveDrawingBuffer: false,
+            depth: false,
+            stencil: false
+          }
+        }
+      ];
+
+      let lastError = null;
+      for (const rendererConfig of rendererConfigs) {
+        try {
+          console.log(`🔄 Trying ${rendererConfig.name} WebGL configuration...`);
+          renderer = new THREE.WebGLRenderer(rendererConfig.config);
+          console.log(`✅ ${rendererConfig.name} WebGL renderer created successfully`);
+          break;
+        } catch (error) {
+          console.warn(`⚠️ ${rendererConfig.name} WebGL failed:`, error.message);
+          lastError = error;
+          continue;
+        }
+      }
+
+      if (!renderer) {
+        console.error('❌ All WebGL configurations failed, trying software renderer...');
+        
+        // Try software rendering as last resort
+        if (isSoftwareRenderingSupported()) {
+          try {
+            console.log('🔄 Attempting software rendering fallback...');
+            renderer = createSoftwareRenderer(container, {
+              backgroundColor: '#1a1a1a',
+              showGrid: true,
+              showAxes: true
+            });
+            console.log('✅ Software renderer created as fallback');
+            this.isSoftwareRenderer = true;
+          } catch (softwareError) {
+            console.error('❌ Even software rendering failed:', softwareError);
+            throw new Error(`WebGL is not supported on this system. Last error: ${lastError?.message}. Please try: 1) Updating your browser, 2) Updating graphics drivers, 3) Enabling hardware acceleration, 4) Using a different browser.`);
+          }
+        } else {
+          throw new Error(`WebGL is not supported on this system. Last error: ${lastError?.message}. Please try: 1) Updating your browser, 2) Updating graphics drivers, 3) Enabling hardware acceleration, 4) Using a different browser.`);
+        }
+      }
+      
+      this.renderer = renderer;
       this.renderer.setSize(width, height);
-      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
       
       if (enableShadows) {
         this.renderer.shadowMap.enabled = true;
@@ -109,6 +300,9 @@ export class SceneManager {
 
       // Mount renderer
       container.appendChild(this.renderer.domElement);
+
+      // Setup WebGL context loss recovery
+      this.setupWebGLContextRecovery();
 
       // Setup resize handler
       this.setupResizeHandler();
@@ -2060,6 +2254,468 @@ export class SceneManager {
   }
 
   /**
+   * Set camera mode
+   * @param {string} mode - Camera mode (orbit, first-person, fixed)
+   */
+  setCameraMode(mode) {
+    if (!this.controls) return;
+    
+    console.log(`📷 Setting camera mode: ${mode}`);
+    
+    switch (mode) {
+      case 'orbit':
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.enableZoom = true;
+        this.controls.enablePan = true;
+        this.controls.enableRotate = true;
+        break;
+      case 'first-person':
+        this.controls.enableDamping = false;
+        this.controls.enableZoom = false;
+        this.controls.enablePan = false;
+        this.controls.enableRotate = true;
+        break;
+      case 'fixed':
+        this.controls.enableDamping = false;
+        this.controls.enableZoom = false;
+        this.controls.enablePan = false;
+        this.controls.enableRotate = false;
+        break;
+    }
+  }
+
+  /**
+   * Reset camera to default position
+   */
+  resetCamera() {
+    if (!this.camera || !this.controls) return;
+    
+    console.log('🔄 Resetting camera to default position');
+    
+    // Reset camera position
+    this.camera.position.set(0, 1.5, 1.5);
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+  }
+
+  /**
+   * Set camera view with smooth animation
+   * @param {string} view - View preset (Front, Back, Left, Right, Top, Bottom, Isometric)
+   */
+  setView(view) {
+    if (!this.camera || !this.controls) return;
+    
+    console.log(`👁️ Setting camera view: ${view}`);
+    
+    // Store current position and target
+    const currentPosition = this.camera.position.clone();
+    const currentTarget = this.controls.target.clone();
+    
+    // Calculate current distance from target
+    const currentDistance = currentPosition.distanceTo(currentTarget);
+    console.log(`📏 Current distance from target: ${currentDistance.toFixed(2)}`);
+    
+    // Calculate target position and target
+    let targetPosition, targetLookAt;
+    
+    // Use the current distance to maintain consistent zoom level
+    const distance = currentDistance;
+    
+    // Use the current target as the focus point for all views
+    const focusPoint = currentTarget.clone();
+    
+    switch (view) {
+      case 'Front':
+        targetPosition = new THREE.Vector3(focusPoint.x, focusPoint.y, focusPoint.z + distance);
+        targetLookAt = focusPoint.clone();
+        break;
+      case 'Back':
+        targetPosition = new THREE.Vector3(focusPoint.x, focusPoint.y, focusPoint.z - distance);
+        targetLookAt = focusPoint.clone();
+        break;
+      case 'Left':
+        targetPosition = new THREE.Vector3(focusPoint.x - distance, focusPoint.y, focusPoint.z);
+        targetLookAt = focusPoint.clone();
+        break;
+      case 'Right':
+        targetPosition = new THREE.Vector3(focusPoint.x + distance, focusPoint.y, focusPoint.z);
+        targetLookAt = focusPoint.clone();
+        break;
+      case 'Top':
+        // Position directly above the model center, no X/Z offset inheritance
+        targetPosition = new THREE.Vector3(0, focusPoint.y + distance, 0);
+        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        break;
+      case 'Bottom':
+        // Position directly below the model center, no X/Z offset inheritance
+        targetPosition = new THREE.Vector3(0, focusPoint.y - distance, 0);
+        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        break;
+      case 'Isometric':
+        // Calculate isometric distance to maintain same zoom level
+        const isoDistance = distance / Math.sqrt(3); // Divide by sqrt(3) to compensate for 3D diagonal
+        targetPosition = new THREE.Vector3(
+          focusPoint.x + isoDistance, 
+          focusPoint.y + isoDistance, 
+          focusPoint.z + isoDistance
+        );
+        targetLookAt = focusPoint.clone();
+        break;
+    }
+    
+    console.log(`🎯 Target position:`, targetPosition);
+    console.log(`👁️ Target look-at:`, targetLookAt);
+    
+    // Animate camera transition
+    this.animateCameraToPosition(currentPosition, targetPosition, currentTarget, targetLookAt);
+  }
+
+  /**
+   * Animate camera to target position with smooth transition
+   * @param {THREE.Vector3} startPos - Starting position
+   * @param {THREE.Vector3} endPos - Ending position
+   * @param {THREE.Vector3} startTarget - Starting target
+   * @param {THREE.Vector3} endTarget - Ending target
+   */
+  animateCameraToPosition(startPos, endPos, startTarget, endTarget) {
+    const duration = 1000; // 1 second animation
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Use easing function for smooth animation
+      const easeProgress = this.easeInOutCubic(progress);
+      
+      // Interpolate position
+      this.camera.position.lerpVectors(startPos, endPos, easeProgress);
+      
+      // Interpolate target
+      this.controls.target.lerpVectors(startTarget, endTarget, easeProgress);
+      
+      // Update controls
+      this.controls.update();
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    animate();
+  }
+
+  /**
+   * Easing function for smooth animation
+   * @param {number} t - Progress (0 to 1)
+   * @returns {number} Eased progress
+   */
+  easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  /**
+   * Toggle performance stats display
+   * @param {boolean} show - Whether to show stats
+   */
+  toggleStats(show) {
+    console.log(`📊 Toggling stats: ${show}`);
+    
+    if (show) {
+      // Add stats display (you can integrate with stats.js if available)
+      this.showStats = true;
+      console.log('Performance stats enabled');
+    } else {
+      this.showStats = false;
+      console.log('Performance stats disabled');
+    }
+  }
+
+  /**
+   * Toggle auto-rotate for camera
+   */
+  toggleAutoRotate() {
+    if (!this.controls) return;
+    
+    this.controls.autoRotate = !this.controls.autoRotate;
+    console.log(`🔄 Auto-rotate: ${this.controls.autoRotate ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Take screenshot of current scene
+   */
+  takeScreenshot() {
+    if (!this.renderer) return;
+    
+    console.log('📸 Taking screenshot');
+    
+    try {
+      // Get canvas data URL
+      const canvas = this.renderer.domElement;
+      const dataURL = canvas.toDataURL('image/png');
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.download = `screenshot_${new Date().getTime()}.png`;
+      link.href = dataURL;
+      link.click();
+      
+      console.log('Screenshot saved');
+    } catch (error) {
+      console.error('Failed to take screenshot:', error);
+    }
+  }
+
+  /**
+   * Toggle fullscreen mode
+   */
+  toggleFullscreen() {
+    console.log('🖥️ Toggling fullscreen');
+    
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      if (this.renderer && this.renderer.domElement.requestFullscreen) {
+        this.renderer.domElement.requestFullscreen();
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }
+
+  /**
+   * Set lighting preset
+   * @param {string} preset - Lighting preset (studio, outdoor, indoor, dramatic, soft, harsh)
+   */
+  setLighting(preset) {
+    if (!this.scene) return;
+    
+    console.log(`💡 Setting lighting preset: ${preset}`);
+    
+    // Remove existing lights
+    const existingLights = this.scene.children.filter(child => child.isLight);
+    existingLights.forEach(light => this.scene.remove(light));
+    
+    // Create new lighting based on preset
+    switch (preset) {
+      case 'studio':
+        this._createStudioLighting();
+        break;
+      case 'outdoor':
+        this._createOutdoorLighting();
+        break;
+      case 'indoor':
+        this._createIndoorLighting();
+        break;
+      case 'dramatic':
+        this._createDramaticLighting();
+        break;
+      case 'soft':
+        this._createSoftLighting();
+        break;
+      case 'harsh':
+        this._createHarshLighting();
+        break;
+      default:
+        this._createStudioLighting();
+    }
+  }
+
+  /**
+   * Set light intensity
+   * @param {number} intensity - Light intensity (0-2)
+   */
+  setLightIntensity(intensity) {
+    if (!this.scene) return;
+    
+    console.log(`💡 Setting light intensity: ${intensity}`);
+    
+    this.scene.traverse((child) => {
+      if (child.isLight) {
+        if (child.isAmbientLight) {
+          child.intensity = intensity * 0.3;
+        } else if (child.isDirectionalLight) {
+          child.intensity = intensity;
+        } else if (child.isPointLight) {
+          child.intensity = intensity * 2;
+        }
+      }
+    });
+  }
+
+  /**
+   * Create studio lighting setup
+   * @private
+   */
+  _createStudioLighting() {
+    // Ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    this.scene.add(ambientLight);
+    
+    // Key light (main light)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    keyLight.position.set(5, 5, 5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    this.scene.add(keyLight);
+    
+    // Fill light (softer)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-3, 2, 3);
+    this.scene.add(fillLight);
+    
+    // Rim light
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    rimLight.position.set(0, 5, -5);
+    this.scene.add(rimLight);
+  }
+
+  /**
+   * Create outdoor lighting setup
+   * @private
+   */
+  _createOutdoorLighting() {
+    // Bright ambient light
+    const ambientLight = new THREE.AmbientLight(0x87CEEB, 0.6);
+    this.scene.add(ambientLight);
+    
+    // Sun light
+    const sunLight = new THREE.DirectionalLight(0xFFE4B5, 1.2);
+    sunLight.position.set(10, 10, 5);
+    sunLight.castShadow = true;
+    this.scene.add(sunLight);
+  }
+
+  /**
+   * Create indoor lighting setup
+   * @private
+   */
+  _createIndoorLighting() {
+    // Warm ambient light
+    const ambientLight = new THREE.AmbientLight(0xFFF8DC, 0.4);
+    this.scene.add(ambientLight);
+    
+    // Ceiling light
+    const ceilingLight = new THREE.DirectionalLight(0xFFFFFF, 0.8);
+    ceilingLight.position.set(0, 10, 0);
+    this.scene.add(ceilingLight);
+    
+    // Table lamp
+    const tableLight = new THREE.PointLight(0xFFE4B5, 0.5);
+    tableLight.position.set(3, 2, 3);
+    this.scene.add(tableLight);
+  }
+
+  /**
+   * Create dramatic lighting setup
+   * @private
+   */
+  _createDramaticLighting() {
+    // Low ambient light
+    const ambientLight = new THREE.AmbientLight(0x2F2F2F, 0.2);
+    this.scene.add(ambientLight);
+    
+    // Strong directional light
+    const mainLight = new THREE.DirectionalLight(0xFFFFFF, 1.5);
+    mainLight.position.set(5, 10, 5);
+    mainLight.castShadow = true;
+    this.scene.add(mainLight);
+    
+    // Accent light
+    const accentLight = new THREE.SpotLight(0xFF6B6B, 0.8);
+    accentLight.position.set(-5, 5, 5);
+    accentLight.angle = Math.PI / 6;
+    this.scene.add(accentLight);
+  }
+
+  /**
+   * Create soft lighting setup
+   * @private
+   */
+  _createSoftLighting() {
+    // High ambient light
+    const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.8);
+    this.scene.add(ambientLight);
+    
+    // Soft directional light
+    const softLight = new THREE.DirectionalLight(0xFFFFFF, 0.4);
+    softLight.position.set(3, 3, 3);
+    this.scene.add(softLight);
+  }
+
+  /**
+   * Create harsh lighting setup
+   * @private
+   */
+  _createHarshLighting() {
+    // Low ambient light
+    const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.1);
+    this.scene.add(ambientLight);
+    
+    // Very bright directional light
+    const harshLight = new THREE.DirectionalLight(0xFFFFFF, 2.0);
+    harshLight.position.set(0, 10, 0);
+    harshLight.castShadow = true;
+    this.scene.add(harshLight);
+  }
+
+  /**
+   * Set auto tone mapping
+   * @param {boolean} enabled - Whether auto tone mapping is enabled
+   */
+  setAutoTone(enabled) {
+    if (!this.renderer) return;
+    
+    console.log(`🎨 Auto tone mapping: ${enabled ? 'enabled' : 'disabled'}`);
+    
+    this.renderer.toneMappingExposure = enabled ? 1.0 : 1.0;
+    this.autoTone = enabled;
+  }
+
+  /**
+   * Set tone mapping algorithm
+   * @param {string} mapping - Tone mapping algorithm (ACES, Reinhard, Linear, Filmic)
+   */
+  setToneMapping(mapping) {
+    if (!this.renderer) return;
+    
+    console.log(`🎨 Setting tone mapping: ${mapping}`);
+    
+    switch (mapping) {
+      case 'ACES':
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        break;
+      case 'Reinhard':
+        this.renderer.toneMapping = THREE.ReinhardToneMapping;
+        break;
+      case 'Linear':
+        this.renderer.toneMapping = THREE.LinearToneMapping;
+        break;
+      case 'Filmic':
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        break;
+      default:
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    }
+  }
+
+  /**
+   * Set exposure value
+   * @param {number} exposure - Exposure value (0-3)
+   */
+  setExposure(exposure) {
+    if (!this.renderer) return;
+    
+    console.log(`📸 Setting exposure: ${exposure}`);
+    
+    this.renderer.toneMappingExposure = exposure;
+  }
+
+  /**
    * Focus camera on the current model
    */
   focusOnModel() {
@@ -2074,7 +2730,7 @@ export class SceneManager {
     if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) {
       console.warn('Model has invalid bounding box, using default camera position');
       // Use default camera position
-      this.camera.position.set(0, 1.5, 3);
+      this.camera.position.set(0, 1.5, 1.5);
       this.controls.target.set(0, 1, 0);
       this.controls.update();
       return;
@@ -2088,8 +2744,8 @@ export class SceneManager {
     console.log('Model size:', size);
     console.log('Max dimension:', maxDim);
 
-    // Use default distance if model has no size
-    const distance = maxDim > 0 ? maxDim * 2 : 3;
+    // Use closer distance for consistent zoom level
+    const distance = maxDim > 0 ? maxDim * 1.2 : 1.5;
     const cameraPosition = center.clone();
     cameraPosition.y += distance * 0.5; // Above the model
     cameraPosition.z += distance; // Behind the model
@@ -2302,6 +2958,73 @@ export class SceneManager {
   }
 
   /**
+   * Setup WebGL context loss recovery
+   */
+  setupWebGLContextRecovery() {
+    if (!this.renderer || !this.renderer.domElement) return;
+
+    const canvas = this.renderer.domElement;
+    
+    // Handle context loss
+    canvas.addEventListener('webglcontextlost', (event) => {
+      console.warn('⚠️ WebGL context lost, preventing default behavior');
+      event.preventDefault();
+      this.isRendering = false;
+    });
+
+    // Handle context restoration
+    canvas.addEventListener('webglcontextrestored', (event) => {
+      console.log('🔄 WebGL context restored, reinitializing...');
+      this.reinitializeScene();
+    });
+  }
+
+  /**
+   * Reinitialize scene after context loss
+   */
+  reinitializeScene() {
+    if (!this.isInitialized) return;
+    
+    try {
+      // Recreate renderer
+      const container = this.renderer.domElement.parentElement;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      // Remove old renderer
+      if (this.renderer.domElement.parentElement) {
+        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      }
+      
+      // Create new renderer
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false
+      });
+      
+      this.renderer.setSize(width, height);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      
+      // Recreate controls
+      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.05;
+      
+      // Mount new renderer
+      container.appendChild(this.renderer.domElement);
+      
+      // Restart render loop
+      this.startRenderLoop();
+      
+      console.log('✅ Scene reinitialized after context loss');
+    } catch (error) {
+      console.error('❌ Failed to reinitialize scene:', error);
+    }
+  }
+
+  /**
    * Setup resize handler
    */
   setupResizeHandler() {
@@ -2466,8 +3189,19 @@ export class SceneManager {
    * Start render loop
    */
   startRenderLoop() {
+    if (this.isRendering) {
+      console.warn('Render loop is already running');
+      return;
+    }
+    
+    this.isRendering = true;
+    
     const animate = () => {
-      requestAnimationFrame(animate);
+      if (!this.isRendering) {
+        return;
+      }
+      
+      this.animationId = requestAnimationFrame(animate);
       
       if (this.controls) {
         this.controls.update();
@@ -2479,6 +3213,63 @@ export class SceneManager {
     };
     
     animate();
+    console.log('🎬 Render loop started');
+  }
+
+  /**
+   * Stop render loop
+   */
+  stopRenderLoop() {
+    if (!this.isRendering) {
+      console.warn('Render loop is not running');
+      return;
+    }
+    
+    this.isRendering = false;
+    
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+    
+    console.log('⏹️ Render loop stopped');
+  }
+
+  /**
+   * Cleanup and dispose of resources
+   */
+  dispose() {
+    console.log('🧹 Cleaning up SceneManager...');
+    
+    // Stop render loop
+    this.stopRenderLoop();
+    
+    // Clear current model
+    this.clearModel();
+    
+    // Dispose of renderer
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer = null;
+    }
+    
+    // Dispose of controls
+    if (this.controls) {
+      this.controls.dispose();
+      this.controls = null;
+    }
+    
+    // Clear scene
+    if (this.scene) {
+      this.scene.clear();
+      this.scene = null;
+    }
+    
+    // Reset state
+    this.isInitialized = false;
+    this.camera = null;
+    
+    console.log('✅ SceneManager cleanup completed');
   }
 
   /**
