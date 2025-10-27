@@ -388,7 +388,7 @@
 /* Anchored Right Hamburger Menu */
 .anchored-right-hamburger {
   position: fixed;
-  top: 121px;
+  top: 92px;
   right: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -1048,11 +1048,11 @@
 /* Anchored Left Hamburger Menu */
 .anchored-left-hamburger {
   position: fixed;
-  top: 121px;
+  top: 92px;
   left: 0;
   background: #3a3a3a;
   border: 1px solid #555;
-  border-radius: 0 0 0 4px;
+  border-radius: 0 0 0 0;
   padding: 0.5rem;
   cursor: pointer;
   z-index: 1003;
@@ -2809,7 +2809,7 @@
 .scene-controls-row {
   background: rgba(42, 42, 42, 0.95);
   border-bottom: 1px solid #3a3a3a;
-  padding: 12px 20px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2817,13 +2817,14 @@
   z-index: 100;
   height: auto;
   margin-top: 1px;
+  margin-left: -5px;
   border-radius: 0 0 8px 8px;
 }
 
 .scene-controls-container {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   max-width: 100%;
   width: 100%;
   justify-content: center;
@@ -2834,7 +2835,7 @@
 .scene-controls-compact {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   flex-wrap: nowrap;
   justify-content: center;
@@ -2917,7 +2918,8 @@
   font-size: 0.7rem;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 24px;
+  min-width: 34px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2946,7 +2948,8 @@
 }
 
 .render-mode-buttons .control-button {
-  min-width: 20px;
+  min-width: 30px;
+  min-height: 30px;
   padding: 2px 4px;
   font-size: 0.6rem;
 }

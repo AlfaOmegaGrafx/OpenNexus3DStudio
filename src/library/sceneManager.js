@@ -163,7 +163,7 @@ export class SceneManager {
 
       // Create camera
       this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      this.camera.position.set(0, 1.5, 1.5); // Position camera closer to look at a human-sized model
+      this.camera.position.set(0, 2.5, 2.5); // Position camera back and up for better view
 
       // Check WebGL support
       const webglSupport = this.checkWebGLSupport();
@@ -2319,7 +2319,7 @@ export class SceneManager {
     console.log('🔄 Resetting camera to default position');
     
     // Reset camera position
-    this.camera.position.set(0, 1.5, 1.5);
+    this.camera.position.set(0, 2.5, 2.5);
     this.controls.target.set(0, 0, 0);
     this.controls.update();
   }
