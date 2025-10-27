@@ -30,7 +30,7 @@ import './App.css';
 
 function AppContent() {
   const [isElectron, setIsElectron] = useState(false);
-  const [apiEndpoint, setApiEndpoint] = useState('http://localhost:8000');
+  const [apiEndpoint, setApiEndpoint] = useState('http://127.0.0.1:7842');
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
@@ -143,7 +143,7 @@ function AppContent() {
       if (result && result.modelUrl) {
         // Load the generated model into the viewport
         const modelUrl = result.modelUrl.startsWith('/') ? 
-          `http://localhost:8000${result.modelUrl}` : 
+          `http://127.0.0.1:7842${result.modelUrl}` : 
           result.modelUrl;
         
         console.log('App: Loading model from URL:', modelUrl);
