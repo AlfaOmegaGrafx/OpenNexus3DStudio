@@ -206,7 +206,7 @@ export class TaskManager {
     formData.append('prompt', prompt);
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/text-to-3d`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -228,7 +228,7 @@ export class TaskManager {
     }
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/image-to-3d`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-to-textured-mesh`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -250,7 +250,7 @@ export class TaskManager {
     }
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/mesh-painting`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
@@ -261,7 +261,7 @@ export class TaskManager {
    * Execute mesh segmentation
    */
   async executeMeshSegmentation(options) {
-    const response = await axios.post(`${this.apiEndpoint}/generate/mesh-segmentation`, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-segmentation/segment-mesh`, {
       options
     });
 
@@ -276,7 +276,7 @@ export class TaskManager {
     formData.append('prompt', prompt);
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/part-completion`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/part-completion`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
@@ -287,7 +287,7 @@ export class TaskManager {
    * Execute auto rigging
    */
   async executeAutoRigging(options) {
-    const response = await axios.post(`${this.apiEndpoint}/generate/auto-rigging`, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`, {
       options
     });
 
