@@ -202,12 +202,16 @@ export class TaskManager {
    * Execute text-to-3D generation
    */
   async executeTextTo3D(prompt, options) {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    formData.append('options', JSON.stringify(options));
+    const requestData = {
+      text_prompt: prompt,
+      texture_prompt: options.texture_prompt || prompt,
+      texture_resolution: options.texture_resolution || 1024,
+      output_format: options.output_format || 'glb',
+      model_preference: options.model_preference || 'trellis_text_to_textured_mesh'
+    };
 
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`, requestData, {
+      headers: { 'Content-Type': 'application/json' },
       onUploadProgress: (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         this.emit('taskProgress', { progress });
@@ -221,22 +225,47 @@ export class TaskManager {
    * Execute image-to-3D generation
    */
   async executeImageTo3D(prompt, imageFile, options) {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (imageFile) {
-      formData.append('image', imageFile);
-    }
-    formData.append('options', JSON.stringify(options));
-
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-to-textured-mesh`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        this.emit('taskProgress', { progress });
+    try {
+      let imageFileId = null;
+      
+      // Step 1: Upload image file if provided
+      if (imageFile) {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', imageFile);
+        
+        const uploadResponse = await axios.post(`${this.apiEndpoint}/api/v1/file-upload/image`, uploadFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            this.emit('taskProgress', { progress: progress * 0.5 }); // 50% for upload
+          }
+        });
+        
+        imageFileId = uploadResponse.data.file_id;
+        this.emit('taskProgress', { progress: 50 });
       }
-    });
+      
+      // Step 2: Submit mesh generation request
+      const requestData = {
+        image_file_id: imageFileId,
+        texture_resolution: options.texture_resolution || 1024,
+        output_format: options.output_format || 'glb',
+        model_preference: options.model_preference || 'trellis_image_to_textured_mesh'
+      };
+      
+      const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-to-textured-mesh`, requestData, {
+        headers: { 'Content-Type': 'application/json' },
+        onUploadProgress: (progressEvent) => {
+          const progress = 50 + Math.round((progressEvent.loaded * 100) / progressEvent.total) * 0.5;
+          this.emit('taskProgress', { progress });
+        }
+      });
 
-    return response.data;
+      return response.data;
+    } catch (error) {
+      console.error('Error in executeImageTo3D:', error);
+      throw error;
+    }
   }
 
   /**
