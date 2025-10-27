@@ -2447,14 +2447,15 @@ export class SceneManager {
   toggleStats(show) {
     console.log(`📊 Toggling stats: ${show}`);
     
-    if (show) {
-      // Add stats display (you can integrate with stats.js if available)
-      this.showStats = true;
-      console.log('Performance stats enabled');
-    } else {
-      this.showStats = false;
-      console.log('Performance stats disabled');
-    }
+    this.showStats = show;
+    
+    // Dispatch custom event to notify components
+    const event = new CustomEvent('statsToggle', { 
+      detail: { showStats: show } 
+    });
+    window.dispatchEvent(event);
+    
+    console.log(`Performance stats ${show ? 'enabled' : 'disabled'}`);
   }
 
   /**

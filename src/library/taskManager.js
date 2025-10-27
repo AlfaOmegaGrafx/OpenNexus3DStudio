@@ -5,8 +5,9 @@
 import axios from 'axios';
 
 export class TaskManager {
-  constructor(apiEndpoint = 'http://localhost:8000') {
-    this.apiEndpoint = apiEndpoint;
+  constructor(apiEndpoint = null) {
+    // Use environment variable if available, otherwise default to 127.0.0.1:7842
+    this.apiEndpoint = apiEndpoint || import.meta.env.VITE_API_ENDPOINT || 'http://127.0.0.1:7842';
     this.tasks = new Map();
     this.isConnected = false;
     this.eventListeners = new Map();
