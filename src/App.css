@@ -388,7 +388,7 @@
 /* Anchored Right Hamburger Menu */
 .anchored-right-hamburger {
   position: fixed;
-  top: 92px;
+  top: 96px;
   right: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -673,6 +673,7 @@
 .space-time-row {
   display: block;
   line-height: 1.2;
+  margin-top: 4px;
 }
 
 .edition-row {
@@ -1048,7 +1049,7 @@
 /* Anchored Left Hamburger Menu */
 .anchored-left-hamburger {
   position: fixed;
-  top: 92px;
+  top: 96px;
   left: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -2803,6 +2804,55 @@
   .status-item {
     font-size: 0.8rem;
   }
+}
+
+/* Stats Overlay */
+.stats-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.stats-panel {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 12px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  min-width: 150px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.stats-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #4a90e2;
+  text-align: center;
+  border-bottom: 1px solid #555;
+  padding-bottom: 4px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.stat-item:last-child {
+  margin-bottom: 0;
+}
+
+.stat-label {
+  color: #ccc;
+}
+
+.stat-value {
+  color: #fff;
+  font-weight: bold;
 }
 
 /* Scene Controls Row - Below Header */
