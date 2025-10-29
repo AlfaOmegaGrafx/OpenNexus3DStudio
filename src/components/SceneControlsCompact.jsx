@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useScene } from '../context/SceneContext';
+import './SceneControlsCompact.css';
 
 /**
  * SceneControlsCompact - Comprehensive 3D scene controls for header
@@ -286,6 +287,7 @@ const SceneControlsCompact = ({
           <span className="slider-value">{exposure.toFixed(1)}</span>
         </div>
       </div>
+
     </div>
   );
 };
