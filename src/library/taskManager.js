@@ -5,8 +5,9 @@
 import axios from 'axios';
 
 export class TaskManager {
-  constructor(apiEndpoint = 'http://localhost:8000') {
-    this.apiEndpoint = apiEndpoint;
+  constructor(apiEndpoint = null) {
+    // Prefer env var, then provided arg, then sensible default
+    this.apiEndpoint = apiEndpoint || import.meta.env.VITE_API_ENDPOINT || 'http://localhost:7842';
     this.tasks = new Map();
     this.isConnected = false;
     this.eventListeners = new Map();
@@ -220,22 +221,31 @@ export class TaskManager {
    * Execute image-to-3D generation
    */
   async executeImageTo3D(prompt, imageFile, options) {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (imageFile) {
-      formData.append('image', imageFile);
-    }
-    formData.append('options', JSON.stringify(options));
-
-    const response = await axios.post(`${this.apiEndpoint}/generate/image-to-3d`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        this.emit('taskProgress', { progress });
+    try {
+      const formData = new FormData();
+      if (prompt) formData.append('prompt', prompt);
+      if (imageFile) {
+        formData.append('image', imageFile);
       }
-    });
+      if (options && typeof options === 'object') {
+        formData.append('options', JSON.stringify(options));
+      }
 
-    return response.data;
+      const response = await axios.post(`${this.apiEndpoint}/generate/image-to-3d`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            this.emit('taskProgress', { progress });
+          }
+        }
+      });
+
+      return response.data;
+    } catch (err) {
+      const serverMsg = err.response?.data?.message || err.response?.data?.detail || err.message;
+      throw new Error(`image-to-3d request failed: ${serverMsg}`);
+    }
   }
 
   /**

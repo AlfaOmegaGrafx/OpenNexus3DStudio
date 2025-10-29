@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import path from 'node:path'
 import react from '@vitejs/plugin-react-swc'
 
 // https://vitejs.dev/config/
@@ -8,9 +9,10 @@ export default defineConfig({
     outDir: './build',
   },
   resolve: {
+    dedupe: ['three'],
     alias: {
       buffer: 'buffer/',
-      'three': 'three'
+      three: path.resolve(__dirname, 'node_modules/three')
     }
   },
   server: {

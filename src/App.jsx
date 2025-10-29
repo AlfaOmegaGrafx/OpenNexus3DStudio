@@ -194,15 +194,9 @@ function AppContent() {
     setTaskApiEndpoint(apiEndpoint);
   }, [apiEndpoint, setTaskApiEndpoint]);
 
-  // Check API connection
+  // Check API connection on mount (TaskProvider handles periodic polling)
   useEffect(() => {
-    const checkApiConnection = async () => {
-      await checkConnection();
-    };
-
-    checkApiConnection();
-    const interval = setInterval(checkApiConnection, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
+    checkConnection();
   }, [checkConnection]);
 
   // Handle file loading
