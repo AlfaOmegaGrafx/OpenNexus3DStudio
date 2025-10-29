@@ -1325,18 +1325,27 @@ export class CharacterManager {
 
       this._modelBaseSetup(vrm, collectionID, item, traitID, textures, colors);
 
-      // Rotate model 180 degrees
-
-      
+      // Check if model needs rotation correction
+      // Only apply rotation if the model is actually facing backwards
       if (vrm.meta?.metaVersion === '0'){
-        if (vrm.humanoid.humanBones.hips.node.parent == vrm.scene){
-          const dummyRotate = new THREE.Object3D();
-          dummyRotate.name = "newRootNode";
-          addChildAtFirst(vrm.scene, dummyRotate)
-          dummyRotate.add(vrm.humanoid.humanBones.hips.node);
+        // Check model orientation before applying rotation
+        const modelForward = new THREE.Vector3();
+        vrm.scene.getWorldDirection(modelForward);
+        
+        // Only rotate if model is facing backwards (positive Z direction)
+        if (modelForward.z > 0.5) {
+          console.log('🔄 VRM0 model is facing backwards, applying rotation correction');
+          
+          if (vrm.humanoid.humanBones.hips.node.parent == vrm.scene){
+            const dummyRotate = new THREE.Object3D();
+            dummyRotate.name = "newRootNode";
+            addChildAtFirst(vrm.scene, dummyRotate)
+            dummyRotate.add(vrm.humanoid.humanBones.hips.node);
+          }
+          vrm.humanoid.humanBones.hips.node.parent.rotateY(3.14159);
+        } else {
+          console.log('✅ VRM0 model is already facing forward, skipping rotation');
         }
-        vrm.humanoid.humanBones.hips.node.parent.rotateY(3.14159);
-        //VRMUtils.rotateVRM0( vrm );
         
 
         vrm.scene.traverse((child) => {
