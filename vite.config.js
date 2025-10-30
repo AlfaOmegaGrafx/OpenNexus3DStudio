@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       buffer: 'buffer/',
+      // Ensure a single Three.js instance across app and plugins
       'three': 'three'
     }
   },
@@ -18,6 +19,8 @@ export default defineConfig({
     host: true
   },
   optimizeDeps: {
-    include: ['three', '@pixiv/three-vrm']
+    include: ['three', '@pixiv/three-vrm'],
+    // Deduplicate Three.js to avoid multiple instances warning
+    dedupe: ['three']
   }
 })

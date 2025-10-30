@@ -61,9 +61,12 @@ export class VRMExporter {
       const scene = new THREE.Scene();
       scene.add(model);
       
-      // Export as standard GLTF with proper binary data
+      // Remove heavy/circular userData before export to avoid JSON.stringify errors
+      this.stripCircularUserData(model);
+
+      // Export as standard GLTF JSON (not binary) so we can build a correct GLB with VRM
       const gltfData = await this.gltfExporter.parseAsync(scene, {
-        binary: true,
+        binary: false,
         includeCustomExtensions: false,
         animations: [],
         onlyVisible: false,
@@ -88,14 +91,12 @@ export class VRMExporter {
         animations: gltfData.animations?.length || 0
       });
 
-      // Debug binary data
+      // Debug buffers
       if (gltfData.buffers && gltfData.buffers.length > 0) {
         const buffer = gltfData.buffers[0];
-        console.log('VRM Export: Buffer details:', {
-          hasData: !!buffer.data,
-          dataType: buffer.data ? buffer.data.constructor.name : 'no data',
-          dataSize: buffer.data ? buffer.data.byteLength : 0,
-          bufferType: buffer.type || 'unknown'
+        console.log('VRM Export: Buffer[0] info:', {
+          hasUri: !!buffer.uri,
+          uriPrefix: typeof buffer.uri === 'string' ? buffer.uri.substring(0, 32) : null,
         });
       } else {
         console.warn('VRM Export: No buffers found in GLTF data');
@@ -663,19 +664,18 @@ export class VRMExporter {
     // Get actual binary data from GLTF export
     let binaryBuffer = new ArrayBuffer(0);
     if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
-      const buffer = gltfData.buffers[0];
-      if (buffer && buffer.data) {
-        // Validate that the buffer data is actually an ArrayBuffer
-        if (buffer.data instanceof ArrayBuffer) {
-          binaryBuffer = buffer.data;
-          console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
-        } else {
-          console.warn('VRM Export: Buffer data is not ArrayBuffer, type:', typeof buffer.data, buffer.data.constructor.name);
-          // Try to convert to ArrayBuffer if it's a Uint8Array
-          if (buffer.data instanceof Uint8Array) {
-            binaryBuffer = buffer.data.buffer.slice(buffer.data.byteOffset, buffer.data.byteOffset + buffer.data.byteLength);
-            console.log('VRM Export: Converted Uint8Array to ArrayBuffer, size:', binaryBuffer.byteLength);
-          }
+      const buffer0 = gltfData.buffers[0];
+      // In JSON export, buffer is a data URI; decode it
+      if (buffer0 && typeof buffer0.uri === 'string' && buffer0.uri.startsWith('data:')) {
+        try {
+          const base64 = buffer0.uri.split(',')[1];
+          const raw = atob(base64);
+          const arr = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+          binaryBuffer = arr.buffer;
+          console.log('VRM Export: Decoded BIN data from data URI, size:', binaryBuffer.byteLength);
+        } catch (e) {
+          console.warn('VRM Export: Failed to decode data URI buffer:', e);
         }
       }
     }
@@ -686,10 +686,13 @@ export class VRMExporter {
       binaryBuffer = new ArrayBuffer(0);
     }
     
-    // Ensure JSON is padded to 4-byte boundary
+    // Ensure JSON is padded to 4-byte boundary using space (0x20) per spec
     const jsonPadding = (4 - (jsonBuffer.length % 4)) % 4;
     const paddedJsonBuffer = new Uint8Array(jsonBuffer.length + jsonPadding);
     paddedJsonBuffer.set(jsonBuffer);
+    for (let i = 0; i < jsonPadding; i++) {
+      paddedJsonBuffer[jsonBuffer.length + i] = 0x20;
+    }
     
     // Create GLB header (12 bytes)
     const header = new ArrayBuffer(12);
@@ -710,10 +713,17 @@ export class VRMExporter {
     
     // Binary chunk header (8 bytes) - only if we have binary data
     let binaryChunkHeader = null;
+    let paddedBinary = null;
     if (binaryBuffer.byteLength > 0) {
+      // Pad BIN to 4-byte boundary with zeros
+      const binPadding = (4 - (binaryBuffer.byteLength % 4)) % 4;
+      paddedBinary = new Uint8Array(binaryBuffer.byteLength + binPadding);
+      paddedBinary.set(new Uint8Array(binaryBuffer));
+      // zeros are fine for BIN padding
+
       binaryChunkHeader = new ArrayBuffer(8);
       const binaryChunkView = new DataView(binaryChunkHeader);
-      binaryChunkView.setUint32(0, binaryBuffer.byteLength, true);
+      binaryChunkView.setUint32(0, paddedBinary.byteLength, true);
       binaryChunkView.setUint32(4, 0x004E4942, true); // "BIN\0"
     }
     
@@ -722,7 +732,7 @@ export class VRMExporter {
                        jsonChunkHeader.byteLength + 
                        paddedJsonBuffer.length + 
                        (binaryChunkHeader ? binaryChunkHeader.byteLength : 0) + 
-                       (binaryBuffer.byteLength > 0 ? binaryBuffer.byteLength : 0);
+                       (paddedBinary ? paddedBinary.byteLength : 0);
     
     // Create final GLB buffer
     const glbBuffer = new ArrayBuffer(totalLength);
@@ -745,13 +755,13 @@ export class VRMExporter {
     offset += paddedJsonBuffer.length;
     
     // Copy binary chunk header and data if available
-    if (binaryChunkHeader && binaryBuffer.byteLength > 0) {
+    if (binaryChunkHeader && paddedBinary) {
       glbView.set(new Uint8Array(binaryChunkHeader), offset);
       offset += binaryChunkHeader.byteLength;
       
       // Copy binary data
-      glbView.set(new Uint8Array(binaryBuffer), offset);
-      offset += binaryBuffer.byteLength;
+      glbView.set(paddedBinary, offset);
+      offset += paddedBinary.byteLength;
     }
     
     console.log('VRM Export: Final GLB size:', glbBuffer.byteLength);
@@ -874,6 +884,22 @@ export class VRMExporter {
     };
 
     console.log('✅ VRM Export: Model transform preserved');
+  }
+
+  /**
+   * Remove heavy or circular fields from userData to avoid exporter JSON issues
+   * @param {THREE.Object3D} root
+   */
+  stripCircularUserData(root) {
+    const keysToStrip = new Set(['gltf', 'parser', 'open3dstudio', 'scene', 'parent']);
+    root.traverse((node) => {
+      if (!node.userData) return;
+      for (const key of Object.keys(node.userData)) {
+        if (keysToStrip.has(key)) {
+          delete node.userData[key];
+        }
+      }
+    });
   }
 
   /**

@@ -3291,8 +3291,12 @@ export class SceneManager {
       if (child.isMesh && child.material) {
         // Only store if not already stored
         if (!child.userData.originalMaterial) {
-          // Store original material
-          child.userData.originalMaterial = child.material.clone();
+          // Store original material (support single or multi-material)
+          if (Array.isArray(child.material)) {
+            child.userData.originalMaterial = child.material.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+          } else {
+            child.userData.originalMaterial = typeof child.material?.clone === 'function' ? child.material.clone() : child.material;
+          }
           child.userData.originalColor = child.material.color.clone();
           
           // Enhanced material preservation for all material types
@@ -3408,7 +3412,15 @@ export class SceneManager {
           case 'solid':
             // Restore original material if it exists (e.g., coming from UV mode)
             if (child.userData.originalMaterial) {
-              child.material = child.userData.originalMaterial.clone();
+              const orig = child.userData.originalMaterial;
+              if (Array.isArray(orig)) {
+                child.material = orig.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+              } else if (typeof orig?.clone === 'function') {
+                child.material = orig.clone();
+              } else {
+                // Fallback: use the stored object directly
+                child.material = orig || child.material;
+              }
             }
             child.material.wireframe = false;
             child.material.transparent = false;
