@@ -634,28 +634,31 @@ export class VRMExporter {
     const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
     
     // Additional validation: Check for any non-printable characters in JSON
+    let finalJsonString = jsonString;
     const hasNonPrintableChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(jsonString);
     if (hasNonPrintableChars) {
       console.warn('VRM Export: JSON contains non-printable characters, cleaning...');
       // Remove non-printable characters except for valid JSON whitespace
-      const cleanedJsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
-      console.log('VRM Export: Cleaned JSON length:', cleanedJsonString.length, 'vs original:', jsonString.length);
+      finalJsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+      console.log('VRM Export: Cleaned JSON length:', finalJsonString.length, 'vs original:', jsonString.length);
     }
     
     // Validate JSON before proceeding
     try {
-      const parsedJson = JSON.parse(jsonString);
-      console.log('VRM Export: JSON validation successful, length:', jsonString.length);
+      const parsedJson = JSON.parse(finalJsonString);
+      console.log('VRM Export: JSON validation successful, length:', finalJsonString.length);
     } catch (error) {
       console.error('VRM Export: JSON validation failed:', error);
       console.error('VRM Export: Invalid JSON at position:', error.message);
+      const position = parseInt(error.message.match(/\d+/)?.[0] || '0');
       console.error('VRM Export: JSON string around error position:', 
-        jsonString.substring(Math.max(0, error.message.match(/\d+/)?.[0] - 50 || 0), 
-        (error.message.match(/\d+/)?.[0] || 0) + 50));
+        finalJsonString.substring(Math.max(0, position - 50), position + 50));
+      console.error('VRM Export: Character at error position:', finalJsonString[position]);
+      console.error('VRM Export: Character code at error position:', finalJsonString.charCodeAt(position));
       throw new Error(`Invalid JSON structure: ${error.message}`);
     }
     
-    const jsonBuffer = new TextEncoder().encode(jsonString);
+    const jsonBuffer = new TextEncoder().encode(finalJsonString);
     
     // Get actual binary data from GLTF export
     let binaryBuffer = new ArrayBuffer(0);
