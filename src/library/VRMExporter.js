@@ -25,7 +25,12 @@ export class VRMExporter {
       expressions = {},
       materials = [],
       screenshot = null,
-      optimize = true
+      optimize = true,
+      // size optimization knobs
+      maxTextureSize = 2048,
+      forcePowerOfTwoTextures = true,
+      forceIndices = true,
+      truncateDrawRange = true
     } = options;
 
     try {
@@ -61,8 +66,9 @@ export class VRMExporter {
       const scene = new THREE.Scene();
       scene.add(model);
       
-      // Remove heavy/circular userData before export to avoid JSON.stringify errors
+      // Remove heavy/circular and nonessential userData before export to reduce size
       this.stripCircularUserData(model);
+      this.stripAllUserData(model);
 
       // Export as standard GLTF JSON (not binary) so we can build a correct GLB with VRM
       const gltfData = await this.gltfExporter.parseAsync(scene, {
@@ -70,11 +76,11 @@ export class VRMExporter {
         includeCustomExtensions: false,
         animations: [],
         onlyVisible: false,
-        truncateDrawRange: false,
+        truncateDrawRange,
         embedImages: true,
-        maxTextureSize: 4096,
-        forceIndices: false,
-        forcePowerOfTwoTextures: false
+        maxTextureSize,
+        forceIndices,
+        forcePowerOfTwoTextures
       });
       
       console.log('VRM Export: GLTF data structure:', {
@@ -899,6 +905,26 @@ export class VRMExporter {
           delete node.userData[key];
         }
       }
+    });
+  }
+
+  /**
+   * Aggressively strip userData to shrink JSON size
+   * Keeps only minimal safe primitives; removes nested objects/arrays
+   * @param {THREE.Object3D} root
+   */
+  stripAllUserData(root) {
+    root.traverse((node) => {
+      if (!node.userData) return;
+      const kept = {};
+      for (const [k, v] of Object.entries(node.userData)) {
+        if (v == null) continue;
+        const t = typeof v;
+        if (t === 'string' || t === 'number' || t === 'boolean') {
+          kept[k] = v;
+        }
+      }
+      node.userData = kept;
     });
   }
 
