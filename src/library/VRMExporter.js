@@ -46,6 +46,17 @@ export class VRMExporter {
         material: model.material ? 'has material' : 'no material',
         materials: model.materials ? model.materials.length : 0
       });
+      
+      // Debug: Check model for morph targets before export
+      let morphTargetCount = 0;
+      model.traverse((child) => {
+        if (child.isMesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
+          morphTargetCount++;
+          console.log(`🎭 VRM Export: Found mesh "${child.name}" with ${child.morphTargetInfluences.length} morph targets`);
+          console.log(`🎭 VRM Export: Morph target dictionary:`, Object.keys(child.morphTargetDictionary || {}));
+        }
+      });
+      console.log(`🎭 VRM Export: Total meshes with morph targets: ${morphTargetCount}`);
 
       // Preserve model transform and positioning before export
       this.preserveModelTransform(model);
@@ -54,6 +65,16 @@ export class VRMExporter {
       const extractedBlendShapes = this.extractBlendShapes(model);
       console.log('VRM Export: Extracted blend shapes:', extractedBlendShapes.length);
 
+      // Extract VRM data from the model if it exists
+      const extractedVRMData = this.extractVRMData(model);
+      console.log('VRM Export: Extracted VRM data:', {
+        hasVRM: !!extractedVRMData,
+        hasMeta: !!extractedVRMData?.meta,
+        hasHumanoid: !!extractedVRMData?.humanoid,
+        hasExpressions: !!extractedVRMData?.expressionManager,
+        hasSpringBones: !!extractedVRMData?.springBoneManager
+      });
+
       // Clone textures to prevent immutable texture errors
       this.cloneTexturesForExport(model);
 
@@ -61,8 +82,11 @@ export class VRMExporter {
       const scene = new THREE.Scene();
       scene.add(model);
       
-      // Export as standard GLTF with proper binary data
-      const gltfData = await this.gltfExporter.parseAsync(scene, {
+      // Clone textures to prevent immutable texture errors
+      this.cloneTexturesForExport(model);
+      
+      // Export as GLB (binary: true) to get proper bufferViews for images and geometry
+      const glbArrayBuffer = await this.gltfExporter.parseAsync(scene, {
         binary: true,
         includeCustomExtensions: false,
         animations: [],
@@ -74,6 +98,9 @@ export class VRMExporter {
         forcePowerOfTwoTextures: false
       });
       
+      // Parse the GLB to extract JSON and binary chunks
+      const gltfData = this.parseGLB(glbArrayBuffer);
+      
       console.log('VRM Export: GLTF data structure:', {
         scenes: gltfData.scenes?.length || 0,
         nodes: gltfData.nodes?.length || 0,
@@ -84,33 +111,51 @@ export class VRMExporter {
         accessors: gltfData.accessors?.length || 0,
         bufferViews: gltfData.bufferViews?.length || 0,
         buffers: gltfData.buffers?.length || 0,
-        skins: gltfData.skins?.length || 0,
-        animations: gltfData.animations?.length || 0
+        binaryData: gltfData.binaryData ? gltfData.binaryData.byteLength : 0
       });
-
-      // Debug binary data
-      if (gltfData.buffers && gltfData.buffers.length > 0) {
-        const buffer = gltfData.buffers[0];
-        console.log('VRM Export: Buffer details:', {
-          hasData: !!buffer.data,
-          dataType: buffer.data ? buffer.data.constructor.name : 'no data',
-          dataSize: buffer.data ? buffer.data.byteLength : 0,
-          bufferType: buffer.type || 'unknown'
+      
+      // Debug: Check if meshes have morph targets
+      if (gltfData.meshes && gltfData.meshes.length > 0) {
+        gltfData.meshes.forEach((mesh, idx) => {
+          const primitives = mesh.primitives || [];
+          primitives.forEach((prim, primIdx) => {
+            if (prim.targets && prim.targets.length > 0) {
+              console.log(`VRM Export: Mesh ${idx} primitive ${primIdx} has ${prim.targets.length} morph targets`);
+              console.log(`VRM Export: Mesh ${idx} extras:`, mesh.extras);
+            } else {
+              console.warn(`VRM Export: Mesh ${idx} primitive ${primIdx} has NO morph targets`);
+            }
+          });
         });
-      } else {
-        console.warn('VRM Export: No buffers found in GLTF data');
+      }
+      
+      // Debug: Check how images are stored
+      if (gltfData.images && gltfData.images.length > 0) {
+        console.log('VRM Export: First image structure:', gltfData.images[0]);
+        const hasBufferViews = gltfData.images.filter(img => img.bufferView !== undefined).length;
+        const hasDataURIs = gltfData.images.filter(img => img.uri && img.uri.startsWith('data:')).length;
+        console.log(`VRM Export: Images with bufferView: ${hasBufferViews}, with data URIs: ${hasDataURIs}`);
       }
 
-      // Create VRM 0.0 file structure manually
-      const glbData = await this.createVRM0File(gltfData, {
+      // Debug binary data
+      if (gltfData.binaryData) {
+        console.log('VRM Export: Binary data extracted, size:', gltfData.binaryData.byteLength);
+      } else {
+        console.warn('VRM Export: No binary data found in GLB');
+      }
+
+      // Create VRM 0.0 file structure manually with extracted VRM data
+      const vrmFile = await this.createVRM0File(gltfData, {
         vrmVersion,
         metadata,
         humanoidBones,
         expressions,
         materials,
         screenshot,
-        blendShapes: extractedBlendShapes
+        extractedVRMData
       });
+
+      const glbData = vrmFile;
 
       // Create blob and download
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
@@ -163,6 +208,86 @@ export class VRMExporter {
     this.processVRMMaterials(model, materials);
 
     return model;
+  }
+
+  /**
+   * Clone textures to prevent immutable texture errors during export
+   * @param {Object} model - Model to process
+   */
+  cloneTexturesForExport(model) {
+    console.log('🔄 VRM Export: Cloning textures to prevent immutable errors...');
+    
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const material = child.material;
+        
+        // Clone the material to avoid modifying the original
+        if (!material.userData.originalMaterial) {
+          material.userData.originalMaterial = material.clone();
+        }
+        
+        // Clone textures to prevent immutable errors
+        if (material.map) {
+          material.map = material.map.clone();
+          material.map.needsUpdate = true;
+        }
+        if (material.normalMap) {
+          material.normalMap = material.normalMap.clone();
+          material.normalMap.needsUpdate = true;
+        }
+        if (material.roughnessMap) {
+          material.roughnessMap = material.roughnessMap.clone();
+          material.roughnessMap.needsUpdate = true;
+        }
+        if (material.metalnessMap) {
+          material.metalnessMap = material.metalnessMap.clone();
+          material.metalnessMap.needsUpdate = true;
+        }
+        if (material.aoMap) {
+          material.aoMap = material.aoMap.clone();
+          material.aoMap.needsUpdate = true;
+        }
+        if (material.emissiveMap) {
+          material.emissiveMap = material.emissiveMap.clone();
+          material.emissiveMap.needsUpdate = true;
+        }
+        if (material.bumpMap) {
+          material.bumpMap = material.bumpMap.clone();
+          material.bumpMap.needsUpdate = true;
+        }
+        if (material.displacementMap) {
+          material.displacementMap = material.displacementMap.clone();
+          material.displacementMap.needsUpdate = true;
+        }
+        if (material.alphaMap) {
+          material.alphaMap = material.alphaMap.clone();
+          material.alphaMap.needsUpdate = true;
+        }
+        if (material.envMap) {
+          material.envMap = material.envMap.clone();
+          material.envMap.needsUpdate = true;
+        }
+        
+        // Handle array of materials
+        if (Array.isArray(material)) {
+          material.forEach((mat, index) => {
+            if (mat.map) {
+              mat.map = mat.map.clone();
+              mat.map.needsUpdate = true;
+            }
+            // Clone other texture properties as needed
+            if (mat.normalMap) {
+              mat.normalMap = mat.normalMap.clone();
+              mat.normalMap.needsUpdate = true;
+            }
+          });
+        }
+        
+        material.needsUpdate = true;
+      }
+    });
+    
+    console.log('✅ VRM Export: Texture cloning completed');
   }
 
   /**
@@ -243,86 +368,7 @@ export class VRMExporter {
     });
   }
 
-  /**
-   * Create VRM 0.0 file structure
-   * @param {Object} gltfData - GLTF data from Three.js exporter
-   * @param {Object} options - VRM options
-   */
-  async createVRM0File(gltfData, options = {}) {
-    // Ensure GLTF data has required arrays
-    const ensureArray = (arr) => Array.isArray(arr) ? arr : [];
-    
-    // Create VRM 0.0 extensions
-    const vrmExtensions = {
-      specVersion: "0.0",
-      meta: {
-        version: "0.0",
-        title: options.metadata?.title || 'Open3DStudio Export',
-        author: options.metadata?.author || 'Open3DStudio',
-        contactInformation: "",
-        reference: "",
-        texture: -1,
-        allowedUserName: "Everyone",
-        violentUssageName: "Disallow",
-        sexualUssageName: "Disallow",
-        commercialUssageName: "Allow",
-        otherPermissionUrl: "",
-        licenseUrl: "",
-        otherLicenseUrl: ""
-      },
-      humanoid: {
-        humanBones: []
-      },
-      firstPerson: {
-        firstPersonBone: -1,
-        firstPersonBoneOffset: { x: 0, y: 0, z: 0 },
-        meshAnnotations: [],
-        lookAtTypeName: "Bone",
-        lookAtHorizontalInner: { curve: [0, 0, 0, 1, 1, 1, 1, 0], xRange: 0, yRange: 0 },
-        lookAtHorizontalOuter: { curve: [0, 0, 0, 1, 1, 1, 1, 0], xRange: 0, yRange: 0 },
-        lookAtVerticalDown: { curve: [0, 0, 0, 1, 1, 1, 1, 0], xRange: 0, yRange: 0 },
-        lookAtVerticalUp: { curve: [0, 0, 0, 1, 1, 1, 1, 0], xRange: 0, yRange: 0 }
-      },
-      expressions: {
-        preset: {},
-        custom: {}
-      },
-      blendShapeMaster: {
-        blendShapeGroups: []
-      },
-      secondaryAnimation: {
-        boneGroups: [],
-        colliderGroups: []
-      },
-      materialProperties: []
-    };
-
-    // Create VRM GLTF structure
-    const vrmGltf = {
-      asset: {
-        version: "2.0",
-        generator: "Open3DStudio VRM Exporter"
-      },
-      scene: 0,
-      scenes: ensureArray(gltfData.scenes),
-      nodes: ensureArray(gltfData.nodes),
-      meshes: ensureArray(gltfData.meshes),
-      materials: ensureArray(gltfData.materials),
-      textures: ensureArray(gltfData.textures),
-      images: ensureArray(gltfData.images),
-      accessors: ensureArray(gltfData.accessors),
-      bufferViews: ensureArray(gltfData.bufferViews),
-      buffers: ensureArray(gltfData.buffers),
-      extensions: {
-        VRM: vrmExtensions
-      },
-      extensionsRequired: ["VRM"],
-      extensionsUsed: ["VRM"]
-    };
-
-    // Convert to GLB format
-    return await this.convertToGLB(vrmGltf, gltfData);
-  }
+  
 
   /**
    * Create VRM data structure
@@ -470,11 +516,7 @@ export class VRMExporter {
       images: gltfData.images || [],
       accessors: gltfData.accessors || [],
       bufferViews: gltfData.bufferViews || [],
-      buffers: gltfData.buffers || [],
-      // CRITICAL: Include skins array for skeleton/bone data
-      skins: gltfData.skins || [],
-      // Also include animations if present
-      animations: gltfData.animations || []
+      buffers: gltfData.buffers || []
     };
 
     // Convert to GLB format
@@ -483,20 +525,14 @@ export class VRMExporter {
 
   /**
    * Create proper VRM 0.0 file structure
-   * 
-   * CRITICAL: This method must include ALL GLTF arrays, especially:
-   * - skins: Contains skeleton/bone data. Without this, the GLTFLoader will fail
-   *   with "Cannot read properties of undefined (reading '0')" when loading skin data.
-   * - animations: Contains animation data for the model.
-   * 
-   * The VRM file format is essentially GLTF 2.0 with a VRM extension, so all
-   * standard GLTF arrays must be preserved for the file to load correctly.
-   * 
-   * @param {Object} gltfData - GLTF data from Three.js exporter
+   * @param {Object} gltfData - GLTF data (with binaryData)
    * @param {Object} vrmData - VRM metadata
    * @returns {ArrayBuffer} VRM 0.0 file data
    */
-  createVRM0File(gltfData, vrmData) {
+  async createVRM0File(gltfData, vrmData) {
+    // Store binaryData separately (will be used by convertToGLB)
+    const binaryData = gltfData.binaryData;
+    
     // Ensure all GLTF arrays are properly initialized
     const ensureArray = (data, defaultValue = []) => {
       return Array.isArray(data) ? data : defaultValue;
@@ -505,33 +541,101 @@ export class VRMExporter {
     console.log('VRM Export: Creating VRM file with GLTF data:', {
       hasScenes: !!gltfData.scenes,
       hasNodes: !!gltfData.nodes,
-        hasMeshes: !!gltfData.meshes,
-        hasMaterials: !!gltfData.materials,
-        hasBuffers: !!gltfData.buffers,
-        hasSkins: !!gltfData.skins,
-        hasAnimations: !!gltfData.animations,
-        bufferCount: gltfData.buffers?.length || 0,
-        skinsCount: gltfData.skins?.length || 0,
-        animationsCount: gltfData.animations?.length || 0,
-        blendShapesCount: vrmData.blendShapes?.length || 0
-      });
-
-      // Convert extracted blend shapes to VRM blendShapeGroups format
-      const blendShapeGroups = this.convertBlendShapesToVRM(vrmData.blendShapes || []);
-      console.log('VRM Export: Converted blend shape groups:', blendShapeGroups.length);
-      
-      console.log('VRM Export: Creating VRM file with GLTF data:', {
-        hasScenes: !!gltfData.scenes,
-        hasNodes: !!gltfData.nodes,
-        hasMeshes: !!gltfData.meshes,
-        hasMaterials: !!gltfData.materials,
-        hasBuffers: !!gltfData.buffers,
-      hasSkins: !!gltfData.skins,
-      hasAnimations: !!gltfData.animations,
+      hasMeshes: !!gltfData.meshes,
+      hasMaterials: !!gltfData.materials,
+      hasBuffers: !!gltfData.buffers,
       bufferCount: gltfData.buffers?.length || 0,
-      skinsCount: gltfData.skins?.length || 0,
-      animationsCount: gltfData.animations?.length || 0
+      hasBinaryData: !!binaryData,
+      binaryDataSize: binaryData ? binaryData.byteLength : 0
     });
+
+    // Clean up buffer references (remove data URIs as we'll embed in binary chunk)
+    const cleanBuffers = ensureArray(gltfData.buffers).map(buffer => ({
+      byteLength: buffer.byteLength
+      // Remove uri property as data will be in the GLB binary chunk
+    }));
+    
+    // CRITICAL FIX: Keep bufferView references for images, remove data URIs
+    // Images in GLB files should reference bufferViews for texture data
+    const cleanImages = ensureArray(gltfData.images).map((image, idx) => {
+      // If image has bufferView, keep it (this is the proper GLB way)
+      if (image.bufferView !== undefined) {
+        console.log(`VRM Export: Image ${idx} has bufferView ${image.bufferView}, keeping it`);
+        // Remove URI if present, keep bufferView and mimeType
+        return {
+          bufferView: image.bufferView,
+          mimeType: image.mimeType || 'image/png',
+          name: image.name
+        };
+      }
+      // If image only has data URI, we need to keep it (not ideal but necessary)
+      // The GLTFExporter should have created bufferViews, but if not, keep the URI
+      if (image.uri && image.uri.startsWith('data:')) {
+        console.warn(`VRM Export: Image ${idx} has data URI but no bufferView, keeping data URI`);
+        // Keep the image as-is since there's no bufferView alternative
+        // This will make the JSON large, but textures will work
+        return image;
+      }
+      console.warn(`VRM Export: Image ${idx} has neither bufferView nor data URI!`, image);
+      return image;
+    });
+    
+    console.log(`VRM Export: Cleaned ${cleanImages.length} images, preserved texture data`);
+
+    // Extract VRM-specific data from extracted VRM if available
+    const extractedVRM = vrmData.extractedVRMData;
+    const vrmMeta = extractedVRM?.meta || vrmData.metadata || {};
+    const vrmHumanoid = extractedVRM?.humanoid;
+    const vrmExpressions = extractedVRM?.expressionManager;
+    const vrmSpringBones = extractedVRM?.springBoneManager;
+    const vrmMaterials = extractedVRM?.materials || [];
+    
+    // Build humanoid bones array from extracted VRM data
+    let humanBones = [];
+    if (vrmHumanoid?.humanBones) {
+      // Convert humanBones object to array format for VRM 0.0
+      for (const [boneName, boneData] of Object.entries(vrmHumanoid.humanBones)) {
+        if (boneData?.node) {
+          // Find node index for this bone
+          const nodeIndex = gltfData.nodes?.findIndex(n => n.name === boneData.node.name);
+          if (nodeIndex >= 0) {
+            humanBones.push({
+              bone: boneName,
+              node: nodeIndex,
+              useDefaultValues: true
+            });
+          }
+        }
+      }
+    }
+    
+    // Build blend shape groups from extracted expressions
+    let blendShapeGroups = [];
+    if (vrmExpressions?.expressionMap) {
+      console.log(`🎭 VRM Export: Processing ${Object.keys(vrmExpressions.expressionMap).length} expressions from VRM data`);
+      for (const [expressionName, expression] of Object.entries(vrmExpressions.expressionMap)) {
+        if (expression._binds && expression._binds.length > 0) {
+          console.log(`🎭 VRM Export: Expression "${expressionName}" has ${expression._binds.length} binds`);
+          const binds = expression._binds.map(bind => ({
+            mesh: 0, // Simplified - would need proper mesh mapping
+            index: bind.index,
+            weight: bind.weight * 100
+          }));
+          
+          blendShapeGroups.push({
+            name: expressionName,
+            presetName: this.getVRM0BlendshapeName(expressionName),
+            binds: binds,
+            isBinary: expression.isBinary || false
+          });
+        } else {
+          console.warn(`🎭 VRM Export: Expression "${expressionName}" has no binds, skipping`);
+        }
+      }
+    } else {
+      console.warn('🎭 VRM Export: No expression manager found in extracted VRM data');
+    }
+    console.log(`🎭 VRM Export: Created ${blendShapeGroups.length} blend shape groups for export`);
 
     // Create complete VRM 0.0 GLTF structure with embedded model data
     const vrmFile = {
@@ -543,22 +647,23 @@ export class VRMExporter {
         VRM: {
           specVersion: "0.0",
           meta: {
-            version: "0.0",
-            title: vrmData.meta?.title || "Open3DStudio Export",
-            author: vrmData.meta?.author || "Open3DStudio",
-            contactInformation: vrmData.meta?.contactInformation || "",
-            reference: vrmData.meta?.reference || "",
+            version: vrmMeta.version || "0.0",
+            title: vrmMeta.title || vrmMeta.name || "Open3DStudio Export",
+            author: vrmMeta.author || (vrmMeta.authors ? vrmMeta.authors.join(", ") : "Open3DStudio"),
+            contactInformation: vrmMeta.contactInformation || "",
+            reference: vrmMeta.reference || "",
             texture: vrmData.meta?.texture || -1,
-            allowedUserName: vrmData.meta?.allowedUserName || "Everyone",
-            violentUssageName: vrmData.meta?.violentUssageName || "Disallow",
-            sexualUssageName: vrmData.meta?.sexualUssageName || "Disallow",
-            commercialUssageName: vrmData.meta?.commercialUssageName || "Allow",
-            otherPermissionUrl: vrmData.meta?.otherPermissionUrl || "",
-            licenseUrl: vrmData.meta?.licenseUrl || "",
-            otherLicenseUrl: vrmData.meta?.otherLicenseUrl || ""
+            allowedUserName: vrmMeta.allowedUserName || vrmMeta.avatarPermission || "Everyone",
+            violentUssageName: vrmMeta.violentUssageName || (vrmMeta.allowExcessivelyViolentUsage ? "Allow" : "Disallow"),
+            sexualUssageName: vrmMeta.sexualUssageName || (vrmMeta.allowExcessivelySexualUsage ? "Allow" : "Disallow"),
+            commercialUssageName: vrmMeta.commercialUssageName || (vrmMeta.commercialUsage === "personalProfit" ? "Allow" : "Disallow"),
+            otherPermissionUrl: vrmMeta.otherPermissionUrl || "",
+            licenseName: vrmMeta.licenseName || vrmMeta.copyrightInformation || "",
+            licenseUrl: vrmMeta.licenseUrl || "https://vrm.dev/licenses/1.0/",
+            otherLicenseUrl: vrmMeta.otherLicenseUrl || ""
           },
           humanoid: {
-            humanBones: vrmData.humanoid?.humanBones || []
+            humanBones: humanBones.length > 0 ? humanBones : (vrmData.humanoid?.humanBones || [])
           },
           firstPerson: {
             firstPersonBone: -1,
@@ -581,7 +686,7 @@ export class VRMExporter {
             boneGroups: vrmData.secondaryAnimation?.boneGroups || [],
             colliderGroups: vrmData.secondaryAnimation?.colliderGroups || []
           },
-          materialProperties: vrmData.materialProperties || []
+          materialProperties: this.extractMaterialProperties(vrmMaterials, gltfData.materials) || vrmData.materialProperties || []
         }
       },
       extensionsRequired: ["VRM"],
@@ -592,14 +697,12 @@ export class VRMExporter {
       meshes: ensureArray(gltfData.meshes),
       materials: ensureArray(gltfData.materials),
       textures: ensureArray(gltfData.textures),
-      images: ensureArray(gltfData.images),
+      images: cleanImages, // Use cleaned images without data URIs
       accessors: ensureArray(gltfData.accessors),
       bufferViews: ensureArray(gltfData.bufferViews),
-      buffers: ensureArray(gltfData.buffers),
-      // CRITICAL: Include skins array for skeleton/bone data
-      skins: ensureArray(gltfData.skins),
-      // Also include animations if present
-      animations: ensureArray(gltfData.animations)
+      buffers: cleanBuffers,
+      // CRITICAL: Include skins array - required for VRM skeleton binding
+      skins: ensureArray(gltfData.skins)
     };
 
     // Debug: Log the VRM file structure before conversion
@@ -612,8 +715,7 @@ export class VRMExporter {
       meshesCount: vrmFile.meshes?.length || 0,
       materialsCount: vrmFile.materials?.length || 0,
       buffersCount: vrmFile.buffers?.length || 0,
-      skinsCount: vrmFile.skins?.length || 0,
-      animationsCount: vrmFile.animations?.length || 0
+      skinsCount: vrmFile.skins?.length || 0
     });
 
     // Convert to proper GLB binary format with embedded binary data
@@ -627,66 +729,93 @@ export class VRMExporter {
    * @returns {ArrayBuffer} GLB binary data
    */
   convertToGLB(vrmFile, gltfData = null) {
+    // Remove binaryData from vrmFile before sanitizing (it shouldn't be in JSON)
+    const { binaryData, ...vrmFileWithoutBinary } = vrmFile;
+    
     // Sanitize VRM data to prevent JSON parsing issues
-    const sanitizedVRMFile = this.sanitizeVRMData(vrmFile);
+    const sanitizedVRMFile = this.sanitizeVRMData(vrmFileWithoutBinary);
     
-    // Convert to JSON string with proper formatting
-    const jsonString = JSON.stringify(sanitizedVRMFile, null, 0);
+    // Convert to JSON string without formatting (compact)
+    const jsonString = JSON.stringify(sanitizedVRMFile);
     
-    // Additional validation: Check for any non-printable characters in JSON
-    const hasNonPrintableChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(jsonString);
-    if (hasNonPrintableChars) {
-      console.warn('VRM Export: JSON contains non-printable characters, cleaning...');
-      // Remove non-printable characters except for valid JSON whitespace
-      const cleanedJsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
-      console.log('VRM Export: Cleaned JSON length:', cleanedJsonString.length, 'vs original:', jsonString.length);
+    console.log('VRM Export: JSON size before encoding:', jsonString.length, 'characters');
+    
+    // Check for embedded data URIs in images (they shouldn't be there)
+    if (jsonString.includes('data:image')) {
+      console.warn('VRM Export: JSON contains data URIs! This will make the file very large.');
+      // Count how many data URIs
+      const dataUriCount = (jsonString.match(/data:image/g) || []).length;
+      console.warn(`VRM Export: Found ${dataUriCount} embedded data URIs in JSON`);
     }
     
     // Validate JSON before proceeding
     try {
-      const parsedJson = JSON.parse(jsonString);
-      console.log('VRM Export: JSON validation successful, length:', jsonString.length);
+      JSON.parse(jsonString);
+      console.log('VRM Export: JSON validation successful');
     } catch (error) {
       console.error('VRM Export: JSON validation failed:', error);
       console.error('VRM Export: Invalid JSON at position:', error.message);
-      console.error('VRM Export: JSON string around error position:', 
-        jsonString.substring(Math.max(0, error.message.match(/\d+/)?.[0] - 50 || 0), 
-        (error.message.match(/\d+/)?.[0] || 0) + 50));
+      // Log a sample of the JSON around the error position
+      if (error.message.includes('position')) {
+        const match = error.message.match(/position (\d+)/);
+        if (match) {
+          const pos = parseInt(match[1]);
+          const start = Math.max(0, pos - 100);
+          const end = Math.min(jsonString.length, pos + 100);
+          console.error('VRM Export: JSON context around error:', jsonString.substring(start, end));
+        }
+      }
       throw new Error(`Invalid JSON structure: ${error.message}`);
     }
     
     const jsonBuffer = new TextEncoder().encode(jsonString);
     
-    // Get actual binary data from GLTF export
+    // Get actual binary data from parsed GLB
     let binaryBuffer = new ArrayBuffer(0);
-    if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
+    
+    // First check if we have binaryData directly from parseGLB
+    if (gltfData && gltfData.binaryData) {
+      binaryBuffer = gltfData.binaryData;
+      console.log('VRM Export: Using binary data from parsed GLB, size:', binaryBuffer.byteLength);
+    }
+    // Fallback: try to extract from buffers array (for backward compatibility)
+    else if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
       const buffer = gltfData.buffers[0];
-      if (buffer && buffer.data) {
-        // Validate that the buffer data is actually an ArrayBuffer
-        if (buffer.data instanceof ArrayBuffer) {
-          binaryBuffer = buffer.data;
-          console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
-        } else {
-          console.warn('VRM Export: Buffer data is not ArrayBuffer, type:', typeof buffer.data, buffer.data.constructor.name);
-          // Try to convert to ArrayBuffer if it's a Uint8Array
-          if (buffer.data instanceof Uint8Array) {
-            binaryBuffer = buffer.data.buffer.slice(buffer.data.byteOffset, buffer.data.byteOffset + buffer.data.byteLength);
-            console.log('VRM Export: Converted Uint8Array to ArrayBuffer, size:', binaryBuffer.byteLength);
-          }
+      
+      // When binary: false is used, buffers have 'uri' property with data URL
+      if (buffer && buffer.uri) {
+        console.log('VRM Export: Extracting binary data from data URI');
+        // Extract base64 data from data URI
+        const base64Data = buffer.uri.split(',')[1];
+        const binaryString = atob(base64Data);
+        binaryBuffer = new ArrayBuffer(binaryString.length);
+        const binaryView = new Uint8Array(binaryBuffer);
+        for (let i = 0; i < binaryString.length; i++) {
+          binaryView[i] = binaryString.charCodeAt(i);
         }
+        console.log('VRM Export: Extracted binary data from URI, size:', binaryBuffer.byteLength);
+      }
+      // Direct buffer data (if available)
+      else if (buffer && buffer.data) {
+        binaryBuffer = buffer.data;
+        console.log('VRM Export: Using direct binary data, size:', binaryBuffer.byteLength);
       }
     }
     
-    // If no binary data from GLTF, create empty buffer (don't add fake data)
+    // If no binary data found, log error - this shouldn't happen
     if (binaryBuffer.byteLength === 0) {
-      console.log('VRM Export: No binary data found in GLTF, creating empty buffer');
-      binaryBuffer = new ArrayBuffer(0);
+      console.error('VRM Export: No binary data found in GLTF export! The exported VRM will not contain model geometry.');
+      throw new Error('Failed to extract binary buffer data from GLTF export');
     }
     
-    // Ensure JSON is padded to 4-byte boundary
+    // Ensure JSON is padded to 4-byte boundary with space characters (0x20)
     const jsonPadding = (4 - (jsonBuffer.length % 4)) % 4;
     const paddedJsonBuffer = new Uint8Array(jsonBuffer.length + jsonPadding);
     paddedJsonBuffer.set(jsonBuffer);
+    // Fill padding with spaces (0x20) as per GLB spec
+    for (let i = jsonBuffer.length; i < paddedJsonBuffer.length; i++) {
+      paddedJsonBuffer[i] = 0x20;
+    }
     
     // Create GLB header (12 bytes)
     const header = new ArrayBuffer(12);
@@ -719,7 +848,7 @@ export class VRMExporter {
                        jsonChunkHeader.byteLength + 
                        paddedJsonBuffer.length + 
                        (binaryChunkHeader ? binaryChunkHeader.byteLength : 0) + 
-                       (binaryBuffer.byteLength > 0 ? binaryBuffer.byteLength : 0);
+                       binaryBuffer.byteLength;
     
     // Create final GLB buffer
     const glbBuffer = new ArrayBuffer(totalLength);
@@ -748,7 +877,6 @@ export class VRMExporter {
       
       // Copy binary data
       glbView.set(new Uint8Array(binaryBuffer), offset);
-      offset += binaryBuffer.byteLength;
     }
     
     console.log('VRM Export: Final GLB size:', glbBuffer.byteLength);
@@ -797,6 +925,59 @@ export class VRMExporter {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  /**
+   * Parse a GLB ArrayBuffer to extract JSON and binary data
+   * @param {ArrayBuffer} glbArrayBuffer - The GLB file as ArrayBuffer
+   * @returns {Object} Object containing the parsed GLTF JSON and binary data
+   */
+  parseGLB(glbArrayBuffer) {
+    const dataView = new DataView(glbArrayBuffer);
+    
+    // Read GLB header
+    const magic = dataView.getUint32(0, true);
+    const version = dataView.getUint32(4, true);
+    const length = dataView.getUint32(8, true);
+    
+    if (magic !== 0x46546C67) { // "glTF" in ASCII
+      throw new Error('Invalid GLB file: wrong magic number');
+    }
+    
+    console.log('VRM Export: Parsing GLB - version:', version, 'length:', length);
+    
+    let offset = 12; // After header
+    let jsonData = null;
+    let binaryData = null;
+    
+    // Read chunks
+    while (offset < length) {
+      const chunkLength = dataView.getUint32(offset, true);
+      const chunkType = dataView.getUint32(offset + 4, true);
+      offset += 8;
+      
+      if (chunkType === 0x4E4F534A) { // "JSON" chunk
+        const jsonBytes = new Uint8Array(glbArrayBuffer, offset, chunkLength);
+        const jsonString = new TextDecoder().decode(jsonBytes);
+        jsonData = JSON.parse(jsonString);
+        console.log('VRM Export: Found JSON chunk, size:', chunkLength);
+      } else if (chunkType === 0x004E4942) { // "BIN\0" chunk
+        binaryData = glbArrayBuffer.slice(offset, offset + chunkLength);
+        console.log('VRM Export: Found BIN chunk, size:', chunkLength);
+      }
+      
+      offset += chunkLength;
+    }
+    
+    if (!jsonData) {
+      throw new Error('Invalid GLB file: no JSON chunk found');
+    }
+    
+    // Return the parsed data
+    return {
+      ...jsonData,
+      binaryData: binaryData
+    };
   }
 
   /**
@@ -950,6 +1131,123 @@ export class VRMExporter {
     });
 
     console.log('✅ VRM Export: Texture cloning completed');
+
+   * Extract VRM data from a loaded VRM model
+   * @param {Object} model - Three.js model (potentially with VRM data)
+   * @returns {Object|null} Extracted VRM data or null
+   */
+  extractVRMData(model) {
+    // Check if model has VRM data in userData
+    let vrm = model.userData?.vrm;
+    
+    // Also check children for VRM data (common in loaded VRM files)
+    if (!vrm && model.children) {
+      for (const child of model.children) {
+        if (child.userData?.vrm) {
+          vrm = child.userData.vrm;
+          break;
+        }
+      }
+    }
+    
+    if (!vrm) {
+      console.log('VRM Export: No VRM data found in model');
+      return null;
+    }
+    
+    return vrm;
+  }
+
+  /**
+   * Convert VRM 1.0 expression names to VRM 0.0 format
+   * @param {string} expressionName - VRM 1.0 expression name
+   * @returns {string} VRM 0.0 expression name
+   */
+  getVRM0BlendshapeName(expressionName) {
+    const nameMap = {
+      'happy': 'joy',
+      'sad': 'sorrow',
+      'relaxed': 'fun',
+      'aa': 'a',
+      'ih': 'i',
+      'ou': 'u',
+      'ee': 'e',
+      'oh': 'o'
+    };
+    
+    return nameMap[expressionName] || expressionName;
+  }
+
+  /**
+   * Extract material properties from VRM materials for VRM 0.0 export
+   * @param {Array} vrmMaterials - VRM materials from source model
+   * @param {Array} gltfMaterials - GLTF materials from export
+   * @returns {Array} Material properties for VRM 0.0
+   */
+  extractMaterialProperties(vrmMaterials, gltfMaterials) {
+    if (!vrmMaterials || vrmMaterials.length === 0) {
+      return [];
+    }
+
+    const materialProperties = [];
+    
+    // Map VRM materials to exported GLTF materials
+    vrmMaterials.forEach((vrmMat, index) => {
+      // Check if this is an MToon material
+      const isMToon = vrmMat.type === 'ShaderMaterial' || vrmMat.isMToonMaterial;
+      
+      if (isMToon) {
+        // Extract MToon properties
+        const mtoonProps = {
+          name: vrmMat.name || `Material_${index}`,
+          shader: "VRM/MToon",
+          renderQueue: 2000,
+          keywordMap: {
+            _NORMALMAP: !!vrmMat.normalMap,
+            MTOON_OUTLINE_COLOR_FIXED: true,
+            MTOON_OUTLINE_WIDTH_WORLD: true
+          },
+          tagMap: {
+            RenderType: vrmMat.transparent ? "TransparentCutout" : "Opaque"
+          },
+          floatProperties: {
+            _ShadeShift: vrmMat.uniforms?.shadeShift?.value || 0,
+            _ShadeToony: vrmMat.uniforms?.shadeToony?.value || 0.9,
+            _ShadingGradeRate: vrmMat.uniforms?.shadingGradeRate?.value || 1.0,
+            _DstBlend: 0,
+            _Cutoff: vrmMat.uniforms?.cutoff?.value || 0.5
+          },
+          vectorProperties: {
+            _Color: vrmMat.color ? [vrmMat.color.r, vrmMat.color.g, vrmMat.color.b, 1.0] : [1, 1, 1, 1],
+            _ShadeColor: vrmMat.uniforms?.shadeColorFactor?.value ? 
+              [vrmMat.uniforms.shadeColorFactor.value.r, vrmMat.uniforms.shadeColorFactor.value.g, vrmMat.uniforms.shadeColorFactor.value.b, 1.0] :
+              [0.97, 0.81, 0.86, 1],
+            _EmissionColor: [0, 0, 0, 1],
+            _OutlineColor: [0, 0, 0, 1],
+            _RimColor: [0, 0, 0, 1]
+          },
+          textureProperties: {}
+        };
+        
+        // Map texture indices if they exist
+        if (vrmMat.map) {
+          mtoonProps.textureProperties._MainTex = index;
+        }
+        if (vrmMat.userData?.shadeTexture || vrmMat.uniforms?.shadeMultiplyTexture) {
+          mtoonProps.textureProperties._ShadeTexture = index;
+        }
+        
+        materialProperties.push(mtoonProps);
+      } else {
+        // Standard material
+        materialProperties.push({
+          name: vrmMat.name || `Material_${index}`,
+          shader: "VRM_USE_GLTFSHADER"
+        });
+      }
+    });
+    
+    return materialProperties;
   }
 
   /**

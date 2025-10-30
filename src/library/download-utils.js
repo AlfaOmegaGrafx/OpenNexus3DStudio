@@ -126,10 +126,39 @@ export function downloadVRMWithAvatar(model, avatar, fileName, options){
     const downloadFileName = `${
       fileName && fileName !== "" ? fileName : "AvatarCreatorModel"
     }`
-    getVRMData(model, avatar, options).then((vrm)=>{
+    try{
+      // Add fallback options for better compatibility
+      const fallbackOptions = {
+        createTextureAtlas: false, // Disable atlas for better compatibility
+        mergeAppliedMorphs: true,
+        ...options
+      };
+      
+      const vrm = await getVRMData(model, avatar, fallbackOptions);
       saveArrayBuffer(vrm, `${downloadFileName}.vrm`)
       resolve();
-    })
+    }catch(err){
+      console.error('downloadVRMWithAvatar failed', err);
+      
+      // Try fallback with minimal options
+      try {
+        console.log('Attempting fallback VRM export with minimal options...');
+        const minimalOptions = {
+          createTextureAtlas: false,
+          mergeAppliedMorphs: false,
+          scale: 1,
+          isVrm0: false
+        };
+        
+        const fallbackVrm = await getVRMData(model, avatar, minimalOptions);
+        saveArrayBuffer(fallbackVrm, `${downloadFileName}_fallback.vrm`);
+        console.log('Fallback VRM export successful');
+        resolve();
+      } catch (fallbackErr) {
+        console.error('Fallback VRM export also failed:', fallbackErr);
+        reject(fallbackErr);
+      }
+    }
   });
 }
 
@@ -140,15 +169,29 @@ async function getVRMData(model, avatar, options){
 
 function getOptimizedGLB(model, avatar, options){
   const modelClone = cloneAvatarModel(model)
-  // default for now ?
-  options.mergeAppliedMorphs = true;
-  const { createTextureAtlas = true } = options;
-  if (createTextureAtlas){
-    return combine(modelClone, avatar, options);
-  }
-  else{
-    console.log("no atlas");
-    return combineNoAtlas(modelClone,avatar, options)
+  
+  // Set default options for better compatibility
+  const defaultOptions = {
+    mergeAppliedMorphs: true,
+    createTextureAtlas: false, // Disable by default for better compatibility
+    scale: 1,
+    isVrm0: false,
+    ...options
+  };
+  
+  try {
+    if (defaultOptions.createTextureAtlas){
+      return combine(modelClone, avatar, defaultOptions);
+    }
+    else{
+      console.log("Using no atlas mode for VRM export");
+      return combineNoAtlas(modelClone, avatar, defaultOptions);
+    }
+  } catch (error) {
+    console.error('Error in getOptimizedGLB:', error);
+    // Fallback to no atlas mode
+    console.log('Falling back to no atlas mode');
+    return combineNoAtlas(modelClone, avatar, { ...defaultOptions, createTextureAtlas: false });
   }
 }
 
@@ -369,7 +412,16 @@ function parseVRM (glbModel, avatar, options){
 
   const metadataMerged = GetMetadataFromAvatar(avatar, vrmMeta, vrmName);
 
-
+  // Store original model position and rotation before export
+  const originalPosition = glbModel.position.clone();
+  const originalRotation = glbModel.rotation.clone();
+  const originalScale = glbModel.scale.clone();
+  
+  console.log('🔄 Storing original model transform for export:', {
+    position: originalPosition,
+    rotation: originalRotation,
+    scale: originalScale
+  });
 
   return new Promise(async (resolve) => {
     /**
@@ -387,10 +439,27 @@ function parseVRM (glbModel, avatar, options){
       if (child.isSkinnedMesh) skinnedMesh = child;
     })
     const reverseBonesXZ = () => {
-      for (let i = 0; i < skinnedMesh.skeleton.bones.length;i++){
+      // Store original bone positions before transformation
+      const originalBonePositions = new Map();
+      for (let i = 0; i < skinnedMesh.skeleton.bones.length; i++) {
         const bone = skinnedMesh.skeleton.bones[i];
-        bone.position.x *= -1;
-        bone.position.z *= -1;
+        originalBonePositions.set(bone.name, {
+          position: bone.position.clone(),
+          rotation: bone.rotation.clone(),
+          quaternion: bone.quaternion.clone()
+        });
+      }
+
+      // Apply bone transformations more carefully
+      for (let i = 0; i < skinnedMesh.skeleton.bones.length; i++) {
+        const bone = skinnedMesh.skeleton.bones[i];
+        
+        // Only reverse X and Z for specific bones that need it
+        // Skip root bones and hips to maintain proper orientation
+        if (bone.name !== 'hips' && bone.name !== 'root' && bone.parent) {
+          bone.position.x *= -1;
+          bone.position.z *= -1;
+        }
       }
 
       skinnedMesh.skeleton.bones.forEach(bone => {
@@ -400,6 +469,8 @@ function parseVRM (glbModel, avatar, options){
       skinnedMesh.skeleton.calculateInverses();
       skinnedMesh.skeleton.computeBoneTexture();
       skinnedMesh.skeleton.update();
+      
+      console.log('🔄 Bone transformation applied during export');
     }
     reverseBonesXZ();
     
@@ -413,11 +484,21 @@ function parseVRM (glbModel, avatar, options){
     if(isOutputVRM0){
       // VRM 0.0
       exporter.parse(vrmData, glbModel, screenshot, rootSpringBones, options.ktxCompression, scale, (vrm) => {
+        // Restore original model position after export
+        glbModel.position.copy(originalPosition);
+        glbModel.rotation.copy(originalRotation);
+        glbModel.scale.copy(originalScale);
+        console.log('✅ Model transform restored after export');
         resolve(vrm)
       })
     }else{
       // VRM 1.0 has a different amount of parameters
       exporter.parse(vrmData, glbModel, screenshot, (vrm) => {
+        // Restore original model position after export
+        glbModel.position.copy(originalPosition);
+        glbModel.rotation.copy(originalRotation);
+        glbModel.scale.copy(originalScale);
+        console.log('✅ Model transform restored after export');
         resolve(vrm)
       })
     }

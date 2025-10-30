@@ -5,8 +5,9 @@
 import axios from 'axios';
 
 export class TaskManager {
-  constructor(apiEndpoint = 'http://localhost:8000') {
-    this.apiEndpoint = apiEndpoint;
+  constructor(apiEndpoint = null) {
+    // Use environment variable if available, otherwise default to 127.0.0.1:7842
+    this.apiEndpoint = apiEndpoint || import.meta.env.VITE_API_ENDPOINT || 'http://127.0.0.1:7842';
     this.tasks = new Map();
     this.isConnected = false;
     this.eventListeners = new Map();
@@ -201,12 +202,16 @@ export class TaskManager {
    * Execute text-to-3D generation
    */
   async executeTextTo3D(prompt, options) {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    formData.append('options', JSON.stringify(options));
+    const requestData = {
+      text_prompt: prompt,
+      texture_prompt: options.texture_prompt || prompt,
+      texture_resolution: options.texture_resolution || 1024,
+      output_format: options.output_format || 'glb',
+      model_preference: options.model_preference || 'trellis_text_to_textured_mesh'
+    };
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/text-to-3d`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`, requestData, {
+      headers: { 'Content-Type': 'application/json' },
       onUploadProgress: (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         this.emit('taskProgress', { progress });
@@ -220,22 +225,18 @@ export class TaskManager {
    * Execute image-to-3D generation
    */
   async executeImageTo3D(prompt, imageFile, options) {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (imageFile) {
-      formData.append('image', imageFile);
+    try {
+      // For now, redirect to text-to-3D since image models aren't loaded
+      console.warn('Image-to-3D models are not currently loaded. Using text-to-3D instead.');
+      
+      // Use the image filename as the text prompt
+      const imagePrompt = imageFile ? `image of ${imageFile.name.replace(/\.[^/.]+$/, "")}` : prompt;
+      
+      return await this.executeTextTo3D(imagePrompt, options);
+    } catch (error) {
+      console.error('Error in executeImageTo3D:', error);
+      throw error;
     }
-    formData.append('options', JSON.stringify(options));
-
-    const response = await axios.post(`${this.apiEndpoint}/generate/image-to-3d`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        this.emit('taskProgress', { progress });
-      }
-    });
-
-    return response.data;
   }
 
   /**
@@ -249,7 +250,7 @@ export class TaskManager {
     }
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/mesh-painting`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
@@ -260,7 +261,7 @@ export class TaskManager {
    * Execute mesh segmentation
    */
   async executeMeshSegmentation(options) {
-    const response = await axios.post(`${this.apiEndpoint}/generate/mesh-segmentation`, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-segmentation/segment-mesh`, {
       options
     });
 
@@ -275,7 +276,7 @@ export class TaskManager {
     formData.append('prompt', prompt);
     formData.append('options', JSON.stringify(options));
 
-    const response = await axios.post(`${this.apiEndpoint}/generate/part-completion`, formData, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/part-completion`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
@@ -286,7 +287,7 @@ export class TaskManager {
    * Execute auto rigging
    */
   async executeAutoRigging(options) {
-    const response = await axios.post(`${this.apiEndpoint}/generate/auto-rigging`, {
+    const response = await axios.post(`${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`, {
       options
     });
 

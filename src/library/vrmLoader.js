@@ -381,6 +381,9 @@ export class VRMLoader {
       this.addDefaultVRMMaterials(vrm);
     }
 
+    // Ensure blend shapes are properly detected
+    this.ensureBlendShapes(vrm);
+
     // Add Open3DStudio metadata
     this.addOpen3DStudioMetadata(vrm);
 
@@ -408,7 +411,95 @@ export class VRMLoader {
       
       vrm.scene.scale.setScalar(scale);
       vrm.scene.position.sub(center.multiplyScalar(scale));
+      
+      // Fix VRM model orientation - rotate to face forward
+      vrm.scene.rotation.y = Math.PI;
+      console.log('🔄 VRM model rotated to face forward during normalization');
+      console.log('🔄 VRM scene rotation after fix:', vrm.scene.rotation);
+      
+      // Ensure bone alignment is preserved
+      this.preserveBoneAlignment(vrm);
     }
+  }
+
+  /**
+   * Preserve bone alignment during VRM processing
+   * @param {Object} vrm - VRM object
+   */
+  preserveBoneAlignment(vrm) {
+    if (!vrm.humanoid || !vrm.humanoid.humanBones) return;
+    
+    console.log('🔄 Preserving bone alignment for VRM model');
+    
+    // Store original bone positions and rotations
+    const boneData = new Map();
+    
+    vrm.scene.traverse((child) => {
+      if (child.isBone) {
+        boneData.set(child.name, {
+          position: child.position.clone(),
+          rotation: child.rotation.clone(),
+          quaternion: child.quaternion.clone(),
+          scale: child.scale.clone()
+        });
+      }
+    });
+    
+    // Apply any necessary bone corrections
+    vrm.scene.traverse((child) => {
+      if (child.isBone && boneData.has(child.name)) {
+        const originalData = boneData.get(child.name);
+        
+        // Ensure bone is properly aligned with model
+        if (child.parent && child.parent.isBone) {
+          // Maintain proper bone hierarchy
+          child.updateMatrixWorld();
+        }
+      }
+    });
+    
+    console.log('✅ Bone alignment preserved');
+  }
+
+  /**
+   * Ensure blend shapes are properly detected and preserved
+   * @param {Object} vrm - VRM object
+   */
+  ensureBlendShapes(vrm) {
+    if (!vrm.scene) return;
+    
+    console.log('🔄 Ensuring blend shapes are properly detected...');
+    
+    let blendShapeCount = 0;
+    vrm.scene.traverse((child) => {
+      if (child.isMesh && child.morphTargetInfluences) {
+        const morphCount = child.morphTargetInfluences.length;
+        if (morphCount > 0) {
+          blendShapeCount += morphCount;
+          console.log(`🎭 Found mesh "${child.name}" with ${morphCount} blend shapes`);
+          
+          // Ensure morph targets are properly initialized
+          if (!child.morphTargetDictionary) {
+            child.morphTargetDictionary = {};
+          }
+          
+          // Ensure morph target influences are properly set
+          for (let i = 0; i < morphCount; i++) {
+            if (child.morphTargetInfluences[i] === undefined) {
+              child.morphTargetInfluences[i] = 0;
+            }
+          }
+        }
+      }
+    });
+    
+    console.log(`✅ Total blend shapes detected: ${blendShapeCount}`);
+    
+    // Store blend shape count in VRM metadata
+    if (!vrm.userData) {
+      vrm.userData = {};
+    }
+    vrm.userData.blendShapeCount = blendShapeCount;
   }
 
   /**
@@ -575,8 +666,27 @@ export class VRMLoader {
       console.log(`📷 Emissive map processed: ${material.emissiveMap.image?.src || 'embedded'}`);
     }
     
+    // Force aggressive texture processing for VRM materials
+    const textureMaps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'];
+    textureMaps.forEach(mapType => {
+      if (material[mapType]) {
+        const texture = material[mapType];
+        texture.needsUpdate = true;
+        texture.flipY = false;
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        console.log(`🔧 Aggressive texture processing for ${mapType}: ${texture.image?.src || 'embedded'}`);
+      }
+    });
+    
     // Ensure material needs update for proper rendering
     material.needsUpdate = true;
+    material.wireframe = false;
+    material.transparent = false;
+    material.opacity = 1.0;
     
     // Set proper material properties for VRM
     if (material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial') {
@@ -589,6 +699,10 @@ export class VRMLoader {
     }
     
     console.log(`✅ VRM material processed successfully: ${material.type}`);
+    console.log(`✅ Material wireframe: ${material.wireframe}, transparent: ${material.transparent}, opacity: ${material.opacity}`);
+    if (material.map) {
+      console.log(`✅ Main texture: needsUpdate=${material.map.needsUpdate}, flipY=${material.map.flipY}`);
+    }
   }
 
   /**

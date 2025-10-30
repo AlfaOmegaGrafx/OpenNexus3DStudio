@@ -9,19 +9,19 @@ import { KTXTools } from "./ktxtools";
 
 function ToOutputVRMMeta(vrmMeta, icon, outputImage) {
     return {
-        allowedUserName: vrmMeta.allowedUserName,
-        author: vrmMeta.author,
-        commercialUssageName: vrmMeta.commercialUssageName,
-        contactInformation: vrmMeta.contactInformation,
-        licenseName: vrmMeta.licenseName,
-        otherLicenseUrl: vrmMeta.otherLicenseUrl,
-        otherPermissionUrl: vrmMeta.otherPermissionUrl,
-        reference: vrmMeta.reference,
-        sexualUssageName: vrmMeta.sexualUssageName,
-        texture: icon ? outputImage.length - 1 : undefined,
-        title: vrmMeta.title,
-        version: vrmMeta.version,
-        violentUssageName: vrmMeta.violentUssageName,
+        allowedUserName: vrmMeta.allowedUserName || 'Everyone',
+        author: vrmMeta.author || 'Unknown',
+        commercialUssageName: vrmMeta.commercialUssageName || 'Allow',
+        contactInformation: vrmMeta.contactInformation || '',
+        licenseName: vrmMeta.licenseName || '',
+        otherLicenseUrl: vrmMeta.otherLicenseUrl || '',
+        otherPermissionUrl: vrmMeta.otherPermissionUrl || '',
+        reference: vrmMeta.reference || '',
+        sexualUssageName: vrmMeta.sexualUssageName || 'Disallow',
+        texture: icon && outputImage && outputImage.length > 0 ? outputImage.length - 1 : undefined,
+        title: vrmMeta.title || 'Untitled',
+        version: vrmMeta.version || '1.0.0',
+        violentUssageName: vrmMeta.violentUssageName || 'Disallow',
     };
 }
 
@@ -681,6 +681,7 @@ export default class VRMExporterv0 {
         console.log(outputSecondaryAnimation);
 
 
+        // Ensure thumbnail is embedded and referenced correctly
         outputVrmMeta.texture = icon ? outputImages.length - 1 : undefined;
         const bufferViews = await Promise.all(
             images.map(async (image) => ({
@@ -1459,12 +1460,13 @@ const toOutputMaterials = (uniqueMaterials, images) => {
     });
 };
 const toOutputImages = (images, icon, mimeType) => {
-    return (icon ? images.concat(icon) : images)
+    const allImages = icon ? images.concat(icon) : images;
+    return allImages
         .filter((image) => image && image.imageBitmap)
-        .map((image) => ({
+        .map((image, index) => ({
             bufferView: -1,
-            mimeType: mimeType,
-            name: image.name, // TODO: 取得できないので仮のテクスチャ名としてマテリアル名を入れた
+            mimeType: mimeType || 'image/png',
+            name: image.name || `texture_${index}`, // Fallback name if not provided
         }));
 };
 const toOutputSamplers = (outputImages) => {

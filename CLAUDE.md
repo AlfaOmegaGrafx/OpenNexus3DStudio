@@ -193,7 +193,7 @@ The application requires external assets to function properly. Run `npm run get-
 
 ### Environment Variables
 The application uses environment variables for configuration:
-- `VITE_API_ENDPOINT` - API backend endpoint (defaults to http://localhost:8000)
+- `VITE_API_ENDPOINT` - API backend endpoint (defaults to http://127.0.0.1:7842)
 - `VITE_ASSET_PATH` environment variable for asset path configuration
 
 ### Development Server

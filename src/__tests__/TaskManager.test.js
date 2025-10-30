@@ -13,7 +13,7 @@ describe('TaskManager', () => {
   let taskManager;
 
   beforeEach(() => {
-    taskManager = new TaskManager('http://localhost:8000');
+    taskManager = new TaskManager('http://127.0.0.1:7842');
   });
 
   afterEach(() => {
@@ -24,7 +24,7 @@ describe('TaskManager', () => {
 
   describe('initialization', () => {
     it('should initialize with default values', () => {
-      expect(taskManager.apiEndpoint).toBe('http://localhost:8000');
+      expect(taskManager.apiEndpoint).toBe('http://127.0.0.1:7842');
       expect(taskManager.tasks.size).toBe(0);
       expect(taskManager.isConnected).toBe(false);
       expect(taskManager.supportedTypes).toContain('text-to-3d');
