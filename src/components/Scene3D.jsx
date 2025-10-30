@@ -5,6 +5,12 @@ import { useCore3D } from '../context/Core3DContext';
 const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
   const mountRef = useRef(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState({
+    fps: 0,
+    triangles: 0,
+    drawCalls: 0
+  });
 
   const {
     isInitialized: sceneInitialized,
@@ -14,7 +20,8 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
     initializeScene,
     updateRenderMode,
     startRenderLoop,
-    exportModel
+    exportModel,
+    sceneManager
   } = useScene();
 
   const {
@@ -34,20 +41,86 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
   // Initialize scene when component mounts
   useEffect(() => {
     if (mountRef.current && !isInitialized) {
-      console.log('🎬 Initializing 3D scene...');
+      console.log('🎬 Scene3D: Initializing 3D scene...');
+      console.log('🎬 Scene3D: Container dimensions:', {
+        width: mountRef.current.clientWidth,
+        height: mountRef.current.clientHeight
+      });
+      
       initializeScene(mountRef.current, {
         width: mountRef.current.clientWidth,
         height: mountRef.current.clientHeight
       }).then(() => {
-        console.log('✅ 3D scene initialized successfully');
+        console.log('✅ Scene3D: Scene initialized successfully');
         setIsInitialized(true);
         startRenderLoop();
+        console.log('🎬 Scene3D: Render loop started');
       }).catch(error => {
-        console.error('❌ Failed to initialize 3D scene:', error);
-        // Silently handle errors without showing popups
+        console.error('❌ Scene3D: Failed to initialize scene:', error);
+        console.error('❌ Scene3D: Error details:', {
+          message: error.message,
+          stack: error.stack,
+          container: mountRef.current,
+          dimensions: {
+            width: mountRef.current?.clientWidth,
+            height: mountRef.current?.clientHeight
+          }
+        });
       });
     }
   }, [initializeScene, startRenderLoop, isInitialized]);
+
+  // Monitor stats when enabled
+  useEffect(() => {
+    if (!showStats || !sceneManager) return;
+
+    let animationId;
+    let lastTime = performance.now();
+    let frameCount = 0;
+
+    const updateStats = (currentTime) => {
+      frameCount++;
+      
+      if (currentTime - lastTime >= 1000) { // Update every second
+        const fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+        
+        if (sceneManager.renderer && sceneManager.renderer.info) {
+          const info = sceneManager.renderer.info;
+          setStats({
+            fps: fps,
+            triangles: info.render.triangles,
+            drawCalls: info.render.calls
+          });
+        }
+        
+        frameCount = 0;
+        lastTime = currentTime;
+      }
+      
+      animationId = requestAnimationFrame(updateStats);
+    };
+
+    animationId = requestAnimationFrame(updateStats);
+
+    return () => {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+    };
+  }, [showStats, sceneManager]);
+
+  // Listen for stats toggle events
+  useEffect(() => {
+    const handleStatsToggle = (event) => {
+      setShowStats(event.detail.showStats);
+    };
+
+    window.addEventListener('statsToggle', handleStatsToggle);
+    
+    return () => {
+      window.removeEventListener('statsToggle', handleStatsToggle);
+    };
+  }, []);
 
   // Handle render mode changes
   useEffect(() => {
@@ -55,6 +128,35 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
       updateRenderMode(renderMode);
     }
   }, [renderMode, currentRenderMode, updateRenderMode]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (mountRef.current && isInitialized) {
+        console.log('🔄 Scene3D: Handling window resize...');
+        const container = mountRef.current;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        console.log('🔄 Scene3D: New dimensions:', { width, height });
+        
+        // Update camera aspect ratio
+        if (sceneManager && sceneManager.camera) {
+          sceneManager.camera.aspect = width / height;
+          sceneManager.camera.updateProjectionMatrix();
+        }
+        
+        // Update renderer size
+        if (sceneManager && sceneManager.renderer) {
+          sceneManager.renderer.setSize(width, height);
+          console.log('✅ Scene3D: Renderer resized successfully');
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isInitialized, sceneManager]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -227,7 +329,7 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
         }}
       />
       
-
+      
       
       {/* CharacterStudio Overlay - Integrated into main viewer */}
       {showCharacterStudioOverlay && (
@@ -392,6 +494,27 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
         <div className="loading-overlay">
           <div className="spinner"></div>
           <p>Loading...</p>
+        </div>
+      )}
+
+      {/* Stats Overlay */}
+      {showStats && isInitialized && (
+        <div className="stats-overlay">
+          <div className="stats-panel">
+            <div className="stats-title">Performance Stats</div>
+            <div className="stat-item">
+              <span className="stat-label">FPS:</span>
+              <span className="stat-value">{stats.fps}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Triangles:</span>
+              <span className="stat-value">{stats.triangles.toLocaleString()}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Draw Calls:</span>
+              <span className="stat-value">{stats.drawCalls}</span>
+            </div>
+          </div>
         </div>
       )}
       

@@ -163,7 +163,7 @@ export class SceneManager {
 
       // Create camera
       this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      this.camera.position.set(0, 1.5, 1.5); // Position camera closer to look at a human-sized model
+      this.camera.position.set(0, 2.5, 2.5); // Position camera back and up for better view
 
       // Check WebGL support
       const webglSupport = this.checkWebGLSupport();
@@ -282,10 +282,20 @@ export class SceneManager {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.0;
 
-      // Create controls
+      // Create enhanced controls with better UX
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.05;
+      this.controls.enableZoom = true;
+      this.controls.enableRotate = true;
+      this.controls.enablePan = true;
+      this.controls.autoRotate = false;
+      this.controls.autoRotateSpeed = 2.0;
+      this.controls.minDistance = 0.5;
+      this.controls.maxDistance = 50;
+      this.controls.minPolarAngle = 0;
+      this.controls.maxPolarAngle = Math.PI;
+      this.controls.target.set(0, 1, 0); // Look at human height
 
       // Setup lighting
       this.setupLighting();
@@ -299,7 +309,13 @@ export class SceneManager {
       this.addHelpers();
 
       // Mount renderer
-      container.appendChild(this.renderer.domElement);
+      try {
+        container.appendChild(this.renderer.domElement);
+        console.log('✅ SceneManager: Renderer DOM element added to container');
+      } catch (error) {
+        console.error('❌ SceneManager: Failed to add renderer to container:', error);
+        throw new Error(`Failed to add renderer to container: ${error.message}`);
+      }
 
       // Setup WebGL context loss recovery
       this.setupWebGLContextRecovery();
@@ -308,62 +324,111 @@ export class SceneManager {
       this.setupResizeHandler();
 
       this.isInitialized = true;
+      console.log('✅ SceneManager: Scene initialized successfully');
+      console.log('✅ SceneManager: Scene details:', {
+        scene: !!this.scene,
+        camera: !!this.camera,
+        renderer: !!this.renderer,
+        controls: !!this.controls,
+        container: container.tagName,
+        dimensions: { width, height }
+      });
+      
       this.emit('initialized', { scene: this.scene, camera: this.camera, renderer: this.renderer });
       
       return { scene: this.scene, camera: this.camera, renderer: this.renderer, controls: this.controls };
     } catch (error) {
-      console.error('Failed to initialize scene:', error);
+      console.error('❌ SceneManager: Failed to initialize scene:', error);
+      console.error('❌ SceneManager: Error details:', {
+        message: error.message,
+        stack: error.stack,
+        container: container,
+        options: options
+      });
       throw error;
     }
   }
 
   /**
-   * Setup scene lighting
+   * Setup scene lighting with enhanced professional lighting setup
    */
   setupLighting() {
+    // Store lights for dynamic control
+    this.lights = {
+      ambient: [],
+      directional: [],
+      point: [],
+      hemisphere: []
+    };
+
     // Enhanced Ambient light - much brighter overall illumination
     const ambientLight = new THREE.AmbientLight(0x606060, 1.2);
+    ambientLight.name = 'mainAmbient';
     this.scene.add(ambientLight);
+    this.lights.ambient.push(ambientLight);
 
     // Additional soft ambient light for extra brightness
     const softAmbientLight = new THREE.AmbientLight(0x808080, 0.6);
+    softAmbientLight.name = 'softAmbient';
     this.scene.add(softAmbientLight);
+    this.lights.ambient.push(softAmbientLight);
 
-    // 3-Point Lighting Setup
+    // Professional 3-Point Lighting Setup with enhanced shadows
     
     // 1. Key Light (Main light) - Front and slightly to the right
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.name = 'keyLight';
     keyLight.position.set(5, 8, 3);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.mapSize.width = 4096; // Increased shadow resolution
+    keyLight.shadow.mapSize.height = 4096;
     keyLight.shadow.camera.near = 0.5;
     keyLight.shadow.camera.far = 50;
     keyLight.shadow.camera.left = -10;
     keyLight.shadow.camera.right = 10;
     keyLight.shadow.camera.top = 10;
     keyLight.shadow.camera.bottom = -10;
+    keyLight.shadow.bias = -0.0001; // Reduce shadow acne
     this.scene.add(keyLight);
+    this.lights.directional.push(keyLight);
 
     // 2. Fill Light (Softer light) - Front and slightly to the left
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    fillLight.name = 'fillLight';
     fillLight.position.set(-3, 5, 2);
     this.scene.add(fillLight);
+    this.lights.directional.push(fillLight);
 
     // 3. Rim Light (Back light) - Behind the model
     const rimLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    rimLight.name = 'rimLight';
     rimLight.position.set(-2, 3, -5);
     this.scene.add(rimLight);
+    this.lights.directional.push(rimLight);
 
     // Additional accent light for better illumination
     const accentLight = new THREE.PointLight(0xffffff, 0.7, 20);
+    accentLight.name = 'accentLight';
     accentLight.position.set(0, 10, 0);
+    accentLight.castShadow = true;
+    accentLight.shadow.mapSize.width = 2048;
+    accentLight.shadow.mapSize.height = 2048;
     this.scene.add(accentLight);
+    this.lights.point.push(accentLight);
 
     // Soft hemisphere light for natural ambient lighting
     const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1d, 0.8);
+    hemisphereLight.name = 'hemisphereLight';
     hemisphereLight.position.set(0, 10, 0);
     this.scene.add(hemisphereLight);
+    this.lights.hemisphere.push(hemisphereLight);
+
+    // Add subtle rim lighting for better model definition
+    const rimLight2 = new THREE.DirectionalLight(0x4a90e2, 0.6);
+    rimLight2.name = 'rimLight2';
+    rimLight2.position.set(2, 2, -3);
+    this.scene.add(rimLight2);
+    this.lights.directional.push(rimLight2);
   }
 
   /**
@@ -474,6 +539,71 @@ export class SceneManager {
       this.currentModel = this.processModel(model, options);
       console.log('Model processed, adding to scene...');
       this.scene.add(this.currentModel);
+
+      // Restore VRM reference if this is a VRM model
+      if (model && model.userData && model.userData.vrm) {
+        this.currentVRM = model.userData.vrm;
+        console.log('🔍 VRM reference restored after processing:', !!this.currentVRM);
+        
+        // Fix VRM model orientation - rotate to face forward
+        if (this.currentModel && this.currentModel.rotation) {
+          this.currentModel.rotation.y = Math.PI; // Rotate 180 degrees to face forward
+          console.log('🔄 VRM model rotated to face forward in scene manager');
+          console.log('🔄 Scene manager rotation after fix:', this.currentModel.rotation);
+        }
+        
+        // Force VRM material restoration after processing
+        this.forceVRMMaterialRestoration();
+        
+        // Additional VRM texture debugging and restoration
+        setTimeout(() => {
+          this.debugVRMTextures();
+          this.validateVRMTextures();
+          this.recreateVRMMaterials();
+          this.forceVRMTextureBinding();
+          this.forceVRMMaterialRestoration();
+          this.forceRendererUpdate();
+          // Force solid mode to ensure textures are visible
+          this.updateRenderMode('solid');
+        }, 100);
+        
+        // Final attempt after a longer delay
+        setTimeout(() => {
+          this.recreateVRMMaterials();
+          this.forceVRMTextureBinding();
+          this.forceVRMMaterialRestoration();
+          this.forceRendererUpdate();
+          // Force solid mode again to ensure textures are visible
+          this.updateRenderMode('solid');
+          // Force a final render
+          if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+          }
+        }, 500);
+        
+        // Ultimate attempt - force everything after 1 second
+        setTimeout(() => {
+          console.log('🚀 Ultimate VRM fix attempt...');
+          this.currentModel.traverse((child) => {
+            if (child.isMesh && child.material) {
+              console.log(`🚀 Ultimate fix for: ${child.name}`);
+              child.material.wireframe = false;
+              child.material.transparent = false;
+              child.material.opacity = 1.0;
+              child.material.needsUpdate = true;
+              if (child.material.map) {
+                child.material.map.needsUpdate = true;
+                child.material.map.flipY = false;
+              }
+            }
+          });
+          this.updateRenderMode('solid');
+          if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+          }
+          console.log('🚀 Ultimate VRM fix completed');
+        }, 1000);
+      }
 
       // Store original materials for render mode restoration
       this.storeOriginalMaterials();
@@ -914,21 +1044,31 @@ export class SceneManager {
     material.userData.isVRMMaterial = true;
     
     // Ensure material is properly configured for rendering
-    if (material.map && !material.map.needsUpdate) {
+    if (material.map) {
       material.map.needsUpdate = true;
+      material.map.flipY = false; // VRM textures should not be flipped
     }
-    if (material.normalMap && !material.normalMap.needsUpdate) {
+    if (material.normalMap) {
       material.normalMap.needsUpdate = true;
+      material.normalMap.flipY = false;
     }
-    if (material.roughnessMap && !material.roughnessMap.needsUpdate) {
+    if (material.roughnessMap) {
       material.roughnessMap.needsUpdate = true;
+      material.roughnessMap.flipY = false;
     }
-    if (material.metalnessMap && !material.metalnessMap.needsUpdate) {
+    if (material.metalnessMap) {
       material.metalnessMap.needsUpdate = true;
+      material.metalnessMap.flipY = false;
     }
-    if (material.emissiveMap && !material.emissiveMap.needsUpdate) {
+    if (material.emissiveMap) {
       material.emissiveMap.needsUpdate = true;
+      material.emissiveMap.flipY = false;
     }
+    
+    // Ensure proper material properties for solid rendering
+    material.wireframe = false;
+    material.transparent = false;
+    material.opacity = 1.0;
     
     // Ensure material needs update
     material.needsUpdate = true;
@@ -954,19 +1094,24 @@ export class SceneManager {
         // Ensure all textures are properly updated
         if (child.material.map) {
           child.material.map.needsUpdate = true;
+          child.material.map.flipY = false; // VRM textures should not be flipped
           console.log(`📷 Updated texture map for: ${child.name}`);
         }
         if (child.material.normalMap) {
           child.material.normalMap.needsUpdate = true;
+          child.material.normalMap.flipY = false;
         }
         if (child.material.roughnessMap) {
           child.material.roughnessMap.needsUpdate = true;
+          child.material.roughnessMap.flipY = false;
         }
         if (child.material.metalnessMap) {
           child.material.metalnessMap.needsUpdate = true;
+          child.material.metalnessMap.flipY = false;
         }
         if (child.material.emissiveMap) {
           child.material.emissiveMap.needsUpdate = true;
+          child.material.emissiveMap.flipY = false;
         }
         
         // Check if this is a VRM material and ensure proper properties
@@ -979,11 +1124,341 @@ export class SceneManager {
           this.ensureVRMMaterialProperties(child.material);
         }
         
+        // Ensure proper material properties for solid rendering
+        child.material.wireframe = false;
+        child.material.transparent = false;
+        child.material.opacity = 1.0;
+        
+        // Force texture coordinate update
+        if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+          child.geometry.attributes.uv.needsUpdate = true;
+        }
+        
         console.log(`✅ Material restoration completed for: ${child.name}`);
       }
     });
     
     console.log('✅ Material restoration completed');
+  }
+
+  /**
+   * Force VRM material restoration with aggressive texture binding
+   */
+  forceVRMMaterialRestoration() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Force VRM material restoration...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Force processing VRM mesh: ${child.name}`);
+        
+        // Force material recreation for VRM materials
+        if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
+          console.log(`🎨 Force VRM material restoration for: ${child.name}`);
+          
+          // Force texture binding
+          if (child.material.map) {
+            child.material.map.needsUpdate = true;
+            child.material.map.flipY = false;
+            child.material.map.generateMipmaps = true;
+            child.material.map.minFilter = THREE.LinearMipmapLinearFilter;
+            child.material.map.magFilter = THREE.LinearFilter;
+            child.material.map.wrapS = THREE.RepeatWrapping;
+            child.material.map.wrapT = THREE.RepeatWrapping;
+            console.log(`📷 Force texture binding for: ${child.name}`);
+          }
+          
+          // Force all texture maps
+          [child.material.normalMap, child.material.roughnessMap, child.material.metalnessMap, child.material.emissiveMap].forEach((texture, index) => {
+            if (texture) {
+              texture.needsUpdate = true;
+              texture.flipY = false;
+              texture.generateMipmaps = true;
+              texture.minFilter = THREE.LinearMipmapLinearFilter;
+              texture.magFilter = THREE.LinearFilter;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+            }
+          });
+          
+          // Force material properties
+          child.material.needsUpdate = true;
+          child.material.wireframe = false;
+          child.material.transparent = false;
+          child.material.opacity = 1.0;
+          
+          // Force geometry UV update
+          if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+            child.geometry.attributes.uv.needsUpdate = true;
+          }
+          
+          // Force material recreation if texture is not working
+          if (child.material.map && !child.material.map.image) {
+            console.log(`⚠️ Texture has no image, forcing recreation for: ${child.name}`);
+            // Try to force texture recreation
+            child.material.map.dispose();
+            child.material.map = null;
+            child.material.needsUpdate = true;
+          }
+          
+          // Force material recreation if it's still not working
+          if (child.material.map && child.material.map.image && child.material.map.image.width === 0) {
+            console.log(`⚠️ Texture image not loaded, forcing material recreation for: ${child.name}`);
+            // Force material recreation
+            const oldMaterial = child.material;
+            child.material = oldMaterial.clone();
+            child.material.needsUpdate = true;
+            oldMaterial.dispose();
+          }
+          
+          console.log(`✅ Force VRM material restoration completed for: ${child.name}`);
+        }
+      }
+    });
+    
+    console.log('✅ Force VRM material restoration completed');
+  }
+
+  /**
+   * Debug VRM textures to see what's happening
+   */
+  debugVRMTextures() {
+    if (!this.currentModel) return;
+    
+    console.log('🔍 Debugging VRM textures...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Mesh: ${child.name}`);
+        console.log(`  Material type: ${child.material.type}`);
+        console.log(`  Material needsUpdate: ${child.material.needsUpdate}`);
+        console.log(`  Material wireframe: ${child.material.wireframe}`);
+        console.log(`  Material transparent: ${child.material.transparent}`);
+        console.log(`  Material opacity: ${child.material.opacity}`);
+        
+        if (child.material.map) {
+          console.log(`  Map texture: ${child.material.map.image?.src || 'embedded'}`);
+          console.log(`  Map needsUpdate: ${child.material.map.needsUpdate}`);
+          console.log(`  Map flipY: ${child.material.map.flipY}`);
+          console.log(`  Map format: ${child.material.map.format}`);
+          console.log(`  Map type: ${child.material.map.type}`);
+        } else {
+          console.log(`  No map texture found`);
+        }
+        
+        if (child.material.color) {
+          console.log(`  Material color: ${child.material.color.getHexString()}`);
+        }
+        
+        console.log(`  Material userData:`, child.material.userData);
+        console.log('---');
+      }
+    });
+  }
+
+  /**
+   * Force renderer update to refresh materials
+   */
+  forceRendererUpdate() {
+    if (!this.renderer) return;
+    
+    console.log('🔧 Force renderer update...');
+    
+    // Force renderer to update
+    this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
+    
+    // Force material updates
+    if (this.currentModel) {
+      this.currentModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.needsUpdate = true;
+          if (child.material.map) {
+            child.material.map.needsUpdate = true;
+          }
+        }
+      });
+    }
+    
+    // Force render
+    this.renderer.render(this.scene, this.camera);
+    
+    console.log('✅ Force renderer update completed');
+  }
+
+  /**
+   * Validate and fix VRM textures
+   */
+  validateVRMTextures() {
+    if (!this.currentModel) return;
+    
+    console.log('🔍 Validating VRM textures...');
+    let fixedCount = 0;
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if (child.material.map) {
+          const texture = child.material.map;
+          if (!texture.image || texture.image.width === 0) {
+            console.log(`⚠️ Invalid texture found for: ${child.name}`);
+            // Try to force texture recreation
+            texture.needsUpdate = true;
+            texture.flipY = false;
+            texture.generateMipmaps = true;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            fixedCount++;
+          }
+        }
+      }
+    });
+    
+    console.log(`✅ VRM texture validation completed. Fixed ${fixedCount} textures.`);
+  }
+
+  /**
+   * Force VRM texture binding - more aggressive approach
+   */
+  forceVRMTextureBinding() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Force VRM texture binding...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔍 Force binding textures for: ${child.name}`);
+        
+        // Force all texture maps to be properly bound
+        const textureMaps = [
+          'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'
+        ];
+        
+        textureMaps.forEach(mapType => {
+          if (child.material[mapType]) {
+            const texture = child.material[mapType];
+            console.log(`📷 Force binding ${mapType} for: ${child.name}`);
+            
+            // Force texture properties
+            texture.needsUpdate = true;
+            texture.flipY = false;
+            texture.generateMipmaps = true;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            
+            // Force texture to be bound to GPU
+            if (this.renderer) {
+              this.renderer.initTexture(texture);
+            }
+          }
+        });
+        
+        // Force material update
+        child.material.needsUpdate = true;
+        child.material.wireframe = false;
+        child.material.transparent = false;
+        child.material.opacity = 1.0;
+        
+        // Force geometry UV update
+        if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+          child.geometry.attributes.uv.needsUpdate = true;
+        }
+        
+        console.log(`✅ Force texture binding completed for: ${child.name}`);
+      }
+    });
+    
+    console.log('✅ Force VRM texture binding completed');
+  }
+
+  /**
+   * Completely recreate VRM materials to fix texture issues
+   */
+  recreateVRMMaterials() {
+    if (!this.currentModel) return;
+    
+    console.log('🔧 Recreating VRM materials...');
+    
+    this.currentModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log(`🔄 Recreating material for: ${child.name}`);
+        
+        // Store original material properties
+        const originalMaterial = child.material;
+        const materialType = originalMaterial.type;
+        
+        // Create new material with same properties
+        let newMaterial;
+        if (materialType === 'MeshStandardMaterial') {
+          newMaterial = new THREE.MeshStandardMaterial({
+            map: originalMaterial.map,
+            normalMap: originalMaterial.normalMap,
+            roughnessMap: originalMaterial.roughnessMap,
+            metalnessMap: originalMaterial.metalnessMap,
+            emissiveMap: originalMaterial.emissiveMap,
+            color: originalMaterial.color,
+            roughness: originalMaterial.roughness,
+            metalness: originalMaterial.metalness,
+            emissive: originalMaterial.emissive,
+            transparent: false,
+            opacity: 1.0,
+            wireframe: false
+          });
+        } else {
+          newMaterial = new THREE.MeshBasicMaterial({
+            map: originalMaterial.map,
+            color: originalMaterial.color,
+            transparent: false,
+            opacity: 1.0,
+            wireframe: false
+          });
+        }
+        
+        // Copy userData
+        newMaterial.userData = { ...originalMaterial.userData };
+        
+        // Force texture updates
+        if (newMaterial.map) {
+          newMaterial.map.needsUpdate = true;
+          newMaterial.map.flipY = false;
+        }
+        if (newMaterial.normalMap) {
+          newMaterial.normalMap.needsUpdate = true;
+          newMaterial.normalMap.flipY = false;
+        }
+        if (newMaterial.roughnessMap) {
+          newMaterial.roughnessMap.needsUpdate = true;
+          newMaterial.roughnessMap.flipY = false;
+        }
+        if (newMaterial.metalnessMap) {
+          newMaterial.metalnessMap.needsUpdate = true;
+          newMaterial.metalnessMap.flipY = false;
+        }
+        if (newMaterial.emissiveMap) {
+          newMaterial.emissiveMap.needsUpdate = true;
+          newMaterial.emissiveMap.flipY = false;
+        }
+        
+        // Replace material
+        child.material = newMaterial;
+        child.material.needsUpdate = true;
+        
+        // Dispose old material
+        originalMaterial.dispose();
+        
+        console.log(`✅ Material recreated for: ${child.name}`);
+        console.log(`✅ New material wireframe: ${newMaterial.wireframe}, transparent: ${newMaterial.transparent}`);
+        if (newMaterial.map) {
+          console.log(`✅ New material texture: needsUpdate=${newMaterial.map.needsUpdate}, flipY=${newMaterial.map.flipY}`);
+        }
+      }
+    });
+    
+    console.log('✅ VRM materials recreation completed');
   }
 
   /**
@@ -1322,7 +1797,7 @@ export class SceneManager {
         newPosition: this.currentModel.position
       });
     }
-
+    
     // Also ensure model orientation is correct
     this.ensureModelOrientation();
   }
@@ -1332,7 +1807,7 @@ export class SceneManager {
    */
   ensureModelOrientation() {
     if (!this.currentModel) return;
-
+    
     // Check if VRM model needs orientation correction
     if (this.currentVRM && this.currentVRM.scene) {
       const modelForward = new THREE.Vector3();
@@ -2319,7 +2794,7 @@ export class SceneManager {
     console.log('🔄 Resetting camera to default position');
     
     // Reset camera position
-    this.camera.position.set(0, 1.5, 1.5);
+    this.camera.position.set(0, 2.5, 2.5);
     this.controls.target.set(0, 0, 0);
     this.controls.update();
   }
@@ -2447,14 +2922,15 @@ export class SceneManager {
   toggleStats(show) {
     console.log(`📊 Toggling stats: ${show}`);
     
-    if (show) {
-      // Add stats display (you can integrate with stats.js if available)
-      this.showStats = true;
-      console.log('Performance stats enabled');
-    } else {
-      this.showStats = false;
-      console.log('Performance stats disabled');
-    }
+    this.showStats = show;
+    
+    // Dispatch custom event to notify components
+    const event = new CustomEvent('statsToggle', { 
+      detail: { showStats: show } 
+    });
+    window.dispatchEvent(event);
+    
+    console.log(`Performance stats ${show ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -2772,7 +3248,7 @@ export class SceneManager {
     // Use closer distance for consistent zoom level
     const distance = maxDim > 0 ? maxDim * 1.2 : 1.5;
     const cameraPosition = center.clone();
-    cameraPosition.y += distance * 0.5; // Above the model
+    cameraPosition.y += distance * 0.2; // Slightly above the model
     cameraPosition.z += distance; // Behind the model
 
     // Set camera position and target
@@ -2786,12 +3262,20 @@ export class SceneManager {
 
 
   /**
-   * Set render mode
+   * Set render mode with auto-focus
    * @param {string} mode - Render mode (solid, wireframe, skeleton, partColorize, rendered)
    */
   setRenderMode(mode) {
     this.renderMode = mode;
     this.updateRenderMode(mode);
+    
+    // Auto-focus on model when changing render modes for better viewing
+    if (this.currentModel) {
+      setTimeout(() => {
+        this.focusOnModel();
+      }, 100); // Small delay to ensure render mode is applied first
+    }
+    
     this.emit('renderModeChanged', { mode });
   }
 
@@ -2922,6 +3406,10 @@ export class SceneManager {
       if (child.isMesh) {
         switch (mode) {
           case 'solid':
+            // Restore original material if it exists (e.g., coming from UV mode)
+            if (child.userData.originalMaterial) {
+              child.material = child.userData.originalMaterial.clone();
+            }
             child.material.wireframe = false;
             child.material.transparent = false;
             child.material.opacity = 1.0;
@@ -2929,8 +3417,42 @@ export class SceneManager {
             if (child.userData.originalColor) {
               child.material.color.copy(child.userData.originalColor);
             }
+            
+            // Enhanced VRM material handling for solid mode
+            if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
+              console.log(`🎨 Processing VRM material for solid mode: ${child.name}`);
+              this.ensureVRMMaterialProperties(child.material);
+              
+              // Force aggressive texture binding for VRM materials
+              if (child.material.map) {
+                child.material.map.needsUpdate = true;
+                child.material.map.flipY = false;
+                child.material.map.generateMipmaps = true;
+                child.material.map.minFilter = THREE.LinearMipmapLinearFilter;
+                child.material.map.magFilter = THREE.LinearFilter;
+                child.material.map.wrapS = THREE.RepeatWrapping;
+                child.material.map.wrapT = THREE.RepeatWrapping;
+              }
+            }
+            
+            // Force material and texture updates for solid rendering
+            child.material.needsUpdate = true;
+            if (child.material.map) {
+              child.material.map.needsUpdate = true;
+              child.material.map.flipY = false;
+            }
+            if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
+              child.geometry.attributes.uv.needsUpdate = true;
+            }
+            
             // Clear bone visualization
             this.clearBoneVisualization();
+            
+            // Force VRM model to face forward
+            if (this.currentModel && this.currentVRM) {
+              this.currentModel.rotation.y = Math.PI;
+              console.log('🔄 VRM model orientation fixed for solid mode');
+            }
             break;
           case 'wireframe':
             child.material.wireframe = true;
@@ -2962,11 +3484,39 @@ export class SceneManager {
             child.material.transparent = false;
             child.material.opacity = 1.0;
             break;
-          case 'rendered':
-            // Restore original materials for rendered mode
-            this.restoreOriginalMaterials();
-            // Clear bone visualization
-            this.clearBoneVisualization();
+          case 'normal':
+            // Normal map visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            if (child.material.normalMap) {
+              child.material.map = child.material.normalMap;
+              child.material.color.setHex(0x808080);
+            }
+            break;
+          case 'uv':
+            // UV map visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            child.material.color.setHex(0xffffff);
+            // Create UV visualization material
+            const uvMaterial = new THREE.MeshBasicMaterial({
+              map: this.createUVTexture(),
+              side: THREE.DoubleSide
+            });
+            // Store the original material before replacing
+            if (!child.userData.originalMaterial) {
+              child.userData.originalMaterial = child.material.clone();
+            }
+            child.material = uvMaterial;
+            break;
+          case 'depth':
+            // Depth visualization
+            child.material.wireframe = false;
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+            child.material.color.setHex(0xffffff);
             break;
         }
       }
@@ -3005,48 +3555,208 @@ export class SceneManager {
   }
 
   /**
-   * Reinitialize scene after context loss
+   * Create UV visualization texture
    */
-  reinitializeScene() {
-    if (!this.isInitialized) return;
+  createUVTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
     
-    try {
-      // Recreate renderer
-      const container = this.renderer.domElement.parentElement;
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+    // Create UV grid pattern
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    
+    // Draw UV grid
+    for (let i = 0; i <= 8; i++) {
+      const x = (i / 8) * 512;
+      const y = (i / 8) * 512;
       
-      // Remove old renderer
-      if (this.renderer.domElement.parentElement) {
-        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
-      }
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
       
-      // Create new renderer
-      this.renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-        failIfMajorPerformanceCaveat: false
-      });
-      
-      this.renderer.setSize(width, height);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      
-      // Recreate controls
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.05;
-      
-      // Mount new renderer
-      container.appendChild(this.renderer.domElement);
-      
-      // Restart render loop
-      this.startRenderLoop();
-      
-      console.log('✅ Scene reinitialized after context loss');
-    } catch (error) {
-      console.error('❌ Failed to reinitialize scene:', error);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
     }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    return texture;
+  }
+
+  /**
+   * Set lighting intensity for all lights
+   * @param {number} intensity - Lighting intensity multiplier
+   */
+  setLightingIntensity(intensity) {
+    if (!this.lights) return;
+    
+    // Adjust ambient lights
+    this.lights.ambient.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust directional lights
+    this.lights.directional.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust point lights
+    this.lights.point.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+    
+    // Adjust hemisphere lights
+    this.lights.hemisphere.forEach(light => {
+      if (!light.userData.originalIntensity) {
+        light.userData.originalIntensity = light.intensity;
+      }
+      light.intensity = light.userData.originalIntensity * intensity;
+    });
+  }
+
+  /**
+   * Toggle specific light types
+   * @param {string} lightType - Type of light to toggle ('ambient', 'directional', 'point', 'hemisphere')
+   * @param {boolean} enabled - Whether to enable or disable
+   */
+  toggleLightType(lightType, enabled) {
+    if (!this.lights || !this.lights[lightType]) return;
+    
+    this.lights[lightType].forEach(light => {
+      light.visible = enabled;
+    });
+  }
+
+  /**
+   * Set camera to predefined positions with smooth animation and auto-focus
+   * @param {string} position - Camera position ('front', 'back', 'left', 'right', 'top', 'bottom')
+   * @param {number} duration - Animation duration in milliseconds (default: 1000ms)
+   */
+  setCameraPosition(position, duration = 1000) {
+    if (!this.camera || !this.controls) return;
+    
+    // First, focus on the model to get proper distance
+    this.focusOnModel();
+    
+    // Get the model's bounding box for proper positioning
+    let modelCenter = new THREE.Vector3(0, 1, 0);
+    let modelSize = 2; // Default size
+    
+    if (this.currentModel) {
+      const box = new THREE.Box3().setFromObject(this.currentModel);
+      if (!box.isEmpty()) {
+        modelCenter = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        modelSize = Math.max(size.x, size.y, size.z);
+      }
+    }
+    
+    // Calculate distance based on model size for very close-up view
+    const distance = Math.max(modelSize * 1.0, 1.0);
+    
+    const positions = {
+      front: { x: modelCenter.x, y: modelCenter.y, z: modelCenter.z + distance },
+      back: { x: modelCenter.x, y: modelCenter.y, z: modelCenter.z - distance },
+      left: { x: modelCenter.x - distance, y: modelCenter.y, z: modelCenter.z },
+      right: { x: modelCenter.x + distance, y: modelCenter.y, z: modelCenter.z },
+      top: { x: modelCenter.x, y: modelCenter.y + distance, z: modelCenter.z },
+      bottom: { x: modelCenter.x, y: modelCenter.y - distance, z: modelCenter.z }
+    };
+    
+    const targetPos = positions[position];
+    if (!targetPos) return;
+    
+    // Store current position and target
+    const startPosition = this.camera.position.clone();
+    const startTarget = this.controls.target.clone();
+    const endPosition = new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z);
+    const endTarget = modelCenter.clone();
+    
+    // Animation variables
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing function (ease-in-out)
+      const easeInOut = progress < 0.5 
+        ? 2 * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      
+      // Interpolate position
+      this.camera.position.lerpVectors(startPosition, endPosition, easeInOut);
+      
+      // Interpolate target
+      this.controls.target.lerpVectors(startTarget, endTarget, easeInOut);
+      
+      // Update controls
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Ensure final position is exact
+        this.camera.position.copy(endPosition);
+        this.controls.target.copy(endTarget);
+        this.controls.update();
+        
+        console.log(`🎬 Camera animated to ${position} view with close-up focus`);
+      }
+    };
+    
+    // Start animation
+    console.log(`🎬 Animating camera to ${position} view with close-up focus...`);
+    animate();
+  }
+
+  /**
+   * Enable/disable auto-rotation
+   * @param {boolean} enabled - Whether to enable auto-rotation
+   * @param {number} speed - Rotation speed (default: 2.0)
+   */
+  setAutoRotation(enabled, speed = 2.0) {
+    if (this.controls) {
+      this.controls.autoRotate = enabled;
+      this.controls.autoRotateSpeed = speed;
+    }
+  }
+
+  /**
+   * Set renderer tone mapping and exposure
+   * @param {string} toneMapping - Tone mapping type ('ACESFilmic', 'Reinhard', 'Cineon', 'Linear')
+   * @param {number} exposure - Exposure value
+   */
+  setToneMapping(toneMapping, exposure = 1.0) {
+    if (!this.renderer) return;
+    
+    const toneMappingTypes = {
+      'ACESFilmic': THREE.ACESFilmicToneMapping,
+      'Reinhard': THREE.ReinhardToneMapping,
+      'Cineon': THREE.CineonToneMapping,
+      'Linear': THREE.LinearToneMapping
+    };
+    
+    this.renderer.toneMapping = toneMappingTypes[toneMapping] || THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = exposure;
   }
 
   /**

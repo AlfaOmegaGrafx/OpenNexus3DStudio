@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
 import { AudioProvider } from './context/AudioContext';
@@ -51,17 +51,20 @@ function AppContent() {
   
   // Synchronized hamburger handlers - when one expands, the other collapses
   const handleLeftHamburgerClick = () => {
-    if (sidebarCollapsed) {
-      // Left hamburger is expanding - collapse right hamburger and main viewport
-      setSidebarCollapsed(false);
-      setCharacterStudioSidebarCollapsed(true);
-      // Main viewport expands when left hamburger expands
-    } else {
-      // Left hamburger is collapsing - expand right hamburger and collapse main viewport
-      setSidebarCollapsed(true);
-      setCharacterStudioSidebarCollapsed(false);
-      // Main viewport collapses when left hamburger collapses
-    }
+    // Use React's batching to update all states simultaneously for better performance
+    startTransition(() => {
+      if (sidebarCollapsed) {
+        // Left hamburger is expanding - collapse right hamburger and main viewport
+        setSidebarCollapsed(false);
+        setCharacterStudioSidebarCollapsed(true);
+        // Main viewport expands when left hamburger expands
+      } else {
+        // Left hamburger is collapsing - expand right hamburger and collapse main viewport
+        setSidebarCollapsed(true);
+        setCharacterStudioSidebarCollapsed(false);
+        // Main viewport collapses when left hamburger collapses
+      }
+    });
   };
 
   const handleRightHamburgerClick = () => {

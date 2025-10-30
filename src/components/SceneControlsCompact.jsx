@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useScene } from '../context/SceneContext';
+import './SceneControlsCompact.css';
 
 /**
  * SceneControlsCompact - Comprehensive 3D scene controls for header
@@ -151,6 +152,23 @@ const SceneControlsCompact = ({
         </select>
       </div>
 
+      {/* Light Intensity Slider - moved to right of lighting controls */}
+      <div className="light-intensity-controls">
+        <label className="control-label">Light:</label>
+        <div className="slider-container">
+          <input 
+            type="range"
+            className="control-slider"
+            min="0"
+            max="2"
+            step="0.1"
+            value={lightIntensity}
+            onChange={(e) => handleLightIntensityChange(parseFloat(e.target.value))}
+          />
+          <span className="slider-value">{lightIntensity.toFixed(1)}</span>
+        </div>
+      </div>
+
       {/* Original Camera Controls */}
       <div className="camera-controls">
         <label className="control-label">Camera</label>
@@ -212,25 +230,7 @@ const SceneControlsCompact = ({
         </button>
       </div>
 
-
-      {/* NEW: Light Intensity Slider (from image) */}
-      <div className="light-intensity-controls">
-        <label className="control-label">Light:</label>
-        <div className="slider-container">
-          <input 
-            type="range"
-            className="control-slider"
-            min="0"
-            max="2"
-            step="0.1"
-            value={lightIntensity}
-            onChange={(e) => handleLightIntensityChange(parseFloat(e.target.value))}
-          />
-          <span className="slider-value">{lightIntensity.toFixed(1)}</span>
-        </div>
-      </div>
-
-      {/* NEW: View Selector (from image) */}
+      {/* View Selector */}
       <div className="view-controls">
         <label className="control-label">View:</label>
         <select 
@@ -249,7 +249,7 @@ const SceneControlsCompact = ({
         </select>
       </div>
 
-      {/* NEW: Auto Tone Checkbox and Dropdown (from image) */}
+      {/* Auto Tone Checkbox and Dropdown */}
       <div className="auto-tone-controls">
         <input 
           type="checkbox"
@@ -271,7 +271,7 @@ const SceneControlsCompact = ({
         </select>
       </div>
 
-      {/* NEW: Exposure Slider (from image) */}
+      {/* Exposure Slider */}
       <div className="exposure-controls">
         <label className="control-label">Exp:</label>
         <div className="slider-container">
@@ -287,6 +287,7 @@ const SceneControlsCompact = ({
           <span className="slider-value">{exposure.toFixed(1)}</span>
         </div>
       </div>
+
     </div>
   );
 };
