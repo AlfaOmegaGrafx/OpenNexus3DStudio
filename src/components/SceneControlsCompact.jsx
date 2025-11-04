@@ -169,6 +169,25 @@ const SceneControlsCompact = ({
         </div>
       </div>
 
+      {/* View Selector */}
+      <div className="view-controls">
+        <label className="control-label">View:</label>
+        <select 
+          className="control-select"
+          value={selectedView}
+          onChange={(e) => handleViewChange(e.target.value)}
+        >
+          <option value="Select View">Select View</option>
+          <option value="Front">Front</option>
+          <option value="Back">Back</option>
+          <option value="Left">Left</option>
+          <option value="Right">Right</option>
+          <option value="Top">Top</option>
+          <option value="Bottom">Bottom</option>
+          <option value="Isometric">Isometric</option>
+        </select>
+      </div>
+
       {/* Original Camera Controls */}
       <div className="camera-controls">
         <label className="control-label">Camera</label>
@@ -228,25 +247,6 @@ const SceneControlsCompact = ({
         >
           🖥️
         </button>
-      </div>
-
-      {/* View Selector */}
-      <div className="view-controls">
-        <label className="control-label">View:</label>
-        <select 
-          className="control-select"
-          value={selectedView}
-          onChange={(e) => handleViewChange(e.target.value)}
-        >
-          <option value="Select View">Select View</option>
-          <option value="Front">Front</option>
-          <option value="Back">Back</option>
-          <option value="Left">Left</option>
-          <option value="Right">Right</option>
-          <option value="Top">Top</option>
-          <option value="Bottom">Bottom</option>
-          <option value="Isometric">Isometric</option>
-        </select>
       </div>
 
       {/* Auto Tone Checkbox and Dropdown */}

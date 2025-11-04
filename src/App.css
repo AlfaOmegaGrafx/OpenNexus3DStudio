@@ -1020,6 +1020,8 @@
   flex: 1;
   overflow: hidden;
   transition: margin-top 0.3s ease;
+  height: calc(100vh - 96px);
+  min-height: 0;
 }
 
 .app-content.has-progress {
@@ -1028,7 +1030,7 @@
 
 .sidebar {
   width: 320px;
-  height: 100vh;
+  height: 100%;
   background: #2a2a2a;
   border-right: 1px solid #3a3a3a;
   padding: 0.5rem;

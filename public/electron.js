@@ -3,6 +3,7 @@ const path = require('path');
 const isDev = process.env.NODE_ENV === 'development';
 
 let mainWindow;
+const HOME_URL = 'http://localhost:3000';
 
 function createWindow() {
   // Create the browser window
@@ -22,12 +23,17 @@ function createWindow() {
     show: false
   });
 
-  // Load the app
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../build/index.html')}`;
-  
-  mainWindow.loadURL(startUrl);
+  // Load the app - always try localhost first, fallback to file build
+  const fallbackFileUrl = `file://${path.join(__dirname, '../build/index.html')}`;
+  mainWindow.loadURL(HOME_URL);
+
+  // Fallback if localhost is not available
+  const handleFailLoad = () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.loadURL(fallbackFileUrl);
+    }
+  };
+  mainWindow.webContents.once('did-fail-load', handleFailLoad);
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
@@ -122,6 +128,15 @@ const template = [
   {
     label: 'View',
     submenu: [
+      {
+        label: 'Home (Localhost)',
+        accelerator: 'CmdOrCtrl+H',
+        click: () => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.loadURL(HOME_URL);
+          }
+        }
+      },
       {
         label: 'Toggle Developer Tools',
         accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
