@@ -217,6 +217,178 @@ const handleRenderModeChange = (mode) => {
 - **Scene Stats**: Real-time triangle, vertex, and material counts
 - **Feature Highlights**: Showcase of new capabilities
 
+## 🎛️ SceneControlsCompact UI Setup
+
+### **Current UI Layout (Saved)**
+
+The `SceneControlsCompact` component provides a compact header-based control interface for 3D scene management. The current UI setup includes:
+
+#### **1. Lighting Controls**
+- **Lighting Dropdown**: Select lighting preset
+  - Options: Studio, Outdoor, Indoor, Dramatic, Soft, Harsh
+  - Label: "Lighting"
+  - Uses `setLighting()` from SceneContext
+
+- **Light Intensity Slider**: Adjust overall lighting intensity
+  - Range: 0.0 to 2.0
+  - Step: 0.1
+  - Display: Shows current value (e.g., "1.0")
+  - Label: "Light:"
+  - Uses `setLightIntensity()` from SceneContext
+
+#### **2. View Selector**
+- **View Dropdown**: Select camera view position
+  - Options: Select View, Front, Back, Left, Right, Top, Bottom, Isometric
+  - Label: "View:"
+  - Behavior depends on View Look Lock state (see below)
+
+- **Position Lock Button** (🔒/🔓)
+  - **Locked (🔒)**: When enabled, all view options (Front, Back, Left, Right, Top, Bottom, Isometric) are available, but each view ensures the **full model is visible** by calculating optimal camera distance based on model bounding box.
+  - **Unlocked (🔓)**: When disabled (default), view selection moves the camera around the model using standard `setView()` behavior. All view options are available.
+  - Title: "Position Locked - Views show full model" / "Position Unlocked - All view options available"
+  - Active state: Button shows as active when locked
+  - When locked: Uses custom calculation with model bounding box to ensure full model visibility
+  - When unlocked: Uses `setView()` from SceneContext
+
+#### **3. Camera Controls**
+- **Camera Mode Dropdown**: Select camera control mode
+  - Options: Orbit, First Person, Fixed
+  - Label: "Camera"
+  - Uses `setCameraMode()` from SceneContext
+
+- **Focus on Model Button** (🎯)
+  - Title: "Focus on Model"
+  - Uses `sceneManager.focusOnModel()`
+
+- **Focus on Face Button** (👤)
+  - Title: "Focus on Face"
+  - Uses `focusOnFace()` from SceneContext
+
+- **Reset Camera Button** (🔄)
+  - Title: "Reset Camera"
+  - Uses `resetCamera()` from SceneContext
+
+#### **4. Tools Section**
+- **Toggle Stats Button** (📊)
+  - Title: "Toggle Stats"
+  - Active state: Shows when stats are enabled
+  - Uses `toggleStats()` from SceneContext
+
+- **Auto Rotate Button** (🔄)
+  - Title: "Auto Rotate"
+  - Uses `toggleAutoRotate()` from SceneContext
+
+- **Screenshot Button** (📸)
+  - Title: "Screenshot"
+  - Uses `takeScreenshot()` from SceneContext
+
+- **Fullscreen Button** (🖥️)
+  - Title: "Fullscreen"
+  - Uses `toggleFullscreen()` from SceneContext
+
+#### **5. Auto Tone Controls**
+- **Auto Tone Checkbox**: Enable/disable auto tone mapping
+  - Uses `setAutoTone()` from SceneContext
+  - When enabled, unlocks tone mapping dropdown
+
+- **Tone Mapping Dropdown**: Select tone mapping algorithm
+  - Options: ACES, Reinhard, Linear, Filmic
+  - Label: "Auto Tone:"
+  - Disabled when auto tone is unchecked
+  - Uses `setToneMapping()` from SceneContext
+
+#### **6. Exposure Controls**
+- **Exposure Slider**: Adjust scene exposure
+  - Range: 0.0 to 3.0
+  - Step: 0.1
+  - Display: Shows current value (e.g., "1.0")
+  - Label: "Exp:"
+  - Uses `setExposure()` from SceneContext
+
+### **Component Integration**
+
+```jsx
+import SceneControlsCompact from './components/SceneControlsCompact';
+import { useScene } from './context/SceneContext';
+
+// In your component
+const { updateRenderMode } = useScene();
+
+<SceneControlsCompact
+  onRenderModeChange={(mode) => {
+    // Custom render mode handling
+    updateRenderMode(mode);
+  }}
+  onLightingChange={(lighting) => {
+    // Custom lighting handling
+    console.log('Lighting changed:', lighting);
+  }}
+  renderModeStates={{
+    solid: true,
+    wireframe: false,
+    skeleton: false,
+    partColorize: false
+  }}
+  skeletonActive={false}
+  onSkeletonClick={() => {
+    // Custom skeleton mode handling
+    console.log('Skeleton clicked');
+  }}
+/>
+```
+
+### **Context Integration**
+
+The component uses the `useScene()` hook to access:
+- `sceneManager` - Main scene manager instance
+- `setLighting()` - Set lighting preset
+- `setLightIntensity()` - Adjust light intensity
+- `setCameraMode()` - Set camera control mode
+- `resetCamera()` - Reset camera to default position
+- `focusOnFace()` - Focus camera on character face
+- `setView()` - Set camera view position
+- `toggleStats()` - Toggle performance stats display
+- `toggleAutoRotate()` - Toggle auto-rotation
+- `takeScreenshot()` - Capture screenshot
+- `toggleFullscreen()` - Toggle fullscreen mode
+- `setAutoTone()` - Enable/disable auto tone mapping
+- `setToneMapping()` - Set tone mapping algorithm
+- `setExposure()` - Adjust scene exposure
+- `updateRenderMode()` - Update rendering mode
+
+### **Styling**
+
+The component uses `SceneControlsCompact.css` for styling. Key CSS classes:
+- `.scene-controls-compact` - Main container
+- `.lighting-controls` - Lighting dropdown section
+- `.light-intensity-controls` - Light intensity slider section
+- `.view-controls` - View selector section
+- `.camera-controls` - Camera controls section
+- `.additional-controls` - Tools section
+- `.auto-tone-controls` - Auto tone section
+- `.exposure-controls` - Exposure slider section
+- `.control-label` - Label styling
+- `.control-select` - Dropdown styling
+- `.control-button` - Button styling
+- `.control-slider` - Slider input styling
+- `.slider-container` - Slider container with value display
+- `.slider-value` - Displayed slider value
+
+### **State Management**
+
+The component maintains local state for:
+- `lighting` - Current lighting preset (default: 'studio')
+- `cameraMode` - Current camera mode (default: 'orbit')
+- `showStats` - Stats visibility (default: false)
+- `lightIntensity` - Light intensity value (default: 1.0)
+- `selectedView` - Selected view position (default: 'Select View')
+- `viewLookLocked` - Position lock state (default: false)
+  - When `true`: All view options available, but each view calculates camera position to ensure full model is visible (uses model bounding box)
+  - When `false`: All view options available, uses standard `setView()` behavior
+- `autoTone` - Auto tone enabled state (default: false)
+- `toneMapping` - Tone mapping algorithm (default: 'ACES')
+- `exposure` - Exposure value (default: 1.0)
+
 ## 🔍 Debugging & Development
 
 ### **Console Logging**

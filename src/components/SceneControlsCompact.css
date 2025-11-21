@@ -80,6 +80,14 @@
   appearance: none;
 }
 
+/* WebKit track styling - blue fill */
+.control-item input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to right, #4a90e2 0%, #4a90e2 var(--slider-progress, 0%), rgba(255, 255, 255, 0.1) var(--slider-progress, 0%), rgba(255, 255, 255, 0.1) 100%);
+  border-radius: 2px;
+}
+
 .control-item input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -90,6 +98,21 @@
   cursor: pointer;
   border: 2px solid #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  margin-top: -4px;
+}
+
+/* Firefox track styling - blue fill */
+.control-item input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.control-item input[type="range"]::-moz-range-progress {
+  height: 4px;
+  background: #4a90e2;
+  border-radius: 2px 0 0 2px;
 }
 
 .control-item input[type="range"]::-moz-range-thumb {
@@ -97,6 +120,35 @@
   height: 12px;
   border-radius: 50%;
   background: #4a90e2;
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* IE/Edge track styling - blue fill */
+.control-item input[type="range"]::-ms-track {
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+.control-item input[type="range"]::-ms-fill-lower {
+  background: #4a90e2;
+  border-radius: 2px 0 0 2px;
+}
+
+.control-item input[type="range"]::-ms-fill-upper {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0 2px 2px 0;
+}
+
+.control-item input[type="range"]::-ms-thumb {
+  width: 12px;
+  height: 12px;
+  background: #4a90e2;
+  border-radius: 50%;
   cursor: pointer;
   border: 2px solid #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);

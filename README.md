@@ -3,12 +3,12 @@
 [![Apache2.0 License](https://img.shields.io/badge/license-Apache2.0-green.svg)](LICENSE)
 [![Cross-Platform](https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Web-blue)](#)
 
-**Open3DStudio** is a 3D AIGC application. It works closely with the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
+**Open3DStudio** (also known as **OpenNexus3DStudio** in the current application) is a 3D AIGC application. It works closely with the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
 
 The supported workflows include text-to-3d, image-to-3d, mesh segmentation, texture generation, auto-rigging, part completion etc.
 
 ## Demo 
-You can have a try on [Vercel Deployment](https://open3dstudio-n5hap1p9y-fishwowaters-projects.vercel.app) or download the shipped applications from [Releases](https://github.com/FishWoWater/Open3DStudio/releases).
+You can have a try on [Vercel Deployment](https://opennexus3dstudio-n5hap1p9y-fishwowaters-projects.vercel.app) or download the shipped applications from [Releases](https://github.com/FishWoWater/OpenNexus3DStudio/releases).
 
 Notice that you need to deploy the API backend on your own machine or server, or try my API endpoint: [http://i-2.gpushare.com:42180](http://i-2.gpushare.com:42180) (it's deployed on a single 3060Ti and ONLY enables the mesh segmentation feature).
 
@@ -44,8 +44,8 @@ The available models are up to the API backend, refer to [3DAIGC-API](https://gi
 
 ```bash
 # Clone the repository
-git clone https://github.com/FishWoWater/Open3DStudio.git
-cd Open3DStudio
+git clone https://github.com/FishWoWater/OpenNexus3DStudio.git
+cd OpenNexus3DStudio
 
 # Install dependencies
 npm install
@@ -79,7 +79,7 @@ npm run dist-linux  # Linux
 
 1. Clone and setup the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) backend
 2. Start the API server (usually on port 8000)
-3. Update the API endpoint in Open3DStudio if needed
+3. Update the API endpoint in OpenNexus3DStudio if needed
 
 ## 🏗️ Architecture
 
@@ -169,7 +169,7 @@ npm run dist-linux  # Linux
 
 ## 📄 License
 
-The code and application is licensed under [Apache2.0 License](LICENSE).
+**Open3DStudio** is licensed under [Apache2.0 License](LICENSE). The code and application maintain continuity with the original Open3DStudio project while evolving as OpenNexus3DStudio.
 
 ## 🙏 Acknowledgments
 

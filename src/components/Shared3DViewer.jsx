@@ -4,11 +4,11 @@ import { useCore3D } from '../context/Core3DContext';
 
 /**
  * Shared 3D Viewer Component
- * Works for both CharacterStudio and Open3DStudio applications
+ * Works for both CharacterStudio and OpenNexus3DStudio applications
  * Supports both traditional 3D models and Core3D designs
  */
 const Shared3DViewer = ({ 
-  mode = 'characterstudio', // 'characterstudio' or 'open3dstudio'
+  mode = 'characterstudio', // 'characterstudio' or 'opennexus3dstudio'
   model = null,
   renderMode = 'solid',
   showControls = true,
@@ -86,11 +86,15 @@ const Shared3DViewer = ({
       setIsLoading(true);
       setError(null);
 
-      if (mode === 'open3dstudio') {
-        // Handle Core3D designs
+      if (mode === 'opennexus3dstudio') {
+        // Handle Core3D designs - prioritize design over model
         if (currentDesign) {
           await loadCore3DDesign(currentDesign);
+        } else if (modelToLoad) {
+          // Use the model passed as prop, fallback to context model
+          await loadCore3DModel(modelToLoad);
         } else if (core3dModel) {
+          // Fallback to context model
           await loadCore3DModel(core3dModel);
         }
       } else {
@@ -106,7 +110,7 @@ const Shared3DViewer = ({
     } finally {
       setIsLoading(false);
     }
-  }, [sceneManager, mode, currentDesign, core3dModel, loadModel, onModelLoad, onModelError]);
+  }, [sceneManager, mode, currentDesign, core3dModel, loadModel, loadCore3DDesign, loadCore3DModel, onModelLoad, onModelError]);
 
   // Load Core3D design
   const loadCore3DDesign = useCallback(async (design) => {
@@ -133,19 +137,72 @@ const Shared3DViewer = ({
 
   // Load Core3D model
   const loadCore3DModel = useCallback(async (model) => {
-    if (!sceneManager || !model) return;
+    if (!sceneManager || !model) {
+      console.warn('⚠️ Cannot load Core3D model: missing sceneManager or model', { sceneManager: !!sceneManager, model: !!model });
+      return;
+    }
 
     try {
-      if (model.model_url) {
-        await sceneManager.loadModel(model.model_url, {
+      console.log('📦 Attempting to load Core3D model:', model);
+      
+      // Try multiple possible URL properties
+      let modelUrl = model.model_url || 
+                    model.download_url || 
+                    model.file_url || 
+                    model.url ||
+                    (model.uri && model.uri.startsWith('http') ? model.uri : null) ||
+                    (model.id && typeof model.id === 'string' && model.id.startsWith('http') ? model.id : null);
+      
+      // If we have a URI but not a direct URL, try to fetch model details
+      if (!modelUrl && (model.uri || model.id)) {
+        const modelId = model.uri || model.id;
+        console.log('📦 Model has URI/ID but no direct URL, attempting to fetch details:', modelId);
+        
+        // Try to fetch model details from Core3D API
+        try {
+          // Import the Core3D service (it's a singleton instance)
+          const core3dServiceModule = await import('../services/core3dService');
+          const core3dService = core3dServiceModule.default;
+          
+          if (core3dService && core3dService.isInitialized) {
+            const modelDetails = await core3dService.getModel(modelId);
+            console.log('📦 Fetched model details:', modelDetails);
+            
+            // Try to get URL from fetched details
+            modelUrl = modelDetails.model_url || 
+                      modelDetails.download_url || 
+                      modelDetails.file_url || 
+                      modelDetails.url ||
+                      (modelDetails.uri && modelDetails.uri.startsWith('http') ? modelDetails.uri : null);
+          } else {
+            console.warn('⚠️ Core3D service not initialized');
+          }
+        } catch (fetchErr) {
+          console.warn('⚠️ Failed to fetch model details from API:', fetchErr);
+        }
+      }
+      
+      if (modelUrl) {
+        console.log('📦 Loading Core3D model from URL:', modelUrl);
+        await sceneManager.loadModel(modelUrl, {
           format: 'auto',
           optimize: true,
           center: true,
           scale: 1
         });
+        console.log('✅ Core3D model loaded successfully');
+      } else {
+        console.warn('⚠️ Core3D model has no loadable URL. Model data:', {
+          id: model.id,
+          uri: model.uri,
+          name: model.name,
+          keys: Object.keys(model)
+        });
+        setError('Model has no downloadable URL. Please check the model details.');
       }
     } catch (err) {
-      console.error('Failed to load Core3D model:', err);
+      console.error('❌ Failed to load Core3D model:', err);
+      setError(`Failed to load model: ${err.message}`);
       throw err;
     }
   }, [sceneManager]);
@@ -208,12 +265,19 @@ const Shared3DViewer = ({
     }
   }, [isInitialized, model, loadModelIntoViewer]);
 
-  // Handle Core3D design changes
+  // Handle Core3D design changes (prioritize design over model)
   useEffect(() => {
-    if (isInitialized && mode === 'open3dstudio' && currentDesign) {
+    if (isInitialized && mode === 'opennexus3dstudio' && currentDesign) {
       loadCore3DDesign(currentDesign);
     }
   }, [isInitialized, mode, currentDesign, loadCore3DDesign]);
+
+  // Handle Core3D model changes when in opennexus3dstudio mode (if no design is active)
+  useEffect(() => {
+    if (isInitialized && mode === 'opennexus3dstudio' && !currentDesign && core3dModel) {
+      loadCore3DModel(core3dModel);
+    }
+  }, [isInitialized, mode, currentDesign, core3dModel, loadCore3DModel]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -332,7 +396,7 @@ const Shared3DViewer = ({
       {/* Mode indicator */}
       <div className="viewer-mode-indicator">
         <span className={`mode-badge ${mode}`}>
-          {mode === 'characterstudio' ? '🎭 CharacterStudio' : '🎨 Open3DStudio'}
+          {mode === 'characterstudio' ? '🎭 CharacterStudio' : '🎨 OpenNexus3DStudio'}
         </span>
       </div>
     </div>

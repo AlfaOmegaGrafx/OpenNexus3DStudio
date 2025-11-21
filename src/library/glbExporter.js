@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { getOptimizedTextureOptions } from './textureOptimizer.js';
 
 export class GLBExporter {
   constructor() {
@@ -49,11 +50,22 @@ export class GLBExporter {
         exportScene.userData = metadata;
       }
 
-      // Export to GLB
+      // Export to GLB with optimized texture settings
+      // OPTIMIZED: Apply texture size limiting and optimization options
+      const optimizedTextureOptions = getOptimizedTextureOptions({
+        // Allow user to override if needed
+        maxTextureSize: options.maxTextureSize,
+        forcePowerOfTwoTextures: options.forcePowerOfTwoTextures,
+      });
+      
       const glbData = await this.exporter.parseAsync(exportScene, {
         binary: true,
         includeCustomExtensions: vrmCompatible,
-        animations: includeAnimations ? this.extractAnimations(model) : []
+        animations: includeAnimations ? this.extractAnimations(model) : [],
+        // OPTIMIZED: Add texture optimization options (ported from CharacterStudioRedux)
+        truncateDrawRange: true,
+        forcePowerOfTwoTextures: optimizedTextureOptions.forcePowerOfTwoTextures,  // false = allows exact sizes
+        maxTextureSize: optimizedTextureOptions.maxTextureSize,  // 1024 = 16x size reduction vs 4096
       });
 
       // Create blob and download
@@ -161,7 +173,7 @@ export class GLBExporter {
     model.userData = {
       ...model.userData,
       vrmCompatible: true,
-      exportSource: 'Open3DStudio',
+      exportSource: 'OpenNexus3DStudio',
       exportDate: new Date().toISOString()
     };
 
@@ -197,9 +209,9 @@ export class GLBExporter {
       VRM: {
         version: '0.0',
         meta: {
-          title: 'Open3DStudio Export',
+          title: 'OpenNexus3DStudio Export',
           version: '1.0.0',
-          author: 'Open3DStudio',
+          author: 'OpenNexus3DStudio',
           contactInformation: '',
           reference: '',
           texture: -1,
@@ -275,7 +287,7 @@ export class GLBExporter {
       includeTextures: true,
       includeAnimations: true,
       metadata: {
-        source: 'Open3DStudio',
+        source: 'OpenNexus3DStudio',
         target: 'CharacterStudio',
         compatibility: 'VRM',
         exportDate: new Date().toISOString()

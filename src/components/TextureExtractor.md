@@ -1,6 +1,6 @@
 # 🎨 Texture Extractor
 
-A comprehensive texture extraction and management component for Open3DStudio.
+A comprehensive texture extraction and management component for Open3DStudio (OpenNexus3DStudio).
 
 ## Features
 

@@ -155,13 +155,14 @@
     display: inline-block;
     width: 20px;
     height: 20px;
-    border: 2px solid #284b39; /* Change border color as needed */
+    border: 2px solid #007acc; /* Blue border to match theme */
     border-radius: 5px;
     cursor: pointer;
+    position: relative;
   }
   
   .custom-checkbox .checkbox-container.checked {
-    background-color: #5eb086; /* Change background color when checked */
+    background-color: #007acc; /* Blue background when checked */
   }
   
   .custom-checkbox .checkbox-container .checkmark {
@@ -170,7 +171,20 @@
   
   /* Style the checkmark when the checkbox is checked */
   .custom-checkbox input[type="checkbox"]:checked + .checkbox-container {
-    background-color: #5eb086; /* Change background color when checked */
+    background-color: #007acc; /* Blue background when checked */
+    border-color: #007acc;
+  }
+  
+  .custom-checkbox input[type="checkbox"]:checked + .checkbox-container::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    display: block;
   }
   
   .custom-checkbox input[type="checkbox"]:checked + .checkbox-container .checkmark {

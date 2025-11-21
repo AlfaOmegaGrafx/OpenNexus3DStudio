@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import BoneStructurePanel from './BoneStructurePanel';
 
 const BlendShapeController = ({ sceneManager, currentModel, isActive, onToggle }) => {
@@ -7,6 +7,7 @@ const BlendShapeController = ({ sceneManager, currentModel, isActive, onToggle }
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBonePanel, setShowBonePanel] = useState(false);
   const [bonePanelExpanded, setBonePanelExpanded] = useState(false);
+  const cardHeaderRef = useRef(null);
 
   useEffect(() => {
     console.log('BlendShapeController: currentModel changed', currentModel);
@@ -70,6 +71,16 @@ const BlendShapeController = ({ sceneManager, currentModel, isActive, onToggle }
     if (isActive) {
       setShowBonePanel(true);
       setIsExpanded(true);
+      // Auto-scroll header into view when externally activated
+      if (cardHeaderRef.current) {
+        setTimeout(() => {
+          cardHeaderRef.current?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start',
+            inline: 'nearest'
+          });
+        }, 0);
+      }
     }
   }, [isActive]);
 
@@ -113,7 +124,27 @@ const BlendShapeController = ({ sceneManager, currentModel, isActive, onToggle }
   return (
     <div className="blend-shape-controller">
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" ref={cardHeaderRef}>
+          <button 
+            onClick={() => {
+              const newExpanded = !isExpanded;
+              setIsExpanded(newExpanded);
+              // Auto-scroll header into view when expanding
+              if (newExpanded && cardHeaderRef.current) {
+                setTimeout(() => {
+                  cardHeaderRef.current?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                  });
+                }, 0);
+              }
+            }}
+            className="expand-icon-button"
+            title={isExpanded ? "Hide Blend Shapes" : "Show Blend Shapes"}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
           <button 
             onClick={() => {
               console.log('Skeleton icon clicked, current state:', showBonePanel);
@@ -123,13 +154,6 @@ const BlendShapeController = ({ sceneManager, currentModel, isActive, onToggle }
             title={showBonePanel ? "Hide Bone Structure" : "Show Bone Structure"}
           >
             🦴
-          </button>
-          <button 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="expand-icon-button"
-            title={isExpanded ? "Hide Blend Shapes" : "Show Blend Shapes"}
-          >
-            {isExpanded ? '▼' : '▶'}
           </button>
           <h3 className="card-title">Blend Shapes</h3>
           {isExpanded && (

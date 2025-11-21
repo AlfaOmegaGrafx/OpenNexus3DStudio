@@ -290,6 +290,9 @@ scripts/restore-scene-controls.bat
 restore-scene-controls.js
 SCENE_CONTROLS_BACKUP.md
 
+# MCP Configuration (contains sensitive keys)
+.cursor/mcp.json
+
 # LOCKED FILES - DO NOT DELETE
 # MONETIZATION_ROADMAP.md - LOCKED FILE - DO NOT DELETE
 # MONETIZATION_ROADMAP_BACKUP.md - BACKUP FILE - DO NOT DELETE

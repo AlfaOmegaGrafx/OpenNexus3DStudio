@@ -31,7 +31,8 @@ const imageToMaterialMapping = {
   orm: ["ormMap", "aoMap", "roughnessMap", "metalnessMap"]
 };
 
-export const createTextureAtlas = async ({ transparentColor, meshes, includeNonTexturedMeshesInAtlas=false, atlasSize = 4096, mtoon=true, transparentMaterial=false, transparentTexture = false, twoSidedMaterial = false }) => {
+export const createTextureAtlas = async ({ transparentColor, meshes, includeNonTexturedMeshesInAtlas=false, atlasSize = 2048, mtoon=true, transparentMaterial=false, transparentTexture = false, twoSidedMaterial = false }) => {
+  // OPTIMIZED: Default atlas size changed from 4096 to 2048 (matches CharacterStudioRedux optimization)
   // detect whether we are in node or the browser
   const isNode = typeof window === 'undefined';
   // if we are in node, call createTextureAtlasNode
@@ -170,7 +171,90 @@ export const createTextureAtlasNode = async ({ meshes, atlasSize, mtoon, transpa
  */
 export const createTextureAtlasBrowser = async ({ backColor, includeNonTexturedMeshesInAtlas=false,meshes, atlasSize, mtoon, transparentMaterial, transparentTexture, twoSidedMaterial, scale=1}) => {
   const ATLAS_SIZE_PX = atlasSize;
-  const IMAGE_NAMES = mtoon ? ["diffuse"] : ["diffuse", "orm", "normal"];// not using normal texture for now
+  // FIX: Include ORM and normal textures even for MToon materials if they exist in source materials
+  // Check if any material has normalMap or roughnessMap
+  // Also check userData for VRM texture references (VRM materials might have textures in userData)
+  let hasNormalMap = false;
+  let hasRoughnessMap = false;
+  meshes.forEach((mesh) => {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (material) {
+      if (material.normalMap) hasNormalMap = true;
+      if (material.roughnessMap || material.metalnessMap || material.aoMap) hasRoughnessMap = true;
+      // Check userData for VRM texture references (some VRM materials store textures here)
+      if (material.userData?.vrmMaterial) {
+        const vrmMat = material.userData.vrmMaterial;
+        if (vrmMat.uniforms?.normalMap || vrmMat.normalMap) hasNormalMap = true;
+        if (vrmMat.uniforms?.roughnessMap || vrmMat.roughnessMap) hasRoughnessMap = true;
+      }
+    }
+  });
+  
+  // FIX: For MToon materials, always include ORM and normal if we're exporting from a VRM
+  // This ensures we preserve all texture channels even if the material properties don't show them
+  // Check if we're working with a VRM model by looking for VRM-specific properties
+  const isVRMExport = meshes.some(mesh => {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    return material?.userData?.vrmMaterial || material?.userData?.isVRMMaterial || 
+           mesh.userData?.vrm || mesh.parent?.userData?.vrm;
+  });
+  
+  // FIX: Also check if source materials have textures in their names (VRM exports often have "_orm" or "_normal" in texture names)
+  // This helps detect ORM/normal textures even if they're not assigned to material properties
+  const hasOrmInNames = meshes.some(mesh => {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (material?.map?.name?.includes('_orm') || material?.map?.name?.includes('orm')) return true;
+    if (material?.userData?.vrmMaterial?.uniforms?.map?.name?.includes('_orm')) return true;
+    return false;
+  });
+  const hasNormalInNames = meshes.some(mesh => {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (material?.map?.name?.includes('_normal') || material?.map?.name?.includes('normal')) return true;
+    if (material?.userData?.vrmMaterial?.uniforms?.map?.name?.includes('_normal')) return true;
+    return false;
+  });
+  
+  // Build IMAGE_NAMES based on material type and available textures
+  // FIX: For VRM exports with MToon, ALWAYS include ORM and normal if they exist in source materials
+  // This ensures ORM textures are exported even when using MToon shader
+  // Check source materials more thoroughly for ORM textures
+  const hasOrmInSourceMaterials = meshes.some(mesh => {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (!material) return false;
+    // Check direct material properties
+    if (material.roughnessMap || material.metalnessMap || material.aoMap) return true;
+    // Check userData for VRM materials
+    if (material.userData?.vrmMaterial) {
+      const vrmMat = material.userData.vrmMaterial;
+      if (vrmMat.roughnessMap || vrmMat.metalnessMap || vrmMat.aoMap) return true;
+      if (vrmMat.uniforms?.roughnessMap || vrmMat.uniforms?.metalnessMap || vrmMat.uniforms?.aoMap) return true;
+    }
+    // Check texture names
+    if (material.map?.name?.includes('_orm') || material.map?.name?.includes('orm')) return true;
+    return false;
+  });
+  
+  const shouldIncludeOrm = hasOrmInSourceMaterials || hasRoughnessMap || hasOrmInNames || isVRMExport;
+  const shouldIncludeNormal = hasNormalMap || hasNormalInNames || isVRMExport;
+  
+  const IMAGE_NAMES = mtoon 
+    ? (shouldIncludeNormal || shouldIncludeOrm 
+        ? ["diffuse", ...(shouldIncludeOrm ? ["orm"] : []), ...(shouldIncludeNormal ? ["normal"] : [])] 
+        : ["diffuse"])
+    : ["diffuse", "orm", "normal"]; // Standard materials always include all channels
+  
+  console.log('🔄 Texture atlas IMAGE_NAMES:', IMAGE_NAMES, {
+    hasNormalMap, 
+    hasRoughnessMap, 
+    isVRMExport, 
+    hasOrmInNames, 
+    hasNormalInNames,
+    hasOrmInSourceMaterials,
+    shouldIncludeOrm,
+    shouldIncludeNormal,
+    mtoon,
+    note: mtoon ? 'MToon material - ORM textures will be included if detected' : 'Standard material - all channels included'
+  });
   const bakeObjects = [];
   // save if there is vrm data
   let vrmMaterial = null;
@@ -189,7 +273,7 @@ export const createTextureAtlasBrowser = async ({ backColor, includeNonTexturedM
     // check if bakeObjects objects that contain the material property with value of mesh.material
     let bakeObject = bakeObjects.find((bakeObject) => bakeObject.material === material);
     if (!bakeObject) {
-      bakeObjects.push({ material, mesh, sibligs:[] });
+      bakeObjects.push({ material, mesh, siblings:[] });
     }
     else {
         // @IMPROVEMENT: Merge meshes with the same material instead of keeping them separate; BUT make sure you merge morph targets and handle VRM expression bind changes!!!
@@ -510,10 +594,23 @@ export const createTextureAtlasBrowser = async ({ backColor, includeNonTexturedM
   if (mtoon){
     // xxx set textures and colors
     // save material as standard material
+    // FIX: Include ORM and normal maps if they exist (for texture channel export)
+    // Ensure ORM and normal textures are set even if they're null (so they can be exported if available)
     material = new THREE.MeshStandardMaterial({
       map: textures["diffuse"],
+      roughnessMap: textures["orm"] || null,  // Will be null if ORM atlas wasn't created
+      metalnessMap: textures["orm"] || null,  // Will be null if ORM atlas wasn't created
+      normalMap: textures["normal"] || null,  // Will be null if normal atlas wasn't created
       transparent: transparentMaterial,
       side: side,
+    });
+    
+    // Log which textures are available
+    console.log('🔄 MToon material textures:', {
+      diffuse: !!textures["diffuse"],
+      orm: !!textures["orm"],
+      normal: !!textures["normal"],
+      materialName: "mToon_" + materialPostName
     });
 
     // make sure to avoid in transparent material alphatest
@@ -538,6 +635,14 @@ export const createTextureAtlasBrowser = async ({ backColor, includeNonTexturedM
     material.userData.shadeTexture = textures["uniformColor"];
     material.name = "mToon_" + materialPostName;
     material.map.name = material.name;
+    
+    // FIX: Set texture names for ORM and normal maps if they exist
+    if (material.roughnessMap) {
+      material.roughnessMap.name = material.name + "_orm";
+    }
+    if (material.normalMap) {
+      material.normalMap.name = material.name + "_normal";
+    }
   }
   else{
     material = new THREE.MeshStandardMaterial({

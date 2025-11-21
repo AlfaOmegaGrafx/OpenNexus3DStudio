@@ -1,5 +1,5 @@
 /**
- * CharacterStudioBridge - Bridge for importing Open3DStudio GLB exports into CharacterStudio
+ * CharacterStudioBridge - Bridge for importing OpenNexus3DStudio GLB exports into CharacterStudio
  * Handles format conversion and VRM compatibility
  */
 import * as THREE from 'three';
@@ -20,11 +20,11 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Load Open3DStudio GLB for CharacterStudio
+   * Load OpenNexus3DStudio GLB for CharacterStudio
    * @param {File|string} source - GLB file or URL
    * @param {Object} options - Loading options
    */
-  async loadOpen3DStudioGLB(source, options = {}) {
+  async loadOpenNexus3DStudioGLB(source, options = {}) {
     const {
       convertToVRM = true,
       addVRMStructure = true,
@@ -49,7 +49,7 @@ export class CharacterStudioBridge {
       this.emit('loadComplete', { model: processedModel, gltf });
       return processedModel;
     } catch (error) {
-      console.error('Failed to load Open3DStudio GLB:', error);
+      console.error('Failed to load OpenNexus3DStudio GLB:', error);
       this.emit('loadError', { error, source });
       throw error;
     }
@@ -122,9 +122,9 @@ export class CharacterStudioBridge {
     // Create VRM userData structure
     scene.userData.vrm = {
       meta: {
-        title: 'Open3DStudio Import',
+        title: 'OpenNexus3DStudio Import',
         version: '1.0.0',
-        author: 'Open3DStudio',
+        author: 'OpenNexus3DStudio',
         contactInformation: '',
         reference: '',
         texture: -1,
@@ -319,7 +319,7 @@ export class CharacterStudioBridge {
   addCharacterStudioProperties(scene) {
     scene.userData.characterStudio = {
       imported: true,
-      source: 'Open3DStudio',
+      source: 'OpenNexus3DStudio',
       importDate: new Date().toISOString(),
       version: '1.0.0',
       compatible: true
@@ -352,7 +352,7 @@ export class CharacterStudioBridge {
       ...scene.userData.metadata,
       characterStudio: {
         compatible: true,
-        importSource: 'Open3DStudio',
+        importSource: 'OpenNexus3DStudio',
         importDate: new Date().toISOString(),
         version: '1.0.0'
       }

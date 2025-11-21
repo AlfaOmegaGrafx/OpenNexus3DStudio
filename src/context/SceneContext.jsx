@@ -189,6 +189,12 @@ export const SceneProvider = ({ children }) => {
     }
   };
 
+  const focusOnFace = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.focusOnFace();
+    }
+  };
+
   const setView = (view) => {
     if (sceneManagerRef.current) {
       sceneManagerRef.current.setView(view);
@@ -276,6 +282,7 @@ export const SceneProvider = ({ children }) => {
     setLightIntensity,
     setCameraMode,
     resetCamera,
+    focusOnFace,
     setView,
     toggleStats,
     toggleAutoRotate,

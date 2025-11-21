@@ -28,7 +28,6 @@ export class TaskManager {
    */
   async checkConnection() {
     try {
-      console.log(`🔗 Checking API connection to: ${this.apiEndpoint}/health`);
       const startTime = Date.now();
       
       const response = await axios.get(`${this.apiEndpoint}/health`, { 
@@ -40,10 +39,18 @@ export class TaskManager {
       });
       
       const responseTime = Date.now() - startTime;
-      console.log(`✅ API response received in ${responseTime}ms:`, response.data);
-      console.log(`📊 API Status: ${response.status} | Headers:`, response.headers);
-      
+      const wasConnected = this.isConnected;
       this.isConnected = response.status === 200;
+      
+      // Only log when connection status changes
+      if (wasConnected !== this.isConnected) {
+        if (this.isConnected) {
+          console.log(`✅ API connected to ${this.apiEndpoint} (${responseTime}ms)`);
+        } else {
+          console.warn(`⚠️ API disconnected from ${this.apiEndpoint}`);
+        }
+      }
+      
       this.emit('connectionStatusChanged', { 
         connected: this.isConnected, 
         responseTime,
@@ -52,19 +59,26 @@ export class TaskManager {
         data: response.data
       });
       
-      console.log(`🎯 API connection status: ${this.isConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
       return this.isConnected;
     } catch (error) {
-      console.error('❌ API connection failed:', {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        endpoint: this.apiEndpoint,
-        timeout: error.code === 'ECONNABORTED'
-      });
-      
+      const wasConnected = this.isConnected;
       this.isConnected = false;
+      
+      // Only log errors when connection status changes or on first failure
+      if (wasConnected || !this.lastErrorTime || Date.now() - this.lastErrorTime > 30000) {
+        const errorMsg = error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
+          ? `API unavailable at ${this.apiEndpoint}`
+          : `API connection error: ${error.message}`;
+        
+        if (wasConnected) {
+          console.warn(`⚠️ ${errorMsg}`);
+        } else {
+          // Only log periodically when already disconnected
+          console.debug(`🔌 ${errorMsg}`);
+        }
+        this.lastErrorTime = Date.now();
+      }
+      
       this.emit('connectionStatusChanged', { 
         connected: false, 
         error: {

@@ -279,7 +279,7 @@
 
 /* Scrollbar styling for webkit browsers */
 .webgl-error-dialog::-webkit-scrollbar {
-  width: 8px;
+  width: var(--scrollbar-size, 8px);
 }
 
 .webgl-error-dialog::-webkit-scrollbar-track {

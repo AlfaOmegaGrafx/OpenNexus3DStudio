@@ -198,13 +198,17 @@ export function fetchOwnedNFTs (walletAddress, network, collection){
     case 'polygon':{
       return fetchFromOpensea(walletAddress, "matic", collection);
     }
+    case 'base':{
+      // Base uses same OpenSea API format as Ethereum
+      return fetchFromOpensea(walletAddress, "base", collection);
+    }
     case 'solana':{
       console.warn("solana work in progress");
       return Promise.resolve(false);
       return fetchFromMetaplex(walletAddress, collection);
     }
     default:{
-      console.log("Unsupported Netwrok: " + walletAddress)
+      console.log("Unsupported Network: " + network)
       return Promise.resolve(false);
     }
   }
@@ -270,17 +274,40 @@ const fetchFromMetaplex = (walletAddress, collection) =>{
 /**
  * Switches the active wallet to a specific blockchain and retrieves the wallet address.
  * 
- * @param {string} network - The blockchain name (`"ethereum"`, `"polygon"` or `"solana"`).
- * @param {string} wallet - The wallet name (`"metamask"`, `"phantom"` or `"solana"`).
+ * @param {string} network - The blockchain name (`"ethereum"`, `"polygon"`, `"base"`, or `"solana"`).
+ * @param {string} walletType - Optional wallet type (`"metamask"`, `"phantom"`, `"thirdweb-smart"`, `"thirdweb-inapp"`, or `"solana"`).
  * @returns {Promise<string>} A promise resolving to the active wallet address, or an empty string on error.
  */
-export function connectWallet(network) {
-  console.log("connect wallet:", network);
+export function connectWallet(network, walletType = null) {
+  console.log("connect wallet:", network, walletType);
   return new Promise(async (resolve, reject) => {
     try {
       switch (network.toLowerCase()) {
         case 'ethereum':
-        case 'polygon': {
+        case 'polygon':
+        case 'base': {
+          // Check for Thirdweb wallet types first
+          if (walletType === 'thirdweb-smart' || walletType === 'thirdweb-inapp') {
+            try {
+              const { ThirdwebSmartWalletManager } = await import('./thirdwebSmartWallet');
+              const { ThirdwebInAppWalletManager } = await import('./thirdwebInAppWallet');
+              
+              if (walletType === 'thirdweb-smart') {
+                const smartWallet = new ThirdwebSmartWalletManager({ chain: network.toLowerCase() });
+                const address = await smartWallet.connectSmartWallet({ sponsorGas: true });
+                return resolve(address);
+              } else {
+                const inAppWallet = new ThirdwebInAppWalletManager({ chain: network.toLowerCase() });
+                const address = await inAppWallet.showConnectionModal();
+                return resolve(address);
+              }
+            } catch (error) {
+              console.warn('Thirdweb wallet connection failed, falling back to MetaMask:', error);
+              // Fall through to MetaMask
+            }
+          }
+
+          // Default to MetaMask/Ethereum wallet
           if (!window.ethereum) {
             return reject(new Error('Ethereum wallet is not available.'));
           }
@@ -288,8 +315,9 @@ export function connectWallet(network) {
           const chainIdMap = {
             ethereum: '0x1', // Ethereum Mainnet
             polygon: '0x89', // Polygon Mainnet
+            base: '0x2105', // Base Mainnet (8453 in decimal)
           };
-          const targetChain = network.toLowerCase() == ethereum ? chainIdMap.ethereum : chainIdMap.polygon;
+          const targetChain = chainIdMap[network.toLowerCase()] || chainIdMap.ethereum;
 
           await window.ethereum.request({
               method: 'wallet_switchEthereumChain',

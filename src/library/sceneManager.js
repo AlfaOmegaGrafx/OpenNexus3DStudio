@@ -2,12 +2,8 @@
  * SceneManager - Central orchestrator for 3D scene management
  * Similar to CharacterManager in CharacterStudio, but focused on 3D AIGC workflows
  */
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import * as THREE from './three.js';
+import { GLTFLoader, OBJLoader, FBXLoader, OrbitControls, RGBELoader, DRACOLoader } from './three.js';
 import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
@@ -41,6 +37,15 @@ export class SceneManager {
     
     // Loaders
     this.gltfLoader = new GLTFLoader();
+    
+    // Configure DRACOLoader for compressed GLTF/GLB models
+    this.dracoLoader = new DRACOLoader();
+    // Use CDN for Draco decoder (supports both wasm and js decoders)
+    this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    // Alternative: Use jsdelivr CDN (uncomment if gstatic doesn't work)
+    // this.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/');
+    this.gltfLoader.setDRACOLoader(this.dracoLoader);
+    
     this.objLoader = new OBJLoader();
     this.fbxLoader = new FBXLoader();
     
@@ -432,16 +437,24 @@ export class SceneManager {
   }
 
   /**
-   * Setup HDR environment map using shared manager
+   * Setup sky background image from Character Studio
    */
   setupHDREnvironment() {
-    // Register this scene with the shared HDR manager
-    sharedHDRManager.registerScene(this.scene);
+    if (!this.scene) return;
     
-    // Load HDR if not already loaded
-    if (!sharedHDRManager.isHDRLoaded()) {
-      sharedHDRManager.loadHDR();
+    // Load the sky background image
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(
+      '/assets/backgrounds/background4.jpg',
+      (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        this.scene.background = texture;
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load sky background image:', error);
     }
+    );
   }
 
   /**
@@ -1710,8 +1723,24 @@ export class SceneManager {
    * Process loaded model (center, scale, etc.)
    */
   processModel(model, options = {}) {
-    const { autoCenter = true, autoScale = true, scale = 1 } = options;
-    console.log('processModel called with options:', { autoCenter, autoScale, scale });
+    const { 
+      autoCenter = true, 
+      autoScale = true, 
+      scale = 1,
+      ensureForwardFacing = true,
+      orientationMode = 'auto'
+    } = options;
+    console.log('processModel called with options:', { autoCenter, autoScale, scale, ensureForwardFacing, orientationMode });
+
+    const applyOrientation = () => {
+      if (orientationMode === 'core3d') {
+        model.rotation.y += Math.PI;
+        model.updateMatrixWorld(true);
+        console.log('🎯 Applied Core3D orientation correction');
+      } else if (ensureForwardFacing && orientationMode === 'auto') {
+        this.ensureModelOrientation(model);
+      }
+    };
 
     if (autoCenter || autoScale) {
       const box = new THREE.Box3().setFromObject(model);
@@ -1728,9 +1757,7 @@ export class SceneManager {
         console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
         model.scale.setScalar(targetScale);
       }
-      
-      // Rotate model 180 degrees around Y-axis to face the viewport
-      model.rotation.y += Math.PI;
+      applyOrientation();
       
               if (autoCenter) {
                 // Recalculate bounding box after rotation and scaling
@@ -1765,8 +1792,7 @@ export class SceneManager {
                 });
               }
     } else {
-      // Rotate model 180 degrees around Y-axis to face the viewport
-      model.rotation.y += Math.PI;
+      applyOrientation();
     }
 
     return model;
@@ -1805,22 +1831,27 @@ export class SceneManager {
   /**
    * Ensure model is properly oriented (facing forward)
    */
-  ensureModelOrientation() {
-    if (!this.currentModel) return;
+  ensureModelOrientation(targetModel = this.currentModel) {
+    if (!targetModel) return;
     
-    // Check if VRM model needs orientation correction
-    if (this.currentVRM && this.currentVRM.scene) {
+    try {
+      targetModel.updateMatrixWorld(true);
       const modelForward = new THREE.Vector3();
-      this.currentModel.getWorldDirection(modelForward);
+      targetModel.getWorldDirection(modelForward);
       
-      // Only rotate if the model is actually facing backwards
-      if (modelForward.z > 0.5) {
-        console.log('🔄 Model is facing backwards, rotating 180 degrees');
-        this.currentModel.rotation.y += Math.PI;
-        console.log('🔄 Model rotation after correction:', this.currentModel.rotation);
+      // getWorldDirection returns the direction of the negative Z axis.
+      // We want models to face toward -Z (toward the camera positioned on +Z).
+      if (modelForward.z > 0) {
+        console.log('🔄 Model forward vector points away from camera, rotating 180 degrees');
+        targetModel.rotation.y += Math.PI;
+        targetModel.updateMatrixWorld(true);
+        console.log('🔄 Model rotation after correction:', targetModel.rotation);
       } else {
-        console.log('✅ Model is already facing forward, no correction needed');
+        console.log('✅ Model orientation already faces the camera');
       }
+    } catch (error) {
+      console.warn('⚠️ Failed to evaluate model orientation, applying fallback rotation:', error);
+      targetModel.rotation.y += Math.PI;
     }
   }
 
@@ -2843,14 +2874,36 @@ export class SceneManager {
         targetLookAt = focusPoint.clone();
         break;
       case 'Top':
-        // Position directly above the model center, no X/Z offset inheritance
-        targetPosition = new THREE.Vector3(0, focusPoint.y + distance, 0);
-        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        // Position directly above the model center, always at origin X/Z regardless of previous view
+        // Get actual model center if available, otherwise use focus point Y
+        let topY = focusPoint.y;
+        let topLookAtY = focusPoint.y;
+        if (this.currentModel) {
+          const box = new THREE.Box3().setFromObject(this.currentModel);
+          if (!box.isEmpty()) {
+            const modelCenter = box.getCenter(new THREE.Vector3());
+            topY = modelCenter.y;
+            topLookAtY = modelCenter.y;
+          }
+        }
+        targetPosition = new THREE.Vector3(0, topY + distance, 0);
+        targetLookAt = new THREE.Vector3(0, topLookAtY, 0);
         break;
       case 'Bottom':
-        // Position directly below the model center, no X/Z offset inheritance
-        targetPosition = new THREE.Vector3(0, focusPoint.y - distance, 0);
-        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        // Position directly below the model center, always at origin X/Z regardless of previous view
+        // Get actual model center if available, otherwise use focus point Y
+        let bottomY = focusPoint.y;
+        let bottomLookAtY = focusPoint.y;
+        if (this.currentModel) {
+          const box = new THREE.Box3().setFromObject(this.currentModel);
+          if (!box.isEmpty()) {
+            const modelCenter = box.getCenter(new THREE.Vector3());
+            bottomY = modelCenter.y;
+            bottomLookAtY = modelCenter.y;
+          }
+        }
+        targetPosition = new THREE.Vector3(0, bottomY - distance, 0);
+        targetLookAt = new THREE.Vector3(0, bottomLookAtY, 0);
         break;
       case 'Isometric':
         // Calculate isometric distance to maintain same zoom level
@@ -3258,6 +3311,127 @@ export class SceneManager {
 
     console.log('Camera focused on model at:', cameraPosition);
     console.log('Camera looking at:', center);
+  }
+
+  /**
+   * Focus camera on the face/head of the current model
+   * Detects VRM head bone or estimates face position from model geometry
+   */
+  focusOnFace() {
+    if (!this.currentModel || !this.camera || !this.controls) {
+      console.warn('Cannot focus on face: missing model, camera, or controls');
+      return;
+    }
+
+    console.log('🎯 Focusing camera on face...');
+    
+    let facePosition = null;
+    let hasFace = false;
+
+    // Try to find head bone in VRM model
+    if (this.currentVRM && this.currentVRM.humanoid) {
+      const humanBones = this.currentVRM.humanoid.humanBones;
+      
+      // Look for head bone
+      if (humanBones && humanBones.head && humanBones.head.node) {
+        const headBone = humanBones.head.node;
+        facePosition = new THREE.Vector3();
+        headBone.getWorldPosition(facePosition);
+        hasFace = true;
+        console.log('✅ Found VRM head bone at:', facePosition);
+      }
+    }
+
+    // Fallback: Try to find head bone by name in the model
+    if (!hasFace && this.currentModel) {
+      this.currentModel.traverse((child) => {
+        if (child.isBone && (child.name.toLowerCase() === 'head' || 
+                             child.name.toLowerCase().includes('head'))) {
+          facePosition = new THREE.Vector3();
+          child.getWorldPosition(facePosition);
+          hasFace = true;
+          console.log('✅ Found head bone by name at:', facePosition);
+          return; // Stop traversal
+        }
+      });
+    }
+
+    // Fallback: Estimate face position from model bounding box
+    if (!hasFace) {
+      const box = new THREE.Box3().setFromObject(this.currentModel);
+      
+      if (!box.isEmpty() && isFinite(box.min.x)) {
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        // Estimate face position: upper portion of the model, slightly forward
+        facePosition = center.clone();
+        facePosition.y += size.y * 0.3; // Upper portion (head area)
+        facePosition.z += size.z * 0.1; // Slightly forward (face forward)
+        hasFace = true;
+        console.log('📍 Estimated face position from bounding box:', facePosition);
+      }
+    }
+
+    if (!hasFace || !facePosition) {
+      console.warn('⚠️ Could not determine face position, focusing on model center');
+      this.focusOnModel();
+      return;
+    }
+
+    // Calculate camera position for face close-up
+    // Position camera in front of face for head-and-shoulders portrait view
+    const faceDistance = 0.12; // Very close-up distance for portrait view (head and shoulders)
+    const cameraOffset = new THREE.Vector3(0, 0, faceDistance); // Directly in front of face, eye level
+    
+    // Get model's forward direction (usually -Z in VRM)
+    const modelForward = new THREE.Vector3(0, 0, -1);
+    if (this.currentModel) {
+      // Apply model's rotation to forward vector
+      modelForward.applyQuaternion(this.currentModel.quaternion);
+    }
+    
+    // Calculate camera position relative to face
+    const targetCameraPosition = facePosition.clone();
+    targetCameraPosition.add(cameraOffset);
+    
+    // Store starting positions for smooth animation
+    const startCameraPosition = this.camera.position.clone();
+    const startLookAt = this.controls.target ? this.controls.target.clone() : new THREE.Vector3();
+    
+    // Animation parameters
+    const duration = 1000; // 1 second animation
+    const startTime = performance.now();
+    
+    // Animation function
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing function (ease-out)
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      // Interpolate camera position
+      this.camera.position.lerpVectors(startCameraPosition, targetCameraPosition, easeOut);
+      
+      // Interpolate look-at target (face position)
+      if (this.controls.target) {
+        this.controls.target.lerpVectors(startLookAt, facePosition, easeOut);
+      }
+      
+      // Update controls
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        console.log('✅ Camera focused on face at:', facePosition);
+      }
+    };
+    
+    // Start animation
+    requestAnimationFrame(animate);
   }
 
 
@@ -3819,7 +3993,9 @@ export class SceneManager {
       }
     } else if (typeof source === 'string') {
       console.log('String source:', source);
-      const parts = source.split('.');
+      // Strip query parameters and hash from URL before extracting extension
+      const urlWithoutQuery = source.split('?')[0].split('#')[0];
+      const parts = urlWithoutQuery.split('.');
       console.log('String parts:', parts);
       if (parts.length > 1) {
         extension = parts.pop().toLowerCase();
@@ -3873,7 +4049,7 @@ export class SceneManager {
    */
   async exportToGLB(options = {}) {
     const {
-      filename = 'open3dstudio_export.glb',
+      filename = 'opennexus3dstudio_export.glb',
       forCharacterStudio = true,
       ...exportOptions
     } = options;
@@ -3907,7 +4083,7 @@ export class SceneManager {
    */
   async exportToVRM(options = {}) {
     const {
-      filename = 'open3dstudio_export.vrm',
+      filename = 'opennexus3dstudio_export.vrm',
       vrmVersion = '0.0',
       metadata = {},
       ...exportOptions

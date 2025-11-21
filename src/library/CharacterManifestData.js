@@ -136,6 +136,8 @@ export class CharacterManifestData{
         downloadOptions.stdAtlasSizeTransp = downloadOptions.stdAtlasSizeTransp || 1024;
         downloadOptions.exportStdAtlas = downloadOptions.exportStdAtlas || false;
         downloadOptions.exportMtoonAtlas = downloadOptions.exportMtoonAtlas || true;
+        // OPTIMIZED: Enable texture atlas by default (ported from CharacterStudioRedux)
+        downloadOptions.createTextureAtlas = downloadOptions.createTextureAtlas !== undefined ? downloadOptions.createTextureAtlas : true;
         downloadOptions.screenshotFaceDistance = downloadOptions.screenshotFaceDistance || 1;
         downloadOptions.screenshotFaceOffset = downloadOptions.screenshotFaceOffset || [0,0,0];
         downloadOptions.screenshotResolution = downloadOptions.screenshotResolution || [512,512];

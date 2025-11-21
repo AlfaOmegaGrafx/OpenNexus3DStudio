@@ -1,8 +1,8 @@
 {
-  "name": "open3dstudio",
+  "name": "opennexus3dstudio",
   "version": "1.0.0",
   "description": "A 3D AIGC application for completely locally deployed and free 3DAIGC workflows",
-  "homepage": "https://github.com/FishWoWater/Open3DStudio",
+  "homepage": "https://github.com/FishWoWater/OpenNexus3DStudio",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
@@ -20,14 +20,20 @@
     "test:coverage": "vitest run --coverage",
     "lint": "npm run lint:js && npm run lint:prettier",
     "lint:js": "eslint --cache --ext .js,.jsx ./src",
-    "lint:prettier": "prettier --check \"**/*\" --end-of-line auto"
+    "lint:prettier": "prettier --check \"**/*\" --end-of-line auto",
+    "setup-mcp": "node scripts/setup-thirdweb-mcp.js",
+    "update-roadmap": "node scripts/update-roadmap-date.js"
   },
   "dependencies": {
+    "@coinbase/x402-sdk": "^0.1.0",
     "@pixiv/three-vrm": "^3.4.3",
     "@solana/web3.js": "^1.98.4",
+    "@thirdweb-dev/react": "^5.0.0",
+    "@thirdweb-dev/sdk": "^5.0.0",
     "@vitejs/plugin-react": "^4.6.0",
     "@web3-react/core": "^8.2.3",
     "@web3-react/injected-connector": "^6.0.7",
+    "@xmtp/agent-sdk": "^0.1.0",
     "axios": "^1.8.0",
     "buffer": "^6.0.3",
     "classnames": "^2.5.1",
@@ -51,6 +57,7 @@
     "react-select": "^5.10.2",
     "squaresplit": "^1.0.2",
     "styled-components": "^5.3.1",
+    "thirdweb": "^5.0.0",
     "three": "^0.169.0",
     "three-mesh-bvh": "^0.8.2",
     "use-sound": "^5.0.0",
@@ -77,8 +84,8 @@
   },
   "main": "public/electron.js",
   "build": {
-    "appId": "com.open3dstudio.app",
-    "productName": "Open3DStudio",
+    "appId": "com.opennexus3dstudio.app",
+    "productName": "OpenNexus3DStudio",
     "directories": {
       "output": "dist"
     },

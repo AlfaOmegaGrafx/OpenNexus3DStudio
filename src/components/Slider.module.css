@@ -8,7 +8,83 @@
 .slider {
   width: 100%; /* Adjust as needed */
   margin-right: 10px;
-  
+  height: 4px;
+  background: #555;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* WebKit track styling - blue fill */
+.slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to right, #007acc 0%, #007acc var(--slider-progress, 0%), #555 var(--slider-progress, 0%), #555 100%);
+  border-radius: 2px;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-top: -4px;
+}
+
+/* Firefox track styling - blue fill */
+.slider::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  background: #555;
+  border-radius: 2px;
+}
+
+.slider::-moz-range-progress {
+  height: 4px;
+  background: #007acc;
+  border-radius: 2px 0 0 2px;
+}
+
+.slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* IE/Edge track styling - blue fill */
+.slider::-ms-track {
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+.slider::-ms-fill-lower {
+  background: #007acc;
+  border-radius: 2px 0 0 2px;
+}
+
+.slider::-ms-fill-upper {
+  background: #555;
+  border-radius: 0 2px 2px 0;
+}
+
+.slider::-ms-thumb {
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
 }
 .infoContainer{
   display: flex;

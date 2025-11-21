@@ -108,8 +108,8 @@ const CombinedImport = ({ onFileLoad }) => {
           className={`dropzone ${isDragActive ? 'active' : ''}`}
           style={{
             border: '2px dashed #555',
-            borderRadius: '8px',
-            padding: '1.5rem',
+            borderRadius: '6px',
+            padding: '0.75rem',
             textAlign: 'center',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
@@ -119,16 +119,16 @@ const CombinedImport = ({ onFileLoad }) => {
           <input {...getInputProps()} />
           
           <div className="upload-content">
-            <div className="upload-icon" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
+            <div className="upload-icon" style={{ fontSize: '1.8rem', marginBottom: '0.3rem' }}>
               📁
             </div>
             
             {isDragActive ? (
-              <p>Drop the file here...</p>
+              <p style={{ fontSize: '0.8rem', margin: '0.2rem 0' }}>Drop the file here...</p>
             ) : (
               <div>
-                <p>Drag & drop a file here, or click to select</p>
-                <p className="text-sm text-gray-400 mt-1">
+                <p style={{ fontSize: '0.8rem', margin: '0.2rem 0' }}>Drag & drop a file here, or click to select</p>
+                <p className="text-sm text-gray-400" style={{ fontSize: '0.75rem', margin: '0.15rem 0' }}>
                   Supports: GLB, GLTF, OBJ, FBX, VRM, JPG, PNG
                 </p>
               </div>
@@ -136,8 +136,8 @@ const CombinedImport = ({ onFileLoad }) => {
           </div>
         </div>
 
-        <div className="upload-info mt-2">
-          <h4 className="text-sm font-semibold mb-1">Supported Formats:</h4>
+        <div className="upload-info" style={{ marginTop: '0.5rem', padding: '0 0.75rem' }}>
+          <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>Supported Formats:</h4>
           <div className="format-list">
             <div className="format-item">
               <strong>3D Models:</strong> GLB, GLTF, OBJ, FBX, VRM, DAE, STL
@@ -149,18 +149,18 @@ const CombinedImport = ({ onFileLoad }) => {
         </div>
 
         {vrmMetadata && (
-          <div className="vrm-metadata mt-2">
-            <h4 className="text-sm font-semibold mb-1">VRM Metadata:</h4>
-            <div className="metadata-grid">
-              <div className="metadata-item">
+          <div className="vrm-metadata" style={{ marginTop: '0.5rem', padding: '0 0.75rem' }}>
+            <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>VRM Metadata:</h4>
+            <div className="metadata-grid" style={{ fontSize: '0.7rem' }}>
+              <div className="metadata-item" style={{ marginBottom: '0.2rem' }}>
                 <span className="metadata-label">Title:</span>
                 <span className="metadata-value">{vrmMetadata.title}</span>
               </div>
-              <div className="metadata-item">
+              <div className="metadata-item" style={{ marginBottom: '0.2rem' }}>
                 <span className="metadata-label">Author:</span>
                 <span className="metadata-value">{vrmMetadata.author}</span>
               </div>
-              <div className="metadata-item">
+              <div className="metadata-item" style={{ marginBottom: '0.2rem' }}>
                 <span className="metadata-label">Version:</span>
                 <span className="metadata-value">{vrmMetadata.version}</span>
               </div>
@@ -169,8 +169,8 @@ const CombinedImport = ({ onFileLoad }) => {
         )}
 
         {validationResult && (
-          <div className="validation-result mt-2">
-            <div className={`validation-status ${validationResult.valid ? 'valid' : 'invalid'}`}>
+          <div className="validation-result" style={{ marginTop: '0.5rem', padding: '0 0.75rem' }}>
+            <div className={`validation-status ${validationResult.valid ? 'valid' : 'invalid'}`} style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>
               <span className="status-icon">
                 {validationResult.valid ? '✓' : '⚠'}
               </span>
@@ -181,9 +181,9 @@ const CombinedImport = ({ onFileLoad }) => {
             </div>
             
             {validationResult.isFallbackVRM && (
-              <div className="fallback-info">
-                <h4 className="text-sm font-semibold mb-1 text-yellow-400">⚠️ Fallback Mode:</h4>
-                <p className="text-xs text-yellow-300">
+              <div className="fallback-info" style={{ marginBottom: '0.3rem' }}>
+                <h4 className="text-sm font-semibold text-yellow-400" style={{ fontSize: '0.75rem', marginBottom: '0.2rem' }}>⚠️ Fallback Mode:</h4>
+                <p className="text-xs text-yellow-300" style={{ fontSize: '0.7rem' }}>
                   This VRM model lacks humanoid bones and is loaded in fallback mode. 
                   Some features may be limited, but the model can still be viewed and exported.
                 </p>
@@ -191,11 +191,11 @@ const CombinedImport = ({ onFileLoad }) => {
             )}
             
             {validationResult.issues.length > 0 && (
-              <div className="validation-issues">
-                <h4 className="text-sm font-semibold mb-1">Issues:</h4>
-                <ul className="text-xs text-red-400">
+              <div className="validation-issues" style={{ marginBottom: '0.3rem' }}>
+                <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.2rem' }}>Issues:</h4>
+                <ul className="text-xs text-red-400" style={{ fontSize: '0.7rem' }}>
                   {validationResult.issues.map((issue, index) => (
-                    <li key={index}>• {issue}</li>
+                    <li key={index} style={{ marginBottom: '0.1rem' }}>• {issue}</li>
                   ))}
                 </ul>
               </div>
@@ -203,10 +203,10 @@ const CombinedImport = ({ onFileLoad }) => {
             
             {validationResult.warnings.length > 0 && (
               <div className="validation-warnings">
-                <h4 className="text-sm font-semibold mb-1">Warnings:</h4>
-                <ul className="text-xs text-yellow-400">
+                <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.2rem' }}>Warnings:</h4>
+                <ul className="text-xs text-yellow-400" style={{ fontSize: '0.7rem' }}>
                   {validationResult.warnings.map((warning, index) => (
-                    <li key={index}>• {warning}</li>
+                    <li key={index} style={{ marginBottom: '0.1rem' }}>• {warning}</li>
                   ))}
                 </ul>
               </div>

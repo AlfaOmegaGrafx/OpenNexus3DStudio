@@ -21,7 +21,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
       setValidationResult(null);
 
       // Load and process the GLB file
-      const processedModel = await bridge.loadOpen3DStudioGLB(file, {
+      const processedModel = await bridge.loadOpenNexus3DStudioGLB(file, {
         convertToVRM: true,
         addVRMStructure: true,
         optimizeForCharacterStudio: true,
@@ -65,7 +65,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
         <div className="import-content">
           <div className="import-info mb-3">
             <p className="text-sm text-gray-400 mb-2">
-              Import GLB files exported from Open3DStudio for use in CharacterStudio
+              Import GLB files exported from OpenNexus3DStudio for use in CharacterStudio
             </p>
             <div className="feature-list">
               <div className="feature-item">

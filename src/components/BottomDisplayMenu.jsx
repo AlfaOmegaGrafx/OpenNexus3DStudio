@@ -1,7 +1,6 @@
 import React, {useEffect,useState,useContext} from "react"
 import styles from "./BottomDisplayMenu.module.css"
 import { SceneContext } from "../context/SceneContext"
-import { ViewContext } from "../context/ViewContext"
 import randomizeIcon from "../images/randomize-green.png"
 import wireframeIcon from "../images/wireframe.png"
 import solidIcon from "../images/solid.png"
@@ -21,7 +20,7 @@ export default function BottomDisplayMenu({loadedAnimationName, randomize}){
     lookAtManager,
     animationManager
   } = useContext(SceneContext);
-  const [hasMouseLook, setHasMouseLook] = useState(lookAtManager.userActivated);
+  const [hasMouseLook, setHasMouseLook] = useState(lookAtManager?.userActivated || false);
   const [animationName, setAnimationName] = React.useState(animationManager?.getCurrentAnimationName() || "");
 
   useEffect(()=>{
@@ -34,20 +33,23 @@ export default function BottomDisplayMenu({loadedAnimationName, randomize}){
   },[loadedAnimationName])
 
   const clickDebugMode = () =>{
-    toggleDebugMode()
+    if (toggleDebugMode) toggleDebugMode()
   } 
   
   const handlePlayPauseMode = (play) =>{
+    if (!animationManager) return;
     play ? animationManager.play() : animationManager.pause();
     animationManager.setSpeed(1);
   }
 
   const handlePlaySpeed = (speed) =>{
+    if (!animationManager) return;
     animationManager.play()
     animationManager.setSpeed(speed);
   }
 
   const handleMouseLookEnable = () => {
+    if (!lookAtManager || !animationManager) return;
     lookAtManager.setActive(!hasMouseLook);
     // should be called within lookatManager
     animationManager.enableMouseLook(!hasMouseLook);
@@ -55,15 +57,23 @@ export default function BottomDisplayMenu({loadedAnimationName, randomize}){
   };
 
   const nextAnimation = async () => {
+    if (!animationManager) return;
     console.log("play next")
     await animationManager.loadNextAnimation();
     setAnimationName(animationManager.getCurrentAnimationName());
   }
   const prevAnimation = async () => {
-      console.log("play prev")
-      await animationManager.loadPreviousAnimation();
-      setAnimationName(animationManager.getCurrentAnimationName());
+    if (!animationManager) return;
+    console.log("play prev")
+    await animationManager.loadPreviousAnimation();
+    setAnimationName(animationManager.getCurrentAnimationName());
   }
+  
+  // Don't render if required managers aren't available
+  if (!animationManager || !lookAtManager) {
+    return null;
+  }
+  
   return (
         <div className={styles["Container"]}>
           <div className={styles["ContainerPositionTop"]}>

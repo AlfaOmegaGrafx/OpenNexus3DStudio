@@ -544,6 +544,24 @@ export class ManifestDataManager{
   
     getExportOptions(){
       // get it only from the main manifest, not the additionally loaded.
+      if (!this.mainManifestData) {
+        // Return default export options if no manifest is loaded
+        return {
+          createTextureAtlas: true,
+          mergeAppliedMorphs: true,
+          exportMtoonAtlas: true,
+          exportStdAtlas: false,
+          mToonAtlasSize: 2048,
+          mToonAtlasSizeTransp: 1024,
+          stdAtlasSize: 2048,
+          stdAtlasSizeTransp: 1024,
+          screenshotFaceDistance: 1,
+          screenshotFaceOffset: [0, 0, 0],
+          screenshotResolution: [512, 512],
+          screenshotBackground: [0.1, 0.1, 0.1],
+          screenshotFOV: 75,
+        };
+      }
       return this.mainManifestData.getExportOptions();
     }
 

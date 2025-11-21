@@ -71,7 +71,7 @@ const VRMImport = ({ onVRMImported }) => {
         <div className="import-content">
           <div className="import-info mb-3">
             <p className="text-sm text-gray-400 mb-2">
-              Import VRM models for use in Open3DStudio
+              Import VRM models for use in OpenNexus3DStudio
             </p>
             <div className="feature-list">
               <div className="feature-item">

@@ -1,24 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useCore3D } from '../context/Core3DContext';
 import Core3DSetup from './Core3DSetup';
 import Core3DModels from './Core3DModels';
 import Core3DMaterials from './Core3DMaterials';
 import Core3DDesigner from './Core3DDesigner';
 import Core3DExports from './Core3DExports';
-import Core3DViewer from './Core3DViewer';
+import Core3DTokenManager from './Core3DTokenManager';
+import ErrorBoundary from './ErrorBoundary';
 import './Core3DPanel.css';
 
 const Core3DPanel = () => {
-  const { isInitialized, error, clearError } = useCore3D();
+  const { 
+    isInitialized, 
+    error, 
+    clearError
+  } = useCore3D();
   const [activeTab, setActiveTab] = useState('setup');
   const [isExpanded, setIsExpanded] = useState(false);
+  const cardHeaderRef = useRef(null);
 
   const tabs = [
     { id: 'setup', label: 'Setup', icon: '⚙️' },
+    { id: 'tokens', label: 'Tokens', icon: '🔑' },
     { id: 'models', label: 'Models', icon: '🎭' },
     { id: 'materials', label: 'Materials', icon: '🎨' },
     { id: 'designer', label: 'Designer', icon: '✨' },
-    { id: 'viewer', label: '3D Viewer', icon: '👁️' },
     { id: 'exports', label: 'Exports', icon: '📤' }
   ];
 
@@ -26,22 +32,14 @@ const Core3DPanel = () => {
     switch (activeTab) {
       case 'setup':
         return <Core3DSetup />;
+      case 'tokens':
+        return <Core3DTokenManager />;
       case 'models':
-        return <Core3DModels />;
+        return <Core3DModels onNavigateToDesigner={() => setActiveTab('designer')} />;
       case 'materials':
-        return <Core3DMaterials />;
+        return <Core3DMaterials onNavigateToDesigner={() => setActiveTab('designer')} />;
       case 'designer':
         return <Core3DDesigner />;
-      case 'viewer':
-        return (
-          <div className="core3d-viewer-tab">
-            <Core3DViewer 
-              showControls={true}
-              showStats={true}
-              className="core3d-viewer-full"
-            />
-          </div>
-        );
       case 'exports':
         return <Core3DExports />;
       default:
@@ -52,9 +50,22 @@ const Core3DPanel = () => {
   return (
     <div className="core3d-panel">
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" ref={cardHeaderRef}>
           <button 
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => {
+              const newExpanded = !isExpanded;
+              setIsExpanded(newExpanded);
+              // Auto-scroll header into view when expanding
+              if (newExpanded && cardHeaderRef.current) {
+                setTimeout(() => {
+                  cardHeaderRef.current?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                  });
+                }, 0);
+              }
+            }}
             className="expand-icon-button"
             title={isExpanded ? "Collapse Core3D Panel" : "Expand Core3D Panel"}
           >
@@ -111,7 +122,9 @@ const Core3DPanel = () => {
                 </div>
 
                 <div className="tab-content">
-                  {renderTabContent()}
+                  <ErrorBoundary showDetails={false}>
+                    {renderTabContent()}
+                  </ErrorBoundary>
                 </div>
               </>
             )}

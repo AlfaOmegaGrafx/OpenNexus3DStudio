@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import styles from './Slider.module.css'; // Import CSS for styling
 
 export default function Slider ({ title, value, min, max, onChange, step, stepBox }) {
+  const sliderRef = useRef(null);
+  
+  // Calculate progress percentage for the blue fill indicator
+  useEffect(() => {
+    if (sliderRef.current) {
+      const progress = ((value - min) / (max - min)) * 100;
+      sliderRef.current.style.setProperty('--slider-progress', `${progress}%`);
+    }
+  }, [value, min, max]);
   
   return (
     <>
@@ -21,6 +30,7 @@ export default function Slider ({ title, value, min, max, onChange, step, stepBo
       </div>
     <div className={styles["slider-container"]}>
       <input
+        ref={sliderRef}
         type="range"
         min={min}
         max={max}
