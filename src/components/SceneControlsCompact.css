@@ -3,14 +3,23 @@
 .scene-controls-compact {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #e0e0e0;
   min-width: fit-content;
+  width: min(calc(100vw - 460px), 880px);
+  margin: 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.scene-controls-compact > div {
+  flex: 0 1 auto;
+  min-width: 120px;
 }
 
 .control-item {
@@ -173,9 +182,10 @@
 /* Responsive design */
 @media (max-width: 1200px) {
   .scene-controls-compact {
-    gap: 8px;
-    padding: 6px 8px;
-    font-size: 0.8rem;
+    gap: 6px;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    width: calc(100vw - 360px);
   }
   
   .control-item {
@@ -199,8 +209,9 @@
 @media (max-width: 768px) {
   .scene-controls-compact {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     padding: 4px 6px;
+    width: calc(100vw - 160px);
   }
   
   .control-item {

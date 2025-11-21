@@ -250,6 +250,11 @@ The `SceneControlsCompact` component provides a compact header-based control int
   - When locked: Uses custom calculation with model bounding box to ensure full model visibility
   - When unlocked: Uses `setView()` from SceneContext
 
+#### **2.1 Layout & Spacing**
+- **Hamburger Anchors**: Left and right hamburger buttons are fixed at `top: 139px` and never move, keeping the control bar perfectly aligned between them.
+- **Control Bar Width**: `.scene-controls-compact` width is clamped to `min(calc(100vw - 460px), 880px)` (and smaller at responsive breakpoints) to ensure the "Lighting" label and other text stay readable inside the hamburger boundaries.
+- **Compact Spacing**: Reduced gaps (8px desktop, 6px/4px responsive) and smaller padding (6px desktop, 5px/4px responsive) keep the toolbar tight while maintaining click/tap comfort.
+
 #### **3. Camera Controls**
 - **Camera Mode Dropdown**: Select camera control mode
   - Options: Orbit, First Person, Fixed

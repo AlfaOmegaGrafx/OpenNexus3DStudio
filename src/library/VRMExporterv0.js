@@ -173,7 +173,7 @@ export default class VRMExporterv0 {
             .map((material) => material);
 
         const uniqueMaterialNames = uniqueMaterials.map((material) => material.name);
-        
+
         // FIX: Log material properties to debug ORM texture detection
         console.log('🔄 VRMExporterv0 - Unique materials analysis:', {
           totalMaterials: uniqueMaterials.length,
@@ -229,10 +229,10 @@ export default class VRMExporterv0 {
         // Process main images with texture size limiting
         const mainImages = await Promise.all(
             uniqueMaterials
-                .filter((material) => material.map)
+            .filter((material) => material.map)
                 .map(async (material) => {
-                    if (!material.map)
-                        throw new Error(material.name + " map is null");
+                if (!material.map)
+                    throw new Error(material.name + " map is null");
                     const resized = await processImageBitmap(material.map.image, material.name);
                     return { name: material.name, imageBitmap: resized };
                 })
@@ -241,10 +241,10 @@ export default class VRMExporterv0 {
         // Process shade images with texture size limiting
         const shadeImages = await Promise.all(
             uniqueMaterials
-                .filter((material) => material.userData.shadeTexture)
+            .filter((material) => material.userData.shadeTexture)
                 .map(async (material) => {
-                    if (!material.userData.shadeTexture)
-                        throw new Error(material.userData.shadeTexture + " map is null");
+                if (!material.userData.shadeTexture)
+                    throw new Error(material.userData.shadeTexture + " map is null");
                     const resized = await processImageBitmap(material.userData.shadeTexture.image, material.name + "_shade");
                     return { name: material.name + "_shade", imageBitmap: resized };
                 })
@@ -286,7 +286,7 @@ export default class VRMExporterv0 {
             uniqueMaterials
                 .filter((material) => material.normalMap)
                 .map(async (material) => {
-                    if (!material.normalMap)
+                if (!material.normalMap)
                         return null;
                     const resized = await processImageBitmap(material.normalMap.image, material.name + "_normal");
                     return { name: material.name + "_normal", imageBitmap: resized };

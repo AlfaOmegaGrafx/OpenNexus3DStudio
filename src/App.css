@@ -388,7 +388,7 @@
 /* Anchored Right Hamburger Menu */
 .anchored-right-hamburger {
   position: fixed;
-  top: 96px;
+  top: 139px;
   right: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -1049,7 +1049,7 @@
 /* Anchored Left Hamburger Menu */
 .anchored-left-hamburger {
   position: fixed;
-  top: 96px;
+  top: 139px;
   left: 0;
   background: #3a3a3a;
   border: 1px solid #555;

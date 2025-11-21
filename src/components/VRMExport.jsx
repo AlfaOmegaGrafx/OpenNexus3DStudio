@@ -1569,19 +1569,19 @@ const VRMExport = () => {
     if (!characterManager || !characterManager.avatar) {
       console.warn('⚠️ characterManager not available, falling back to VRMExporter');
       // Fallback to old method if characterManager not available
-      try {
-        setIsExporting(true);
-        const metadata = {
-          title: exportOptions.title,
-          author: exportOptions.author,
-          version: exportOptions.version,
-          allowedUserName: exportOptions.allowedUserName,
-          commercialUssageName: exportOptions.commercialUssageName
-        };
-        const result = await vrmExporter.exportToVRM(modelToExport, {
-          filename: exportOptions.filename,
-          vrmVersion: exportOptions.vrmVersion,
-          metadata,
+    try {
+      setIsExporting(true);
+      const metadata = {
+        title: exportOptions.title,
+        author: exportOptions.author,
+        version: exportOptions.version,
+        allowedUserName: exportOptions.allowedUserName,
+        commercialUssageName: exportOptions.commercialUssageName
+      };
+      const result = await vrmExporter.exportToVRM(modelToExport, {
+        filename: exportOptions.filename,
+        vrmVersion: exportOptions.vrmVersion,
+        metadata,
           optimize: exportOptions.optimize,
           useTextureAtlas: true,  // OPTIMIZED: Enable atlas in fallback
           atlasSize: 2048  // OPTIMIZED: Use optimized atlas size

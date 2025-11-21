@@ -220,7 +220,7 @@ const SceneControlsCompact = ({
       }
     } else {
       // When unlocked: Use standard setView behavior
-      setView(view);
+    setView(view);
     }
   };
   
