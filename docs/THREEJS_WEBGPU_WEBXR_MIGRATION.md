@@ -8,7 +8,7 @@
 
 ## 📋 Overview
 
-This guide documents the migration of CharacterStudio's SceneManager from WebGL-only to a modern rendering stack with WebGPU support, WebXR integration, enhanced audio, and advanced post-processing effects.
+This guide documents the migration of OpenNexus3DStudio's SceneManager from WebGL-only to a modern rendering stack with WebGPU support, WebXR integration, enhanced audio, and advanced post-processing effects.
 
 ## ✅ What's Been Implemented
 

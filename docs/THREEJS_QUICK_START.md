@@ -1,6 +1,6 @@
 # Three.js WebGPU & WebXR Quick Start
 
-Quick reference for using the new Three.js enhancements in CharacterStudio.
+Quick reference for using the new Three.js enhancements in OpenNexus3DStudio.
 
 ## 🚀 Quick Examples
 
