@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCore3D } from '../context/Core3DContext';
 
 const Core3DSetup = () => {
   const { apiKey, isLoading, error, initializeCore3D, clearError } = useCore3D();
-  const [inputKey, setInputKey] = useState(apiKey);
+  const [inputKey, setInputKey] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+
+  // Sync input with actual API key from context
+  useEffect(() => {
+    if (apiKey) {
+      setInputKey(apiKey);
+    } else {
+      // Check localStorage directly to avoid stale state
+      const storedKey = localStorage.getItem('core3d_api_key');
+      if (storedKey) {
+        setInputKey(storedKey);
+      }
+    }
+  }, [apiKey]);
 
   const handleSaveKey = async () => {
     if (!inputKey.trim()) {

@@ -1,14 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, isExpanded: externalIsExpanded }) => {
   const [boneStructures, setBoneStructures] = useState([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedBone, setSelectedBone] = useState(null);
+  const headerRef = useRef(null);
 
   // Sync with external expansion state
   useEffect(() => {
     if (externalIsExpanded !== undefined) {
       setIsExpanded(externalIsExpanded);
+      // Auto-scroll header into view when externally expanded
+      if (externalIsExpanded && headerRef.current) {
+        setTimeout(() => {
+          headerRef.current?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start',
+            inline: 'nearest'
+          });
+        }, 0);
+      }
     }
   }, [externalIsExpanded]);
 
@@ -170,11 +181,22 @@ const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, is
 
   return (
     <div className="bone-structure-panel">
-      <div className="bone-panel-header sticky-header">
+      <div className="bone-panel-header sticky-header" ref={headerRef}>
         <button 
           onClick={() => {
             console.log('Bone structure expand button clicked, current isExpanded:', isExpanded);
-            setIsExpanded(!isExpanded);
+            const newExpanded = !isExpanded;
+            setIsExpanded(newExpanded);
+            // Auto-scroll header into view when expanding
+            if (newExpanded && headerRef.current) {
+              setTimeout(() => {
+                headerRef.current?.scrollIntoView({ 
+                  behavior: 'smooth', 
+                  block: 'start',
+                  inline: 'nearest'
+                });
+              }, 0);
+            }
           }}
           className="expand-icon-button"
           title={isExpanded ? "Collapse Bone Structure" : "Expand Bone Structure"}

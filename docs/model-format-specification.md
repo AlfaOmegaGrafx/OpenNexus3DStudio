@@ -1,10 +1,10 @@
 # Model Format Specification
 
-This document defines the shared model format between Open3DStudio and CharacterStudio to ensure seamless model transfer and compatibility.
+This document defines the shared model format between Open3DStudio (OpenNexus3DStudio) and CharacterStudio to ensure seamless model transfer and compatibility.
 
 ## Overview
 
-The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Format Binary) as the primary exchange format, with specific optimizations and metadata for CharacterStudio compatibility.
+The bridge between Open3DStudio (OpenNexus3DStudio) and CharacterStudio uses GLB (GL Transmission Format Binary) as the primary exchange format, with specific optimizations and metadata for CharacterStudio compatibility.
 
 ## Format Requirements
 
@@ -19,7 +19,7 @@ The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Fo
 - **KHR_materials_pbrSpecularGlossiness**: For material compatibility
 - **KHR_texture_transform**: For texture transformations
 
-## Open3DStudio Export Specifications
+## Open3DStudio (OpenNexus3DStudio) Export Specifications
 
 ### Export Options
 ```javascript
@@ -30,7 +30,7 @@ The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Fo
   includeTextures: true,
   includeAnimations: true,
   metadata: {
-    source: 'Open3DStudio',
+    source: 'OpenNexus3DStudio',
     target: 'CharacterStudio',
     compatibility: 'VRM',
     exportDate: '2024-01-01T00:00:00.000Z'
@@ -64,9 +64,9 @@ The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Fo
     VRM: {
       version: '0.0',
       meta: {
-        title: 'Open3DStudio Export',
+        title: 'OpenNexus3DStudio Export',
         version: '1.0.0',
-        author: 'Open3DStudio',
+        author: 'OpenNexus3DStudio',
         contactInformation: '',
         reference: '',
         texture: -1,
@@ -82,7 +82,7 @@ The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Fo
   },
   userData: {
     vrmCompatible: true,
-    exportSource: 'Open3DStudio',
+    exportSource: 'OpenNexus3DStudio',
     exportDate: '2024-01-01T00:00:00.000Z'
   }
 }
@@ -115,7 +115,7 @@ The bridge between Open3DStudio and CharacterStudio uses GLB (GL Transmission Fo
   userData: {
     characterStudio: {
       imported: true,
-      source: 'Open3DStudio',
+      source: 'OpenNexus3DStudio',
       importDate: '2024-01-01T00:00:00.000Z',
       version: '1.0.0',
       compatible: true
@@ -163,7 +163,7 @@ model.glb
 
 ## Validation Rules
 
-### Open3DStudio Export Validation
+### Open3DStudio (OpenNexus3DStudio) Export Validation
 1. Model must have at least one mesh
 2. All meshes must have materials
 3. Materials must be PBR-compatible
@@ -240,7 +240,7 @@ model.glb
 
 ## Implementation Notes
 
-### Open3DStudio Implementation
+### Open3DStudio (OpenNexus3DStudio) Implementation
 - Use GLBExporter class for export functionality
 - Implement VRM compatibility layer
 - Add CharacterStudio-specific optimizations
@@ -258,7 +258,7 @@ model.glb
 - Compatible material systems
 - Unified error handling
 
-This specification ensures seamless model transfer between Open3DStudio and CharacterStudio while maintaining compatibility and performance.
+This specification ensures seamless model transfer between Open3DStudio (OpenNexus3DStudio) and CharacterStudio while maintaining compatibility and performance.
 
 
 

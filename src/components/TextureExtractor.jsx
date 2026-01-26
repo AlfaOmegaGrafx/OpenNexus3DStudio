@@ -2,7 +2,7 @@
  * TextureExtractor - Component for extracting and displaying textures from 3D models
  * Allows users to view, download, and manage all textures in a loaded model
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
 import './TextureExtractor.css';
 
@@ -11,13 +11,18 @@ const TextureExtractor = () => {
   const [extractedTextures, setExtractedTextures] = useState([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [selectedTexture, setSelectedTexture] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const headerRef = useRef(null);
 
   /**
    * Extract all textures from the current model
    */
   const extractTextures = () => {
     try {
-      if (!sceneManager || (!sceneManager.currentModel && !sceneManager.currentVRM)) {
+      // Use the correct model reference - prefer currentVRM.scene if available, fallback to currentModel
+      const modelToExtract = sceneManager?.currentVRM?.scene || sceneManager?.currentModel;
+      
+      if (!sceneManager || !modelToExtract) {
         console.warn('No model loaded to extract textures from');
         setExtractedTextures([]);
         return;
@@ -25,10 +30,19 @@ const TextureExtractor = () => {
 
       setIsExtracting(true);
       console.log('🎨 Starting texture extraction...');
+      console.log('🔍 Texture Extraction Debug:', {
+        hasSceneManager: !!sceneManager,
+        hasCurrentVRM: !!sceneManager?.currentVRM,
+        hasCurrentVRMScene: !!sceneManager?.currentVRM?.scene,
+        hasCurrentModel: !!sceneManager?.currentModel,
+        modelToExtract: modelToExtract,
+        modelType: modelToExtract?.type,
+        modelChildren: modelToExtract?.children?.length
+      });
 
       const textures = [];
       const processedTextures = new Set();
-      const model = sceneManager.currentVRM || sceneManager.currentModel;
+      const model = modelToExtract;
       
       if (!model) {
         console.warn('Model is null or undefined');
@@ -243,8 +257,30 @@ const TextureExtractor = () => {
 
   return (
     <div className="texture-extractor">
-      <div className="texture-extractor-header">
-        <h2>🎨 Texture Extractor</h2>
+      <div className="texture-extractor-header" ref={headerRef}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button 
+            onClick={() => {
+              const newExpanded = !isExpanded;
+              setIsExpanded(newExpanded);
+              // Auto-scroll header into view when expanding
+              if (newExpanded && headerRef.current) {
+                setTimeout(() => {
+                  headerRef.current?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                  });
+                }, 0);
+              }
+            }}
+            className="expand-icon-button"
+            title={isExpanded ? "Collapse Texture Extractor" : "Expand Texture Extractor"}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
+          <h2>🎨 Texture Extractor</h2>
+        </div>
         <div className="texture-extractor-actions">
           <button 
             onClick={extractTextures}
@@ -265,6 +301,8 @@ const TextureExtractor = () => {
         </div>
       </div>
 
+      {isExpanded && (
+        <>
       {!sceneManager?.currentModel && !sceneManager?.currentVRM && (
         <div className="texture-extractor-empty">
           <p>No model loaded. Please load a 3D model first.</p>
@@ -329,6 +367,8 @@ const TextureExtractor = () => {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
 
       {selectedTexture && (

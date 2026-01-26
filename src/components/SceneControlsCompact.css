@@ -3,14 +3,23 @@
 .scene-controls-compact {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #e0e0e0;
   min-width: fit-content;
+  width: min(calc(100vw - 460px), 880px);
+  margin: 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.scene-controls-compact > div {
+  flex: 0 1 auto;
+  min-width: 120px;
 }
 
 .control-item {
@@ -80,6 +89,14 @@
   appearance: none;
 }
 
+/* WebKit track styling - blue fill */
+.control-item input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to right, #4a90e2 0%, #4a90e2 var(--slider-progress, 0%), rgba(255, 255, 255, 0.1) var(--slider-progress, 0%), rgba(255, 255, 255, 0.1) 100%);
+  border-radius: 2px;
+}
+
 .control-item input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -90,6 +107,21 @@
   cursor: pointer;
   border: 2px solid #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  margin-top: -4px;
+}
+
+/* Firefox track styling - blue fill */
+.control-item input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.control-item input[type="range"]::-moz-range-progress {
+  height: 4px;
+  background: #4a90e2;
+  border-radius: 2px 0 0 2px;
 }
 
 .control-item input[type="range"]::-moz-range-thumb {
@@ -97,6 +129,35 @@
   height: 12px;
   border-radius: 50%;
   background: #4a90e2;
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* IE/Edge track styling - blue fill */
+.control-item input[type="range"]::-ms-track {
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+.control-item input[type="range"]::-ms-fill-lower {
+  background: #4a90e2;
+  border-radius: 2px 0 0 2px;
+}
+
+.control-item input[type="range"]::-ms-fill-upper {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0 2px 2px 0;
+}
+
+.control-item input[type="range"]::-ms-thumb {
+  width: 12px;
+  height: 12px;
+  background: #4a90e2;
+  border-radius: 50%;
   cursor: pointer;
   border: 2px solid #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -121,9 +182,10 @@
 /* Responsive design */
 @media (max-width: 1200px) {
   .scene-controls-compact {
-    gap: 8px;
-    padding: 6px 8px;
-    font-size: 0.8rem;
+    gap: 6px;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    width: calc(100vw - 360px);
   }
   
   .control-item {
@@ -147,8 +209,9 @@
 @media (max-width: 768px) {
   .scene-controls-compact {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     padding: 4px 6px;
+    width: calc(100vw - 160px);
   }
   
   .control-item {
@@ -174,4 +237,54 @@
   .value-display {
     font-size: 0.7rem;
   }
+}
+
+/* XR Controls Styling */
+.xr-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative; /* Make container relative for button positioning */
+}
+
+.xr-controls .control-label {
+  font-size: 0.8rem;
+  color: #b0b0b0;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+/* Override Three.js VRButton/ARButton absolute positioning */
+.xr-controls button#VRButton,
+.xr-controls button#ARButton {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: auto !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 4px 8px !important;
+  margin: 0 2px !important;
+  font-size: 1.2rem !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.xr-controls button#VRButton:hover,
+.xr-controls button#ARButton:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1) !important;
+}
+
+.xr-controls button#VRButton:active,
+.xr-controls button#ARButton:active {
+  transform: scale(0.95) !important;
 }

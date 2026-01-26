@@ -1,21 +1,23 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import * as THREE from "./three.js";
+import { OrbitControls } from "./three.js";
 import { CharacterManager } from "./characterManager";
-import { sharedHDRManager } from "./sharedHDRManager";
-
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 
 export function sceneInitializer(canvasId) {
     const scene = new THREE.Scene()
 
-    
-    // Register with shared HDR manager for consistent environment
-    sharedHDRManager.registerScene(scene);
-    
-    // Load HDR if not already loaded
-    if (!sharedHDRManager.isHDRLoaded()) {
-        sharedHDRManager.loadHDR();
+    // Load sky background image from Character Studio
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(
+      '/assets/backgrounds/background4.jpg',
+      (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.background = texture;
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load sky background image:', error);
     }
+    );
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -98,14 +100,10 @@ export function sceneInitializer(canvasId) {
             cancelAnimationFrame(animationId);
             animationId = null;
         }
-        // Clear environment when paused to save memory
-        scene.environment = null;
     };
     
     const resumeRendering = () => {
         isRendering = true;
-        // Re-apply HDR environment when resuming
-        sharedHDRManager.applyToAllScenes();
         if (!animationId) {
             animate();
         }

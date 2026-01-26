@@ -1,15 +1,19 @@
 .buttonContainer {
-    position: absolute;
-    bottom: 20px;
-    left: 32px;
-    width: calc(100% - 64px);
-    width: -webkit-calc(100% - 64px);
-    text-align: center;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0.75rem;
+    padding-top: 0.4rem;
+    width: 100%;
+    position: relative;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
 }
 
 .buttonContainer .buttonLeft {
-    float: left;
-    padding: 8px 16px;
+    padding: 8px 14px;
     background: #3a3a3a;
     color: #ccc;
     border: 1px solid #555;
@@ -18,11 +22,12 @@
     font-size: 12px;
     font-weight: 500;
     transition: all 0.2s ease;
-    min-width: 50px;
-    height: 30px;
+    min-width: 52px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex: 0 0 auto;
 }
 
 .buttonContainer .buttonLeft:hover {
@@ -39,8 +44,7 @@
 }
 
 .buttonContainer .buttonRight {
-    float: Right;
-    padding: 8px 16px;
+    padding: 8px 14px;
     background: #007acc;
     color: white;
     border: 1px solid #007acc;
@@ -49,12 +53,13 @@
     font-size: 12px;
     font-weight: 500;
     transition: all 0.2s ease;
-    min-width: 50px;
-    height: 30px;
+    min-width: 52px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+    flex: 0 0 auto;
 }
 
 .buttonContainer .buttonRight:hover {
@@ -72,25 +77,16 @@
     box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
-.buttonContainer .buttonCenter {
-    margin: 0 8px;
-}
-
-.buttonContainer::after {
-    content: ' ';
-    display: block;
-    clear: both;
-}
-
 .buttonContainer button {
-    min-width: 50px;
-    height: 30px;
-    padding: 8px 16px;
+    min-width: 52px;
+    height: 32px;
+    padding: 8px 14px;
     font-size: 12px;
     font-weight: 500;
+    flex: 0 0 auto;
 }
 
-/* Open3DStudio Blue Theme Styles */
+/* OpenNexus3DStudio Blue Theme Styles */
 .savePanel {
   padding: 20px;
   height: 100%;
@@ -290,7 +286,218 @@
   width: 14px;
   height: 14px;
   object-fit: contain;
-  margin-right: 0.25rem;
+  margin-right: 0.3rem;
   max-width: 100%;
   max-height: 100%;
+}
+
+/* Container styles */
+.container {
+  padding: 0.75rem;
+  padding-top: 90px; /* Add extra padding to prevent clipping by scene-controls-row */
+  padding-bottom: 0.75rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Remove scrollbars */
+  box-sizing: border-box;
+}
+
+.downloadOptions {
+  margin-bottom: 1rem;
+}
+
+.downloadOptions h3 {
+  color: #007acc;
+  font-size: 1.05rem;
+  margin-bottom: 0.6rem;
+  margin-top: 0;
+  font-weight: 600;
+}
+
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.atlasSettings {
+  margin-bottom: 0.75rem;
+}
+
+.atlasSettings h3 {
+  color: #007acc;
+  font-size: 1.05rem;
+  margin-bottom: 0.6rem;
+  margin-top: 0;
+  font-weight: 600;
+}
+
+.atlasControl {
+  margin-bottom: 0.6rem;
+}
+
+.atlasControl label {
+  display: block;
+  color: #ccc;
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+
+.downloadButton {
+  padding: 8px 14px;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 52px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.downloadButton:hover {
+  background: #4a4a4a;
+  border-color: #666;
+  color: #fff;
+}
+
+/* Range input (slider) styling - blue theme */
+.container input[type="range"] {
+  width: 100%;
+  height: 4px;
+  background: #555;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* WebKit track styling - blue fill */
+.container input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to right, #007acc 0%, #007acc var(--slider-progress, 0%), #555 var(--slider-progress, 0%), #555 100%);
+  border-radius: 2px;
+}
+
+.container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-top: -4px;
+}
+
+/* Firefox track styling - blue fill */
+.container input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  background: #555;
+  border-radius: 2px;
+}
+
+.container input[type="range"]::-moz-range-progress {
+  height: 4px;
+  background: #007acc;
+  border-radius: 2px 0 0 2px;
+}
+
+.container input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* IE/Edge track styling - blue fill */
+.container input[type="range"]::-ms-track {
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+
+.container input[type="range"]::-ms-fill-lower {
+  background: #007acc;
+  border-radius: 2px 0 0 2px;
+}
+
+.container input[type="range"]::-ms-fill-upper {
+  background: #555;
+  border-radius: 0 2px 2px 0;
+}
+
+.container input[type="range"]::-ms-thumb {
+  width: 12px;
+  height: 12px;
+  background: #007acc;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Checkbox styling - blue theme */
+.container input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #007acc;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid #007acc;
+  border-radius: 3px;
+  background: transparent;
+  position: relative;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.container input[type="checkbox"]:checked {
+  background-color: #007acc;
+  border-color: #007acc;
+}
+
+.container input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  display: block;
+}
+
+.container input[type="checkbox"]:hover {
+  border-color: #0099ff;
+}
+
+.container input[type="checkbox"]:checked:hover {
+  background-color: #0099ff;
+  border-color: #0099ff;
 }

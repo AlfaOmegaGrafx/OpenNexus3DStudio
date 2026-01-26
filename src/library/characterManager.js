@@ -1,5 +1,5 @@
-import * as THREE from "three"
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
+import * as THREE from "./three.js"
+import { GLTFLoader } from "./three.js"
 import { AnimationManager } from "./animationManager"
 import { ScreenshotManager } from "./screenshotManager";
 import { BlinkManager } from "./blinkManager";
@@ -321,6 +321,12 @@ export class CharacterManager {
      * @returns {boolean} Whether downloading is supported
      */
     canDownload(){
+      // Some lightweight UIs (like the simplified VRM export panel) may not
+      // initialize the manifest/asset pipeline. In that case we still want to
+      // allow exports using fallback defaults.
+      if (!this.manifestDataManager || !this.manifestDataManager.canDownload) {
+        return true;
+      }
       return this.manifestDataManager.canDownload();
     }
     /**
@@ -335,21 +341,131 @@ export class CharacterManager {
           try {
             // Set default export options if not provided
             exportOptions = exportOptions || {};
-            const manifestOptions = this.manifestDataManager.getExportOptions();
-            console.log(manifestOptions);
+
+            let manifestOptions = {};
+            if (this.manifestDataManager?.getExportOptions) {
+              manifestOptions = this.manifestDataManager.getExportOptions();
+            } else {
+              // Fallback defaults for contexts where manifest data isn't loaded yet
+              // FIX: Default to standard shader to support ORM textures
+              const useStandardShader = exportOptions?.shaderType === 'standard' || exportOptions?.shaderType === undefined;
+              manifestOptions = {
+                createTextureAtlas: true,
+                mergeAppliedMorphs: true,
+                exportMtoonAtlas: !useStandardShader,  // Use MToon atlas only for toon shader
+                exportStdAtlas: useStandardShader,     // Use standard atlas for standard shader (supports ORM)
+                mToonAtlasSize: 2048,
+                mToonAtlasSizeTransp: 1024,
+                stdAtlasSize: 2048,
+                stdAtlasSizeTransp: 1024,
+                screenshotFaceDistance: 1,
+                screenshotFaceOffset: [0, 0, 0],
+                screenshotResolution: [512, 512],
+                screenshotBackground: [0.1, 0.1, 0.1],
+                screenshotFOV: 75,
+              };
+              console.log('🔄 Default shader type:', useStandardShader ? 'standard (ORM supported)' : 'toon (no ORM)');
+            }
+
+            console.log('Manifest export options:', manifestOptions);
             const finalOptions = { ...manifestOptions, ...exportOptions };
             finalOptions.screenshot = this._getPortaitScreenshotTexture(false, finalOptions);
 
             // Log the final export options
             console.log(finalOptions);
 
+            // OPTIMIZED: Construct avatar structure if empty (for direct VRM loads)
+            let avatarToUse = this.avatar;
+            let modelToUse = this.characterModel;
+            
+            if (!avatarToUse || Object.keys(avatarToUse).length === 0) {
+              console.log('⚠️ Avatar is empty, constructing from characterModel...');
+              // Try to find VRM data in the character model
+              let vrmData = null;
+              let vrmScene = null;
+              
+              // Method 1: Check if characterModel itself has VRM data
+              if (this.characterModel.userData?.vrm) {
+                vrmData = this.characterModel.userData.vrm;
+                vrmScene = this.characterModel;
+                console.log('✅ Found VRM data in characterModel.userData');
+              }
+              
+              // Method 2: Traverse children to find VRM data
+              if (!vrmData) {
+                this.characterModel.traverse((child) => {
+                  if (child.userData?.vrm && !vrmData) {
+                    vrmData = child.userData.vrm;
+                    vrmScene = child;
+                    console.log('✅ Found VRM data in child:', child.name || child.type);
+                  }
+                });
+              }
+              
+              // Method 3: Check if any child is a VRM scene (from VRMLoader)
+              if (!vrmData) {
+                this.characterModel.traverse((child) => {
+                  // VRMLoader stores VRM in userData.vrm
+                  if (child.userData?.vrm && !vrmData) {
+                    vrmData = child.userData.vrm;
+                    vrmScene = child;
+                    console.log('✅ Found VRM data from VRMLoader in child:', child.name || child.type);
+                  }
+                });
+              }
+              
+              // Method 4: Check if characterModel has children that are VRM scenes
+              if (!vrmData && this.characterModel.children.length > 0) {
+                for (const child of this.characterModel.children) {
+                  if (child.userData?.vrm) {
+                    vrmData = child.userData.vrm;
+                    vrmScene = child;
+                    modelToUse = child; // Use the VRM scene as the model
+                    console.log('✅ Found VRM data in characterModel child:', child.name || child.type);
+                    break;
+                  }
+                }
+              }
+              
+              // If we found VRM data, construct minimal avatar structure
+              if (vrmData) {
+                avatarToUse = {
+                  "CUSTOM": {
+                    vrm: vrmData,
+                    model: vrmScene || modelToUse
+                  }
+                };
+                console.log('✅ Constructed avatar structure from VRM data');
+              } else {
+                // Last resort: create minimal structure (export will still work but may have limited features)
+                // The getVRMData function in download-utils.js can extract VRM data from the model directly
+                avatarToUse = {
+                  "CUSTOM": {
+                    vrm: {
+                      meta: finalOptions.vrmMeta || {},
+                      humanoid: {},
+                      materials: [],
+                      scene: modelToUse
+                    },
+                    model: modelToUse
+                  }
+                };
+                console.log('⚠️ Created minimal avatar structure (VRM data not found - getVRMData will extract from model)');
+              }
+            }
+            
+            // Use the model we found (or original characterModel)
+            modelToUse = avatarToUse["CUSTOM"]?.model || this.characterModel;
+
             // Call the downloadVRMWithAvatar function with the required parameters
-            await downloadVRMWithAvatar(this.characterModel, this.avatar, name, finalOptions);
+            // Use modelToUse (which may be the VRM scene) instead of characterModel if we found VRM data
+            await downloadVRMWithAvatar(modelToUse, avatarToUse, name, finalOptions);
 
             resolve();
           } catch (error) {
             // Handle any errors that occurred during the download process
             console.error("Error downloading VRM:", error.message);
+            console.error("Error stack:", error.stack);
             reject(new Error("Failed to download VRM."));
           }
         } else {

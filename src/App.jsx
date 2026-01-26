@@ -18,14 +18,15 @@ import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
 import SceneControlsCompact from './components/SceneControlsCompact';
-import { sceneInitializer } from './library/sceneInitializer';
-import { sharedHDRManager } from './library/sharedHDRManager';
+import * as THREE from './library/three.js';
 
 // Import CharacterStudio pages (simplified versions)
 import AppearanceSimple from './pages/AppearanceSimple';
 import SaveSimple from './pages/SaveSimple';
 import MintSimple from './pages/MintSimple';
 import LoadSimple from './pages/LoadSimple';
+import ToolsSimple from './pages/ToolsSimple';
+import BottomDisplayMenu from './components/BottomDisplayMenu';
 import './App.css';
 
 function AppContent() {
@@ -35,9 +36,6 @@ function AppContent() {
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(true); // CharacterStudio sidebar collapse state - default to collapsed
-  const [characterStudioViewportVisible, setCharacterStudioViewportVisible] = useState(true); // CharacterStudio 3D viewport visibility
-  const [characterStudioInitialized, setCharacterStudioInitialized] = useState(false);
-  const characterStudioRef = useRef(null);
   
   // Debug class changes
   useEffect(() => {
@@ -49,37 +47,33 @@ function AppContent() {
     });
   }, [sidebarCollapsed, characterStudioSidebarCollapsed]);
   
-  // Synchronized hamburger handlers - when one expands, the other collapses
+  // Synchronized hamburger handlers - when one collapses, the other expands
   const handleLeftHamburgerClick = () => {
     if (sidebarCollapsed) {
-      // Left hamburger is expanding - collapse right hamburger and main viewport
+      // Left hamburger is expanding - collapse right hamburger
       setSidebarCollapsed(false);
       setCharacterStudioSidebarCollapsed(true);
-      // Main viewport expands when left hamburger expands
     } else {
-      // Left hamburger is collapsing - expand right hamburger and collapse main viewport
+      // Left hamburger is collapsing - expand right hamburger
       setSidebarCollapsed(true);
       setCharacterStudioSidebarCollapsed(false);
-      // Main viewport collapses when left hamburger collapses
     }
   };
 
   const handleRightHamburgerClick = () => {
     if (characterStudioSidebarCollapsed) {
-      // Right hamburger is expanding - collapse left hamburger and main viewport
+      // Right hamburger is expanding - collapse left hamburger
       setCharacterStudioSidebarCollapsed(false);
       setSidebarCollapsed(true);
-      // Main viewport collapses when right hamburger expands
     } else {
-      // Right hamburger is collapsing - expand left hamburger and main viewport
+      // Right hamburger is collapsing - expand left hamburger
       setCharacterStudioSidebarCollapsed(true);
       setSidebarCollapsed(false);
-      // Main viewport expands when right hamburger collapses
     }
   };
 
   // CharacterStudio menu cycling
-  const characterStudioMenus = ['appearance', 'save', 'mint', 'load'];
+  const characterStudioMenus = ['appearance', 'save', 'mint', 'load', 'tools'];
   const [currentMenuIndex, setCurrentMenuIndex] = useState(0); // Default to appearance (index 0)
   
   const handleCharacterStudioNavigation = (direction) => {
@@ -265,118 +259,26 @@ function AppContent() {
     }
   }, [isElectron, clearModel]);
 
-  // Initialize CharacterStudio 3D renderer
+  // Ensure main scene has sky background image from Character Studio
   useEffect(() => {
-    const initCharacterStudio = async () => {
-      if (!characterStudioRef.current || characterStudioInitialized) return;
-      
-      try {
-        console.log('🎬 Initializing CharacterStudio 3D renderer...');
-        const characterStudioScene = await sceneInitializer('character-studio-scene');
-        characterStudioRef.current = characterStudioScene;
-        setCharacterStudioInitialized(true);
-        console.log('✅ CharacterStudio 3D renderer initialized');
-      } catch (error) {
-        console.error('❌ Failed to initialize CharacterStudio renderer:', error);
-      }
-    };
-
-    initCharacterStudio();
-  }, [characterStudioInitialized]);
-
-  // Sync model between main scene and CharacterStudio
-  useEffect(() => {
-    if (!characterStudioInitialized || !characterStudioRef.current || !currentModel) return;
-
-    const syncModelToCharacterStudio = async () => {
-      try {
-        console.log('🔄 Syncing model to CharacterStudio renderer...');
-        
-        // Get the CharacterStudio scene and character manager
-        const { scene, characterManager } = characterStudioRef.current;
-        
-        // Create a URL for the model if it's a File object
-        let modelUrl;
-        if (currentModel instanceof File) {
-          modelUrl = URL.createObjectURL(currentModel);
-        } else if (typeof currentModel === 'string') {
-          modelUrl = currentModel;
-        } else {
-          console.warn('Unsupported model type for CharacterStudio sync:', typeof currentModel);
-          return;
+    if (sceneManager && sceneManager.scene) {
+      // Load the sky background image
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.load(
+        '/assets/backgrounds/background4.jpg',
+        (texture) => {
+          texture.mapping = THREE.EquirectangularReflectionMapping;
+          sceneManager.scene.background = texture;
+        },
+        undefined,
+        (error) => {
+          console.error('Failed to load sky background image:', error);
         }
-        
-        // Load the model into CharacterStudio using direct VRM loading
-        if (characterManager) {
-          // Try to load VRM directly into the character model
-          try {
-            // Clear existing character model
-            if (characterManager.characterModel) {
-              characterManager.characterModel.clear();
-            }
-            
-            // Load VRM directly using the GLTFLoader with VRM plugin
-            const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader');
-            const { VRMLoaderPlugin } = await import('@pixiv/three-vrm');
-            
-            const gltfLoader = new GLTFLoader();
-            gltfLoader.register((parser) => {
-              return new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true });
-            });
-            
-            const gltf = await gltfLoader.loadAsync(modelUrl);
-            const vrm = gltf.userData.vrm;
-            
-            if (vrm && vrm.scene) {
-              // Add the VRM to the character model
-              characterManager.characterModel.add(vrm.scene);
-              console.log('✅ VRM loaded directly into CharacterStudio renderer');
-            } else {
-              console.error('❌ Failed to load VRM - no VRM data found');
-            }
-          } catch (error) {
-            console.error('❌ Failed to load VRM directly:', error);
-            // Fallback to optimizer character method
-            if (characterManager.loadOptimizerCharacter) {
-              await characterManager.loadOptimizerCharacter(modelUrl);
-              console.log('✅ Model synced to CharacterStudio renderer (fallback)');
-            }
-          }
-          
-          // Clean up object URL if we created one
-          if (currentModel instanceof File) {
-            URL.revokeObjectURL(modelUrl);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Failed to sync model to CharacterStudio:', error);
-      }
-    };
-
-    syncModelToCharacterStudio();
-  }, [currentModel, characterStudioInitialized]);
-
-  // Handle viewport visibility changes - pause/resume render loop based on sidebar state
-  useEffect(() => {
-    if (!characterStudioInitialized || !characterStudioRef.current) return;
-
-    const { pauseRendering, resumeRendering } = characterStudioRef.current;
-    
-    if (!characterStudioSidebarCollapsed && characterStudioViewportVisible) {
-      console.log('🎮 Resuming CharacterStudio render loop (sidebar open and viewport visible)');
-      resumeRendering();
-      // Re-apply HDR environment to all scenes
-      sharedHDRManager.applyToAllScenes();
-    } else {
-      console.log('⏸️ Pausing CharacterStudio render loop (sidebar collapsed or viewport hidden)');
-      pauseRendering();
-      // Clear HDR environment from all scenes to save memory
-      sharedHDRManager.clearFromAllScenes();
+      );
     }
-  }, [characterStudioSidebarCollapsed, characterStudioViewportVisible, characterStudioInitialized]);
+  }, [sceneManager]);
 
-  // Note: Removed incorrect main viewport control
-  // The CharacterStudio viewport should operate independently from the main viewport
+  // Note: Removed separate CharacterStudio 3D viewport - sky background is now handled by main canvas
 
   // Check if there are any running tasks
   const hasRunningTasks = tasks.some(task => task.status === 'running');
@@ -386,7 +288,7 @@ function AppContent() {
       <TaskProgressBar tasks={tasks} />
       <header className="app-header">
         <div className="title-container">
-          <h1 className="main-title">Open3DStudio:</h1>
+          <h1 className="main-title">OpenNexus3DStudio:</h1>
           <div className="audiowave-text">
             <div className="space-time-row">
               <span className="space-time">SPACE-TIME</span>
@@ -682,13 +584,15 @@ function AppContent() {
                 📁
               </button>
               <button 
-                className={`header-btn studio-btn ${characterStudioViewportVisible ? 'active' : ''}`}
+                className={`header-btn studio-btn ${currentPanel === 'tools' ? 'active' : ''}`}
                 onClick={() => {
-                  setCharacterStudioViewportVisible(!characterStudioViewportVisible);
+                  setCurrentPanel('tools');
+                  setCurrentMenuIndex(4);
+                  setCharacterStudioSidebarCollapsed(false);
                 }}
-                title="Toggle CharacterStudio 3D Viewport"
+                title="3D Tools & Export"
               >
-                🎮
+                🛠️
               </button>
             </div>
           </div>
@@ -855,7 +759,7 @@ function AppContent() {
             isApiConnected={isConnected}
           />
           {/* Debug info */}
-          <div style={{ background: '#333', padding: '10px', margin: '10px 0', borderRadius: '4px', fontSize: '12px' }}>
+          <div style={{ background: '#333', padding: '0.5rem', margin: '0.25rem 0', borderRadius: '4px', fontSize: '0.7rem' }}>
             <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
             <div>Tasks: {tasks.length}</div>
             <div>Tasks: {JSON.stringify(tasks.map(t => ({ id: t.id, status: t.status, name: t.name })))}</div>
@@ -866,10 +770,11 @@ function AppContent() {
                 background: '#007bff', 
                 color: 'white', 
                 border: 'none', 
-                padding: '5px 10px', 
+                padding: '0.25rem 0.5rem', 
                 borderRadius: '3px', 
                 cursor: 'pointer',
-                marginTop: '5px'
+                marginTop: '0.25rem',
+                fontSize: '0.7rem'
               }}
             >
               Force Check Connection
@@ -883,8 +788,9 @@ function AppContent() {
           <Scene3D 
             model={currentModel}
             renderMode={renderMode}
-            showCharacterStudioOverlay={!characterStudioSidebarCollapsed && characterStudioViewportVisible}
           />
+          {/* Bottom Animations Panel */}
+          <BottomDisplayMenu />
         </div>
 
         {/* CharacterStudio Sidebar */}
@@ -954,14 +860,16 @@ function AppContent() {
                 📁
               </button>
               <button 
-                className={`character-studio-sidebar-icon ${characterStudioViewportVisible ? 'active' : ''}`}
+                className={`character-studio-sidebar-icon ${currentPanel === 'tools' ? 'active' : ''}`}
                 onClick={() => {
-                  setCharacterStudioViewportVisible(!characterStudioViewportVisible);
+                  setCharacterStudioSidebarCollapsed(false);
+                  setCurrentPanel('tools');
+                  setCurrentMenuIndex(4);
                 }}
-                data-tooltip="Toggle 3D Viewport"
-                title="Toggle CharacterStudio 3D Viewport"
+                data-tooltip="3D Tools & Export"
+                title="3D Tools & Export"
               >
-                🎮
+                🛠️
               </button>
             </div>
           )}
@@ -977,6 +885,7 @@ function AppContent() {
                 {currentPanel === 'save' && <SaveSimple onNavigate={handleCharacterStudioNavigation} />}
                 {currentPanel === 'mint' && <MintSimple onNavigate={handleCharacterStudioNavigation} />}
                 {currentPanel === 'load' && <LoadSimple onNavigate={handleCharacterStudioNavigation} />}
+                {currentPanel === 'tools' && <ToolsSimple onNavigate={handleCharacterStudioNavigation} />}
               </div>
             </div>
           )}

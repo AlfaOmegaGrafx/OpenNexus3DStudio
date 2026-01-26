@@ -31,7 +31,17 @@ const Core3DDesigner = () => {
     }
 
     try {
-      const design = await generateDesign(selectedModel.id, selectedMaterial.id, designOptions);
+      // Only pass valid API options (team if available)
+      // UI options like quality, lighting, etc. are not sent to API
+      const apiOptions = {};
+      if (designOptions.team) {
+        apiOptions.team = designOptions.team;
+      }
+      
+      // Use uri if available, otherwise use id
+      const modelId = selectedModel.uri || selectedModel.id;
+      const materialId = selectedMaterial.uri || selectedMaterial.id;
+      const design = await generateDesign(modelId, materialId, apiOptions);
       console.log('Design generated:', design);
       
       // Set preview URL if available
@@ -41,7 +51,15 @@ const Core3DDesigner = () => {
       }
     } catch (error) {
       console.error('Failed to generate design:', error);
-      alert(`Design generation failed: ${error.message}`);
+      // Show more detailed error message with full error data
+      let errorMessage = `Design generation failed: ${error.message}`;
+      if (error.details) {
+        errorMessage += `\n\nDetails: ${error.details}`;
+      }
+      if (error.data && error.data.details) {
+        errorMessage += `\n\nValidation errors:\n${JSON.stringify(error.data.details, null, 2)}`;
+      }
+      alert(errorMessage);
     }
   };
 

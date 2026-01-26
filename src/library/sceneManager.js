@@ -2,12 +2,8 @@
  * SceneManager - Central orchestrator for 3D scene management
  * Similar to CharacterManager in CharacterStudio, but focused on 3D AIGC workflows
  */
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import * as THREE from './three.js';
+import { GLTFLoader, OBJLoader, FBXLoader, OrbitControls, RGBELoader, DRACOLoader, VRButton, ARButton } from './three.js';
 import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
@@ -39,8 +35,25 @@ export class SceneManager {
       boxElement: null
     };
     
+    // Store camera state for XR mode restoration
+    this.preXRCameraPosition = null;
+    this.preXRCameraRotation = null;
+    this.preXRCameraTarget = null;
+    this.preXRCameraQuaternion = null;
+    this.preXRCameraUp = null;
+    this.preXRCameraZoom = null;
+    
     // Loaders
     this.gltfLoader = new GLTFLoader();
+    
+    // Configure DRACOLoader for compressed GLTF/GLB models
+    this.dracoLoader = new DRACOLoader();
+    // Use CDN for Draco decoder (supports both wasm and js decoders)
+    this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    // Alternative: Use jsdelivr CDN (uncomment if gstatic doesn't work)
+    // this.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/');
+    this.gltfLoader.setDRACOLoader(this.dracoLoader);
+    
     this.objLoader = new OBJLoader();
     this.fbxLoader = new FBXLoader();
     
@@ -53,6 +66,588 @@ export class SceneManager {
     // VRM Loader and Exporter
     this.vrmLoader = new VRMLoader();
     this.vrmExporter = new VRMExporter();
+    
+    // XR-related properties
+    this.vrSceneWrapper = null; // Wrapper group for VR/AR scene offset
+    this.xrReferenceSpace = null; // WebXR reference space
+    this.xrBaseReferenceSpace = null; // Reference space from session.requestReferenceSpace(...)
+    this.xrRenderReferenceSpace = null; // Reference space actually used for rendering (may be offset for recenter)
+    this.xrSession = null; // Current XR session
+    this.xrMode = null; // 'ar' | 'vr' | 'xr' (derived from session start; used to avoid race conditions)
+    this.xrRenderer = null; // XR-specific renderer (if different from main renderer)
+    this.originalXRSetSession = null; // Original setSession function for restoration
+    this.originalSceneBackground = undefined; // Original scene background for AR pass-through restoration
+    this.preXRBackgroundSnapshot = null; // Full snapshot of background state before XR (for exact restoration)
+    this.originalClearColor = undefined; // Original renderer clear color for AR pass-through restoration
+    this.originalClearAlpha = undefined; // Original renderer clear alpha for AR pass-through restoration
+    
+    // VR skybox mesh (for WebXR immersive VR where scene.background may not render)
+    this.vrSkybox = null;
+
+    // XR recenter support (software offset reference space)
+    // Key hold state by stable XRSpace (targetRaySpace) instead of XRInputSource object refs,
+    // because session.inputSources may yield different object instances than event.inputSource
+    this.xrRecenterHoldState = new WeakMap(); // WeakMap<XRSpace, Map<number, { downAt:number, triggered:boolean }>>
+    this.xrRecenterCooldownUntil = 0;
+    this.xrRecenterSelectHoldState = new WeakMap(); // WeakMap<XRSpace, { downAt:number, triggered:boolean }>
+
+    // XR auto-centering (on session start): shifts reference space so the viewer starts at X=0
+    // relative to the app's world/grid. This fixes "camera starts 2 squares to the right" issues.
+    this.xrAutoCentered = false;
+    // Initial viewer pose (position + orientation) when XR session started, used for recentering
+    this.xrInitialViewerPosition = null; // { x, y, z }
+    this.xrInitialViewerOrientation = null; // { x, y, z, w }
+
+    // XR platform recenter (e.g. headset Home button) can reset the reference-space origin.
+    // When it happens, we re-run auto-centering so the user returns to X=0 relative to the grid.
+    this.xrOnReferenceSpaceReset = null;
+
+    // XR input diagnostics (dev-gated, low-noise logging)
+    this.xrDebugInputs = false; // Set to true via ?xrDebugInputs=1 query param
+    this.xrLastDiagnosticLog = 0; // Timestamp of last diagnostic log (throttle to 1/second)
+    this.xrLastRecenterCheckLog = 0; // Timestamp of last recenter check log (throttle to 2/second)
+    this.xrRecenterCheckFirstLog = false; // Flag to log first call to maybeHandleXRRecenter
+    this.xrRecenterCooldownLogged = false; // Flag to prevent spam during cooldown
+  }
+
+  /**
+   * Apply a reference space to the Three.js WebXRManager.
+   * Different Three.js versions expose different APIs; support both.
+   */
+  applyXRReferenceSpace(referenceSpace) {
+    if (!this.renderer?.xr || !referenceSpace) {
+      console.warn('[REORIENT_FIX] ⚠️ APPLY_REF_SPACE: Cannot apply - renderer.xr or referenceSpace missing');
+      return;
+    }
+    
+    // Store the reference space we want to use
+    this.xrRenderReferenceSpace = referenceSpace;
+    
+    try {
+      // Method 1: Use setReferenceSpace if available (Three.js r150+)
+      if (typeof this.renderer.xr.setReferenceSpace === 'function') {
+        this.renderer.xr.setReferenceSpace(referenceSpace);
+        console.log('[REORIENT_FIX] ✅ APPLY_REF_SPACE: Applied via setReferenceSpace()');
+      } else {
+        // Fallback (older Three.js): directly assign
+        this.renderer.xr.referenceSpace = referenceSpace;
+        console.log('[REORIENT_FIX] ✅ APPLY_REF_SPACE: Applied via direct assignment (fallback)');
+      }
+      
+      // Method 2: Don't override getReferenceSpace() - let Three.js use the reference space naturally
+      // Overriding it can interfere with Three.js's internal camera handling
+      // The reference space is already set via setReferenceSpace() or direct assignment above
+      
+      // Method 3: Ensure direct property is set as fallback
+      // Some Three.js versions use the property directly, so we set it here too
+      try {
+        if (!this.renderer.xr.referenceSpace || this.renderer.xr.referenceSpace !== referenceSpace) {
+          this.renderer.xr.referenceSpace = referenceSpace;
+          console.log('[REORIENT_FIX] ✅ APPLY_REF_SPACE: Set referenceSpace property directly as fallback');
+        }
+      } catch (e) {
+        // Property assignment failed, that's okay - we have other methods
+        console.log('[REORIENT_FIX] ℹ️ APPLY_REF_SPACE: Direct property assignment not possible (non-critical)');
+      }
+      
+    } catch (e) {
+      console.warn('[REORIENT_FIX] ⚠️ APPLY_REF_SPACE: Failed to apply:', e?.message || e);
+      // Last resort: direct assignment
+      try {
+        this.renderer.xr.referenceSpace = referenceSpace;
+        console.log('[REORIENT_FIX] ⚠️ APPLY_REF_SPACE: Applied via direct assignment (last resort)');
+      } catch {
+        // ignore
+      }
+    }
+    
+    // Verify it was applied (check both direct property and getReferenceSpace if available)
+    let actualReferenceSpace = null;
+    let verificationMethod = 'none';
+    if (this.renderer.xr.referenceSpace) {
+      actualReferenceSpace = this.renderer.xr.referenceSpace;
+      verificationMethod = 'direct property';
+    } else if (typeof this.renderer.xr.getReferenceSpace === 'function') {
+      actualReferenceSpace = this.renderer.xr.getReferenceSpace();
+      verificationMethod = 'getReferenceSpace()';
+    }
+    
+    if (actualReferenceSpace !== referenceSpace) {
+      console.warn('[REORIENT_FIX] ❌ APPLY_REF_SPACE: Verification FAILED - renderer.xr.referenceSpace is not the expected referenceSpace after application.', {
+        expected: referenceSpace,
+        actual: actualReferenceSpace,
+        stored: this.xrRenderReferenceSpace,
+        verificationMethod: verificationMethod,
+        hasSetReferenceSpace: typeof this.renderer.xr.setReferenceSpace === 'function',
+        hasGetReferenceSpace: typeof this.renderer.xr.getReferenceSpace === 'function',
+        xrIsPresenting: this.renderer.xr.isPresenting
+      });
+      // Even if verification fails, we've stored it in xrRenderReferenceSpace which we'll use in the render loop
+      console.log('[REORIENT_FIX] ℹ️ APPLY_REF_SPACE: Will use stored xrRenderReferenceSpace in render loop. Three.js may be using a different reference space internally, but we will use ours for pose calculations.');
+    } else {
+      console.log('[REORIENT_FIX] ✅ APPLY_REF_SPACE: Verification SUCCESS - renderer.xr.referenceSpace is correctly set.', {
+        verificationMethod: verificationMethod
+      });
+    }
+  }
+
+  /**
+   * Verify that the XR reference space was correctly applied to the renderer.
+   */
+  verifyReferenceSpaceApplied(expectedSpace) {
+    if (!this.renderer?.xr || !expectedSpace) {
+      console.warn('[REORIENT_FIX] ⚠️ VERIFY_REF_SPACE: Cannot verify - renderer.xr or expectedSpace missing');
+      return;
+    }
+    if (this.renderer.xr.referenceSpace !== expectedSpace) {
+      console.warn('[REORIENT_FIX] ❌ VERIFY_REF_SPACE: Verification FAILED - renderer.xr.referenceSpace does not match the expected space.');
+    } else {
+      console.log('[REORIENT_FIX] ✅ VERIFY_REF_SPACE: Verification SUCCESS - renderer.xr.referenceSpace is correctly set.');
+    }
+  }
+
+  /**
+   * Software recenter by creating an offset reference space. This is a fallback when
+   * platform-level recenter (home/touchpad hold) doesn't affect the app.
+   *
+   * Strategy:
+   * - Keep floor alignment by zeroing Y translation.
+   * - Recenter X/Z position + yaw so the current view becomes "forward" at origin.
+   */
+  recenterXR(frame) {
+    console.log('[REORIENT_FIX] 🎯 RECENTER_XR: Starting reorientation to initial start position...');
+    try {
+      if (!this.xrSession || !frame) {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - No XR session or frame');
+        return false;
+      }
+      if (!this.xrBaseReferenceSpace) {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - No base reference space');
+        return false;
+      }
+      if (!this.xrRenderReferenceSpace) {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - No render reference space');
+        return false;
+      }
+      if (typeof this.xrRenderReferenceSpace.getOffsetReferenceSpace !== 'function') {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - getOffsetReferenceSpace not available');
+        return false;
+      }
+      if (typeof XRRigidTransform !== 'function') {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - XRRigidTransform not available');
+        return false;
+      }
+
+      // Get current viewer pose in the *current render* reference space
+      // (which might already be an offset space from a previous recenter or auto-center)
+      const currentRenderPose = frame.getViewerPose(this.xrRenderReferenceSpace);
+      if (!currentRenderPose) {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - Could not get viewer pose');
+        return false;
+      }
+
+      const currentPosInRenderSpace = currentRenderPose.transform.position;
+      const currentOriInRenderSpace = currentRenderPose.transform.orientation;
+      if (!currentPosInRenderSpace || !currentOriInRenderSpace) {
+        console.warn('[REORIENT_FIX] ❌ RECENTER_XR: FAILED - Invalid pose position or orientation');
+        return false;
+      }
+      
+      console.log('[REORIENT_FIX] ✅ RECENTER_XR: Prerequisites validated, computing transform...');
+
+      let offsetPos, offsetOri;
+      if (this.xrInitialViewerPosition && this.xrInitialViewerOrientation) {
+        // We want to recenter to the initial start position and orientation.
+        // The initial position is { x: 0, y: 0, z: initialZ } in the app's world (after auto-centering).
+        // However, we want to preserve the user's current Z depth to avoid sudden jumps forward/backward.
+        // So we recenter to { x: 0, y: 0, z: currentZ } but restore the initial orientation.
+        //
+        // The transform we pass to `getOffsetReferenceSpace` represents the pose of the
+        // *new reference space origin* in the *current render reference space*.
+        //
+        // If the viewer is currently at `currentPosInRenderSpace` in the current render space,
+        // and we want them to appear at `(0, 0, currentZ)` in the new space,
+        // then the new space's origin should be at `(currentPos.x, currentPos.y, 0)` in the current space.
+        //
+        // For orientation: we want the viewer's orientation in the new space to be `initialOrientation`.
+        // If the viewer's current orientation in the render space is `currentOri`,
+        // and we want it to be `initialOri` in the new space,
+        // then: currentOri * offsetOri.inverse() = initialOri
+        // So: offsetOri = initialOri.inverse() * currentOri
+        offsetPos = {
+          x: currentPosInRenderSpace.x, // Shift X to make viewer's X=0
+          y: currentPosInRenderSpace.y, // Shift Y to make viewer's Y=0 (align to floor)
+          z: 0, // Don't shift Z - preserve current depth
+        };
+
+        // Orientation component: rotate so the viewer's orientation matches the initial orientation
+        const currentQ = new THREE.Quaternion(currentOriInRenderSpace.x, currentOriInRenderSpace.y, currentOriInRenderSpace.z, currentOriInRenderSpace.w);
+        const initialQ = new THREE.Quaternion(this.xrInitialViewerOrientation.x, this.xrInitialViewerOrientation.y, this.xrInitialViewerOrientation.z, this.xrInitialViewerOrientation.w);
+
+        // We want: currentOri * offsetOri.inverse() = initialOri
+        // So: offsetOri = initialOri.inverse() * currentOri
+        const offsetQ = initialQ.clone().invert().multiply(currentQ);
+        offsetOri = { x: offsetQ.x, y: offsetQ.y, z: offsetQ.z, w: offsetQ.w };
+
+        console.log('[REORIENT_FIX] 🎯 RECENTER_XR: Computing transform to initial start position (app world X=0, Y=0, preserve Z):', {
+          initialPosInAppWorld: this.xrInitialViewerPosition,
+          initialOriInAppWorld: this.xrInitialViewerOrientation,
+          currentPosInRenderSpace: { x: currentPosInRenderSpace.x, y: currentPosInRenderSpace.y, z: currentPosInRenderSpace.z },
+          currentOriInRenderSpace: { x: currentOriInRenderSpace.x, y: currentOriInRenderSpace.y, z: currentOriInRenderSpace.z, w: currentOriInRenderSpace.w },
+          calculatedOffsetPos: offsetPos,
+          calculatedOffsetOri: offsetOri,
+          desiredPosInNewSpace: { x: 0, y: 0, z: currentPosInRenderSpace.z },
+        });
+      } else {
+        // Fallback: use current pose (shouldn't happen if autoCenterXROnce ran)
+        offsetPos = { x: currentPosInRenderSpace.x, y: 0, z: 0 }; // X-only auto-center (same as autoCenterXROnce)
+        offsetOri = { x: 0, y: 0, z: 0, w: 1 }; // Identity quaternion for orientation
+        console.warn('[REORIENT_FIX] ⚠️ RECENTER_XR: No initial pose saved, falling back to X-only auto-center for recenter');
+      }
+
+      // Create a new offset reference space from the *current render reference space*
+      console.log('[REORIENT_FIX] 🔧 RECENTER_XR: Creating offset reference space transform...', {
+        offsetPos,
+        offsetOri,
+        currentRenderReferenceSpace: this.xrRenderReferenceSpace,
+        baseReferenceSpace: this.xrBaseReferenceSpace
+      });
+      const transform = new XRRigidTransform(offsetPos, offsetOri);
+      console.log('[REORIENT_FIX] 🔧 RECENTER_XR: XRRigidTransform created:', {
+        position: transform.position,
+        orientation: transform.orientation,
+        matrix: transform.matrix
+      });
+      const offsetSpace = this.xrRenderReferenceSpace.getOffsetReferenceSpace(transform);
+      console.log('[REORIENT_FIX] 🔧 RECENTER_XR: Offset reference space created:', {
+        offsetSpace,
+        isSameAsBase: offsetSpace === this.xrBaseReferenceSpace,
+        isSameAsCurrent: offsetSpace === this.xrRenderReferenceSpace
+      });
+
+      this.xrRenderReferenceSpace = offsetSpace;
+      this.xrReferenceSpace = offsetSpace; // keep legacy field consistent
+      this.applyXRReferenceSpace(offsetSpace);
+      console.log('[REORIENT_FIX] ✅ RECENTER_XR: Offset reference space created and applied');
+
+      // Force a renderer update to ensure the new reference space is used in the next frame
+      if (this.renderer && typeof this.renderer.setNeedsUpdate === 'function') {
+        this.renderer.setNeedsUpdate(true);
+        console.log('[REORIENT_FIX] ✅ RECENTER_XR: Renderer update forced after recenter');
+      }
+
+      // Verify the recenter worked by checking the viewer pose in the new reference space
+      const verifyPose = frame.getViewerPose(offsetSpace);
+      const verifyPos = verifyPose?.transform?.position;
+      const verifyOri = verifyPose?.transform?.orientation;
+
+      // Also check the viewer pose in the base space to see the actual physical position
+      const basePose = frame.getViewerPose(this.xrBaseReferenceSpace);
+      const basePos = basePose?.transform?.position;
+
+      // Calculate orientation difference to verify recenter worked
+      let orientationMatch = false;
+      if (verifyOri && this.xrInitialViewerOrientation) {
+        const verifyQ = new THREE.Quaternion(verifyOri.x, verifyOri.y, verifyOri.z, verifyOri.w);
+        const initialQ = new THREE.Quaternion(this.xrInitialViewerOrientation.x, this.xrInitialViewerOrientation.y, this.xrInitialViewerOrientation.z, this.xrInitialViewerOrientation.w);
+        const diffQ = verifyQ.clone().multiply(initialQ.clone().invert());
+        const angleDiff = Math.abs(diffQ.angle());
+        orientationMatch = angleDiff < 0.1; // Within ~6 degrees
+      }
+
+      const positionMatch = verifyPos ? (Math.abs(verifyPos.x) < 0.01 && Math.abs(verifyPos.y) < 0.01) : false;
+      const reorientSuccess = positionMatch && orientationMatch;
+
+      console.log('[REORIENT_FIX] 🎯 RECENTER_XR: Verification results:', {
+        mode: this.xrMode,
+        offsetPos,
+        offsetOri,
+        currentPosInRenderSpace: { x: currentPosInRenderSpace.x, y: currentPosInRenderSpace.y, z: currentPosInRenderSpace.z },
+        currentOriInRenderSpace: { x: currentOriInRenderSpace.x, y: currentOriInRenderSpace.y, z: currentOriInRenderSpace.z, w: currentOriInRenderSpace.w },
+        initialPosInAppWorld: this.xrInitialViewerPosition,
+        initialOriInAppWorld: this.xrInitialViewerOrientation,
+        verifyPosInOffsetSpace: verifyPos ? { x: verifyPos.x, y: verifyPos.y, z: verifyPos.z } : null,
+        verifyOriInOffsetSpace: verifyOri ? { x: verifyOri.x, y: verifyOri.y, z: verifyOri.z, w: verifyOri.w } : null,
+        expectedPosInOffsetSpace: { x: 0, y: 0, z: currentPosInRenderSpace.z }, // X=0, Y=0, preserve current Z
+        expectedOriInOffsetSpace: this.xrInitialViewerOrientation,
+        positionMatch: positionMatch,
+        orientationMatch: orientationMatch,
+        basePosAfterRecenter: basePos ? { x: basePos.x, y: basePos.y, z: basePos.z } : null,
+      });
+
+      if (reorientSuccess) {
+        console.log('[REORIENT_FIX] ✅✅✅ RECENTER_XR: SUCCESS - Reorientation verified! Position and orientation match expected values.');
+      } else {
+        console.warn('[REORIENT_FIX] ⚠️ RECENTER_XR: PARTIAL - Reorientation applied but verification shows:', {
+          positionMatch: positionMatch,
+          orientationMatch: orientationMatch,
+          verifyPos: verifyPos ? { x: verifyPos.x, y: verifyPos.y, z: verifyPos.z } : null,
+          expectedPos: { x: 0, y: 0, z: currentPosInRenderSpace.z },
+        });
+      }
+
+      this.verifyReferenceSpaceApplied(offsetSpace);
+
+      console.log('[REORIENT_FIX] ✅ RECENTER_XR: Completed successfully');
+      return true;
+    } catch (e) {
+      console.error('[REORIENT_FIX] ❌❌❌ RECENTER_XR: FAILED with error:', e?.message || e, e);
+      return false;
+    }
+  }
+
+  /**
+   * Auto-center the XR reference space so the current viewer pose becomes centered on X.
+   * This runs once per XR session on the first XR frame.
+   *
+   * Why: some runtimes start the user offset from the app's world origin (e.g. +2m on X),
+   * which makes the user appear off-center relative to the floor grid.
+   *
+   * We preserve floor alignment by forcing Y=0, and we only correct X (not yaw, not Z).
+   * 
+   * Also saves the initial viewer position and orientation for later recentering.
+   */
+  autoCenterXROnce(frame) {
+    // DISABLED: Auto-center functionality is disabled to preserve camera translation.
+    // The base reference space is already set up correctly in enableVR/enableAR.
+    // No offset reference space is created, allowing free camera movement.
+    return false;
+  }
+
+  /**
+   * Decide which gamepad buttons should trigger recenter on a long-press.
+   * Galaxy XR varies by device/profile; this is intentionally permissive but avoids
+   * common "trigger/select" buttons to reduce accidental recenter.
+   */
+  getXRRecenterButtonIndices(inputSource, gamepad) {
+    const count = gamepad?.buttons?.length || 0;
+    if (count <= 0) return [];
+
+    const profiles = Array.isArray(inputSource?.profiles) ? inputSource.profiles : [];
+    const profilesStr = profiles.join(' ').toLowerCase();
+    const isHeadsetInput = inputSource?.handedness === 'none';
+    const looksLikeTouchpad =
+      profilesStr.includes('touchpad') ||
+      profilesStr.includes('cardboard') ||
+      profilesStr.includes('daydream') ||
+      profilesStr.includes('gear') ||
+      profilesStr.includes('oculus-go');
+
+    // Heuristic: if there's only one button (common for headset touchpad), allow it.
+    if (count === 1) return [0];
+
+    // Prefer "menu/home" style buttons on many controllers (often 2 or 3),
+    // but avoid index 0 (trigger/select) by default.
+    const candidates = [];
+    // For headset input sources / touchpad-style profiles, allow index 0 as a long-press gesture.
+    if (isHeadsetInput || looksLikeTouchpad) candidates.push(0);
+    // Some controllers expose a system/menu-like button at index 1.
+    if (count > 1) candidates.push(1);
+    if (count > 3) candidates.push(3);
+    if (count > 2) candidates.push(2);
+    if (count > 4) candidates.push(4);
+    if (count > 5) candidates.push(5);
+
+    // If nothing matched, fall back to last button (often system/menu-ish).
+    if (candidates.length === 0 && count > 1) candidates.push(count - 1);
+
+    // Deduplicate
+    return Array.from(new Set(candidates)).filter((i) => i >= 0 && i < count);
+  }
+
+  /**
+   * Poll XR input sources for long-press recenter gestures.
+   */
+  maybeHandleXRRecenter(time, frame) {
+    // Always log entry (first time only, then throttled) to verify function is being called
+    if (!this.xrRecenterCheckFirstLog) {
+      this.xrRecenterCheckFirstLog = true;
+      console.log('[REORIENT_FIX] 🔍 RECENTER_CHECK: Function called (first time)');
+    }
+    
+    if (!this.xrSession || !frame) {
+      if (!this.xrSession) console.warn('[REORIENT_FIX] ⚠️ RECENTER_CHECK: No XR session');
+      if (!frame) console.warn('[REORIENT_FIX] ⚠️ RECENTER_CHECK: No frame');
+      return;
+    }
+    if (time < (this.xrRecenterCooldownUntil || 0)) {
+      const remaining = ((this.xrRecenterCooldownUntil || 0) - time).toFixed(0);
+      // Only log cooldown once per cooldown period to avoid spam
+      if (!this.xrRecenterCooldownLogged) {
+        this.xrRecenterCooldownLogged = true;
+        console.log(`[REORIENT_FIX] ⏭️ RECENTER_CHECK: On cooldown (${remaining}ms remaining)`);
+        setTimeout(() => { this.xrRecenterCooldownLogged = false; }, 100);
+      }
+      return;
+    } else {
+      this.xrRecenterCooldownLogged = false;
+    }
+
+    const holdMs = 900; // long-press threshold
+    const sources = this.xrSession.inputSources || [];
+    
+    // Log when function is called (throttled to avoid spam, but always log when there's activity)
+    const shouldLogCheck = time - this.xrLastRecenterCheckLog >= 500; // Log every 500ms max
+    if (shouldLogCheck && sources.length > 0) {
+      this.xrLastRecenterCheckLog = time;
+      // Check if there are active holds by checking each input source
+      // (We can't iterate WeakMaps, so we check sources directly)
+      let hasActiveHolds = false;
+      for (const src of sources) {
+        const stableKey = src?.targetRaySpace || src;
+        if (this.xrRecenterSelectHoldState.has(stableKey)) {
+          hasActiveHolds = true;
+          break;
+        }
+        const byButton = this.xrRecenterHoldState.get(stableKey);
+        if (byButton && byButton.size > 0) {
+          hasActiveHolds = true;
+          break;
+        }
+      }
+      if (hasActiveHolds) {
+        console.log(`[REORIENT_FIX] 🔍 RECENTER_CHECK: Checking ${sources.length} input source(s) for long-press...`);
+      }
+    }
+
+    // Low-noise diagnostic logging (throttled to once per second, dev-gated)
+    if (this.xrDebugInputs && time - this.xrLastDiagnosticLog >= 1000) {
+      this.xrLastDiagnosticLog = time;
+      const diagnostic = sources.map((src, idx) => {
+        const gp = src?.gamepad;
+        const buttonStates = gp?.buttons ? Array.from(gp.buttons).map((btn, i) => ({
+          idx: i,
+          pressed: !!btn?.pressed,
+          touched: typeof btn?.touched === 'boolean' ? !!btn.touched : null,
+          value: typeof btn?.value === 'number' ? btn.value : null
+        })) : [];
+        return {
+          index: idx,
+          handedness: src?.handedness || 'unknown',
+          profiles: Array.isArray(src?.profiles) ? src.profiles : [],
+          hasGamepad: !!gp,
+          buttonCount: gp?.buttons?.length || 0,
+          buttons: buttonStates.filter(b => b.pressed || b.touched || b.value > 0)
+        };
+      });
+      console.log('🔍 XR Input Diagnostics (throttled 1/sec):', diagnostic);
+    }
+
+    for (const src of sources) {
+      // Use stable XRSpace (targetRaySpace) as key instead of XRInputSource object ref
+      // This ensures tracking persists even if session.inputSources yields different object instances
+      const stableKey = src?.targetRaySpace || src;
+
+      // Some runtimes don't expose a gamepad for headset touchpads / system inputs, but they do emit
+      // selectstart/selectend events. We track those holds in `xrRecenterSelectHoldState` and trigger
+      // a software recenter from the render loop where we have access to `frame`.
+      const selectHold = this.xrRecenterSelectHoldState.get(stableKey);
+      if (selectHold) {
+        const holdDuration = time - selectHold.downAt;
+        const isLongPress = holdDuration >= holdMs;
+        if (!selectHold.triggered) {
+          if (isLongPress) {
+            selectHold.triggered = true;
+            console.log('[REORIENT_FIX] 🕹️ XR recenter long-press detected (select):', {
+              handedness: src?.handedness,
+              profiles: src?.profiles,
+              holdDuration: holdDuration.toFixed(0) + 'ms',
+              threshold: holdMs + 'ms'
+            });
+            console.log('[REORIENT_FIX] 🎯 TRIGGER: Calling recenterXR() from select long-press...');
+            const ok = this.recenterXR(frame);
+            this.xrRecenterCooldownUntil = time + 1500;
+            if (ok) {
+              console.log('[REORIENT_FIX] ✅ TRIGGER: recenterXR() returned success');
+              return;
+            } else {
+              console.warn('[REORIENT_FIX] ❌ TRIGGER: recenterXR() returned failure');
+            }
+          } else {
+            // Log progress towards long-press threshold (throttled)
+            if (holdDuration % 200 < 16) { // Log roughly every 200ms
+              console.log(`[REORIENT_FIX] ⏳ SELECT_HOLD: ${holdDuration.toFixed(0)}ms / ${holdMs}ms (${((holdDuration / holdMs) * 100).toFixed(0)}%)`);
+            }
+          }
+        }
+      }
+
+      const gp = src?.gamepad;
+      if (!gp || !gp.buttons) continue;
+
+      const indices = this.getXRRecenterButtonIndices(src, gp);
+      if (indices.length === 0) continue;
+
+      const profiles = Array.isArray(src?.profiles) ? src.profiles : [];
+      const profilesStr = profiles.join(' ').toLowerCase();
+      const isHeadsetInput = src?.handedness === 'none';
+      const allowTouchedGesture =
+        isHeadsetInput ||
+        profilesStr.includes('touchpad') ||
+        profilesStr.includes('cardboard') ||
+        profilesStr.includes('daydream') ||
+        profilesStr.includes('gear') ||
+        profilesStr.includes('oculus-go');
+
+      let byButton = this.xrRecenterHoldState.get(stableKey);
+      if (!byButton) {
+        byButton = new Map();
+        this.xrRecenterHoldState.set(stableKey, byButton);
+      }
+
+      for (const idx of indices) {
+        const btn = gp.buttons[idx];
+        if (!btn) continue;
+
+        // Some runtimes expose "touch-and-hold" via GamepadButton.touched even when pressed is never true.
+        const pressed = !!btn.pressed;
+        const touched = allowTouchedGesture && typeof btn.touched === 'boolean' ? !!btn.touched : false;
+        const active = pressed || touched;
+        const existing = byButton.get(idx);
+
+        if (!active) {
+          if (existing) byButton.delete(idx);
+          continue;
+        }
+
+        if (!existing) {
+          byButton.set(idx, { downAt: time, triggered: false });
+          continue;
+        }
+
+        const holdDuration = time - existing.downAt;
+        const isLongPress = holdDuration >= holdMs;
+        if (!existing.triggered) {
+          if (isLongPress) {
+            existing.triggered = true;
+
+            console.log('[REORIENT_FIX] 🕹️ XR recenter long-press detected:', {
+              handedness: src.handedness,
+              profiles: src.profiles,
+              buttonIndex: idx,
+              holdDuration: holdDuration.toFixed(0) + 'ms',
+              threshold: holdMs + 'ms'
+            });
+            console.log('[REORIENT_FIX] 🎯 TRIGGER: Calling recenterXR() from gamepad button long-press...');
+
+            const ok = this.recenterXR(frame);
+            // Cooldown to prevent repeated triggers while holding
+            this.xrRecenterCooldownUntil = time + 1500;
+            if (ok) {
+              console.log('[REORIENT_FIX] ✅ TRIGGER: recenterXR() returned success');
+              return;
+            } else {
+              console.warn('[REORIENT_FIX] ❌ TRIGGER: recenterXR() returned failure');
+            }
+          } else {
+            // Log progress towards long-press threshold (throttled)
+            if (holdDuration % 200 < 16) { // Log roughly every 200ms
+              console.log(`[REORIENT_FIX] ⏳ BUTTON_HOLD: Button ${idx} - ${holdDuration.toFixed(0)}ms / ${holdMs}ms (${((holdDuration / holdMs) * 100).toFixed(0)}%)`);
+            }
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -210,7 +805,9 @@ export class SceneManager {
           name: 'Minimal',
           config: {
             antialias: false,
-            alpha: false,
+            // Keep alpha enabled so AR pass-through can be transparent even on fallback configs.
+            // If alpha is disabled at renderer creation time, AR cannot be transparent later.
+            alpha: true,
             powerPreference: "low-power",
             failIfMajorPerformanceCaveat: false,
             preserveDrawingBuffer: false,
@@ -223,7 +820,8 @@ export class SceneManager {
           name: 'Ultra Minimal',
           config: {
             antialias: false,
-            alpha: false,
+            // Keep alpha enabled for AR pass-through (see note above).
+            alpha: true,
             powerPreference: "low-power",
             failIfMajorPerformanceCaveat: false,
             preserveDrawingBuffer: false,
@@ -274,11 +872,29 @@ export class SceneManager {
       this.renderer.setSize(width, height);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
       
+      // Set renderer clear color to match background (will be overridden by texture when loaded)
+      // Use black (0x000000) with full opacity so background texture shows through
+      this.renderer.setClearColor(0x000000, 1.0);
+      
+      // Enable WebXR support
+      if (this.renderer.xr) {
+        this.renderer.xr.enabled = true;
+        // Store original clear color for AR pass-through restoration
+        this.originalClearColor = new THREE.Color();
+        this.renderer.getClearColor(this.originalClearColor);
+        this.originalClearAlpha = this.renderer.getClearAlpha();
+        console.log('✅ WebXR enabled on renderer');
+        console.log('✅ Renderer clear color initialized:', {
+          color: this.originalClearColor.getHexString(),
+          alpha: this.originalClearAlpha
+        });
+      }
+      
       if (enableShadows) {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       }
-      
+
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.0;
 
@@ -432,16 +1048,76 @@ export class SceneManager {
   }
 
   /**
-   * Setup HDR environment map using shared manager
+   * Setup sky background image from Character Studio
    */
   setupHDREnvironment() {
-    // Register this scene with the shared HDR manager
-    sharedHDRManager.registerScene(this.scene);
+    if (!this.scene) return;
     
-    // Load HDR if not already loaded
-    if (!sharedHDRManager.isHDRLoaded()) {
-      sharedHDRManager.loadHDR();
+    // Load the sky background image
+    const textureLoader = new THREE.TextureLoader();
+    console.log('📸 Loading sky background texture from /assets/backgrounds/background4.jpg');
+    textureLoader.load(
+      '/assets/backgrounds/background4.jpg',
+      (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.flipY = false; // Equirectangular textures typically don't need flipping
+        texture.needsUpdate = true;
+
+        // Always keep a reference to the loaded sky texture so VR can restore it even if AR clears background.
+        this.originalSceneBackground = this.originalSceneBackground ?? texture;
+
+        // In AR, background must remain null (pass-through).
+        // IMPORTANT: This callback can run before `this.xrSession` is assigned (race), so also key off `this.xrMode`
+        // and the renderer clear alpha which AR sets to 0.
+        const isPresenting = !!this.renderer?.xr?.isPresenting;
+        const blendMode = this.xrSession?.environmentBlendMode;
+        const isARByBlend = blendMode === 'alpha-blend' || blendMode === 'additive' || this.xrSession?.mode === 'immersive-ar';
+        const isARByModeFlag = this.xrMode === 'ar';
+        const isTransparentClear =
+          typeof this.renderer?.getClearAlpha === 'function' ? this.renderer.getClearAlpha() === 0 : false;
+
+        const shouldSuppressBackground = isPresenting && (isARByBlend || isARByModeFlag || isTransparentClear);
+
+        if (shouldSuppressBackground) {
+          // Keep pass-through working
+          this.scene.background = null;
+          // Optional: still use for lighting/reflections
+          this.scene.environment = texture;
+          console.log('📱 AR active: sky texture loaded, background suppressed (pass-through).');
+        } else {
+          this.scene.background = texture;
+        }
+        console.log('✅ Sky background texture loaded and set:', texture);
+        console.log('✅ Background type:', this.scene.background ? this.scene.background.constructor.name : 'null');
+        console.log('✅ Background texture settings:', {
+          mapping: texture.mapping,
+          colorSpace: texture.colorSpace,
+          flipY: texture.flipY,
+          image: texture.image ? `${texture.image.width}x${texture.image.height}` : 'no image'
+        });
+      },
+      (progress) => {
+        console.log('📸 Background texture loading progress:', progress);
+      },
+      (error) => {
+        console.error('❌ Failed to load sky background image:', error);
+        // Keep the color background if texture fails
+        console.log('⚠️ Keeping default color background due to texture load failure');
     }
+    );
+  }
+
+  /**
+   * Normalize the sky texture settings for use as `scene.background` in the normal 3D viewer.
+   * Some XR paths use a separate UV-mapped skybox mesh; that must not leak into the viewer background.
+   */
+  configureSceneBackgroundTexture(texture) {
+    if (!texture || !(texture instanceof THREE.Texture)) return;
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.flipY = false;
+    texture.needsUpdate = true;
   }
 
   /**
@@ -644,10 +1320,19 @@ export class SceneManager {
       console.log('🔄 Starting GLTF/GLB model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       const startTime = Date.now();
       
       this.gltfLoader.load(
-        source,
+        url,
         (gltf) => {
           const loadTime = Date.now() - startTime;
           console.log(`✅ GLTF/GLB loaded successfully in ${loadTime}ms`);
@@ -727,6 +1412,11 @@ export class SceneManager {
             }
           }
           
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
           resolve(gltf.scene);
         },
         (progress) => {
@@ -735,6 +1425,11 @@ export class SceneManager {
           this.emit('modelLoadingProgress', { progress: percentComplete });
         },
         (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
           const loadTime = Date.now() - startTime;
           console.error(`❌ GLTF/GLB loading failed after ${loadTime}ms:`, {
             message: error.message,
@@ -752,11 +1447,34 @@ export class SceneManager {
    */
   async loadOBJ(source) {
     return new Promise((resolve, reject) => {
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       this.objLoader.load(
-        source,
-        (obj) => resolve(obj),
+        url,
+        (obj) => {
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
+          resolve(obj);
+        },
         (progress) => this.emit('modelLoadingProgress', { progress }),
-        (error) => reject(error)
+        (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
+          reject(error);
+        }
       );
     });
   }
@@ -769,10 +1487,19 @@ export class SceneManager {
       console.log('🔄 Starting FBX model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       const startTime = Date.now();
       
       this.fbxLoader.load(
-        source,
+        url,
         (fbx) => {
           const loadTime = Date.now() - startTime;
           console.log(`✅ FBX loaded successfully in ${loadTime}ms`);
@@ -863,6 +1590,11 @@ export class SceneManager {
             console.warn('⚠️ No geometries found in FBX model!');
           }
           
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
           resolve(fbx);
         },
         (progress) => {
@@ -871,6 +1603,11 @@ export class SceneManager {
           this.emit('modelLoadingProgress', { progress: percentComplete });
         },
         (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
           const loadTime = Date.now() - startTime;
           console.error(`❌ FBX loading failed after ${loadTime}ms:`, {
             message: error.message,
@@ -887,13 +1624,22 @@ export class SceneManager {
    * Load VRM model
    */
   async loadVRM(source) {
+    // Convert File object to URL if needed (declare outside try for cleanup in catch)
+    let url = source;
+    let objectUrl = null;
+    if (source instanceof File) {
+      objectUrl = URL.createObjectURL(source);
+      url = objectUrl;
+      console.log('📎 Created object URL for File:', url);
+    }
+    
     try {
       console.log('🔄 Starting VRM model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
       const startTime = Date.now();
       
-      const vrm = await this.vrmLoader.loadVRM(source, {
+      const vrm = await this.vrmLoader.loadVRM(url, {
         normalize: true,
         addDefaultMaterials: true,
         processBlendShapes: true,
@@ -902,6 +1648,12 @@ export class SceneManager {
       
       const loadTime = Date.now() - startTime;
       console.log(`✅ VRM loaded successfully in ${loadTime}ms`);
+      
+      // Clean up object URL after successful load
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        console.log('🧹 Cleaned up object URL');
+      }
       
       // Store the VRM object for blend shape access
       this.currentVRM = vrm;
@@ -1018,6 +1770,11 @@ export class SceneManager {
       scene.userData.vrm = vrm;
       return scene;
     } catch (error) {
+      // Clean up object URL on error
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        console.log('🧹 Cleaned up object URL after error');
+      }
       const loadTime = Date.now() - startTime;
       console.error(`❌ VRM loading failed after ${loadTime}ms:`, {
         message: error.message,
@@ -1710,8 +2467,24 @@ export class SceneManager {
    * Process loaded model (center, scale, etc.)
    */
   processModel(model, options = {}) {
-    const { autoCenter = true, autoScale = true, scale = 1 } = options;
-    console.log('processModel called with options:', { autoCenter, autoScale, scale });
+    const { 
+      autoCenter = true, 
+      autoScale = true, 
+      scale = 1,
+      ensureForwardFacing = true,
+      orientationMode = 'auto'
+    } = options;
+    console.log('processModel called with options:', { autoCenter, autoScale, scale, ensureForwardFacing, orientationMode });
+
+    const applyOrientation = () => {
+      if (orientationMode === 'core3d') {
+        model.rotation.y += Math.PI;
+        model.updateMatrixWorld(true);
+        console.log('🎯 Applied Core3D orientation correction');
+      } else if (ensureForwardFacing && orientationMode === 'auto') {
+        this.ensureModelOrientation(model);
+      }
+    };
 
     if (autoCenter || autoScale) {
       const box = new THREE.Box3().setFromObject(model);
@@ -1728,9 +2501,7 @@ export class SceneManager {
         console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
         model.scale.setScalar(targetScale);
       }
-      
-      // Rotate model 180 degrees around Y-axis to face the viewport
-      model.rotation.y += Math.PI;
+      applyOrientation();
       
               if (autoCenter) {
                 // Recalculate bounding box after rotation and scaling
@@ -1765,8 +2536,7 @@ export class SceneManager {
                 });
               }
     } else {
-      // Rotate model 180 degrees around Y-axis to face the viewport
-      model.rotation.y += Math.PI;
+      applyOrientation();
     }
 
     return model;
@@ -1805,22 +2575,61 @@ export class SceneManager {
   /**
    * Ensure model is properly oriented (facing forward)
    */
-  ensureModelOrientation() {
-    if (!this.currentModel) return;
+  ensureModelOrientation(targetModel = this.currentModel) {
+    if (!targetModel) return;
     
-    // Check if VRM model needs orientation correction
-    if (this.currentVRM && this.currentVRM.scene) {
+    try {
+      targetModel.updateMatrixWorld(true);
       const modelForward = new THREE.Vector3();
-      this.currentModel.getWorldDirection(modelForward);
+      targetModel.getWorldDirection(modelForward);
       
-      // Only rotate if the model is actually facing backwards
-      if (modelForward.z > 0.5) {
-        console.log('🔄 Model is facing backwards, rotating 180 degrees');
-        this.currentModel.rotation.y += Math.PI;
-        console.log('🔄 Model rotation after correction:', this.currentModel.rotation);
+      // getWorldDirection returns the direction of the negative Z axis in world space
+      // Camera is typically at +Z looking toward origin (at 0,0,0)
+      // We want models to face toward -Z (toward the camera)
+      // If modelForward.z > 0, model is facing away (toward +Z) - needs rotation
+      // If modelForward.z < 0, model is facing toward camera (toward -Z) - correct
+      
+      console.log('🔍 Orientation check - model forward direction:', modelForward);
+      console.log('🔍 Model rotation before check:', targetModel.rotation);
+      
+      if (modelForward.z > 0.1) { // Use small threshold to avoid floating point issues
+        console.log('🔄 Model forward vector points away from camera (z > 0), rotating 180 degrees');
+        targetModel.rotation.y += Math.PI;
+        targetModel.updateMatrixWorld(true);
+        
+        // Verify after rotation
+        const newForward = new THREE.Vector3();
+        targetModel.getWorldDirection(newForward);
+        console.log('🔄 After rotation - forward:', newForward, 'rotation:', targetModel.rotation);
+        
+        if (newForward.z > 0.1) {
+          console.warn('⚠️ Model still facing wrong direction after rotation, applying additional 180° rotation');
+          targetModel.rotation.y += Math.PI;
+          targetModel.updateMatrixWorld(true);
+        } else {
+          console.log('✅ Model now facing camera correctly');
+        }
+      } else if (modelForward.z < -0.1) {
+        console.log('✅ Model orientation already faces the camera (z < 0)');
       } else {
-        console.log('✅ Model is already facing forward, no correction needed');
+        // modelForward.z is close to 0, model might be facing sideways
+        console.log('⚠️ Model forward vector is close to zero (sideways?), checking X component');
+        if (Math.abs(modelForward.x) > Math.abs(modelForward.z)) {
+          // Model is facing more in X direction than Z
+          if (modelForward.x > 0) {
+            console.log('🔄 Model facing +X, rotating -90 degrees');
+            targetModel.rotation.y -= Math.PI / 2;
+          } else {
+            console.log('🔄 Model facing -X, rotating +90 degrees');
+            targetModel.rotation.y += Math.PI / 2;
+          }
+          targetModel.updateMatrixWorld(true);
+        }
       }
+    } catch (error) {
+      console.warn('⚠️ Failed to evaluate model orientation, applying fallback rotation:', error);
+      targetModel.rotation.y += Math.PI;
+      targetModel.updateMatrixWorld(true);
     }
   }
 
@@ -2843,14 +3652,36 @@ export class SceneManager {
         targetLookAt = focusPoint.clone();
         break;
       case 'Top':
-        // Position directly above the model center, no X/Z offset inheritance
-        targetPosition = new THREE.Vector3(0, focusPoint.y + distance, 0);
-        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        // Position directly above the model center, always at origin X/Z regardless of previous view
+        // Get actual model center if available, otherwise use focus point Y
+        let topY = focusPoint.y;
+        let topLookAtY = focusPoint.y;
+        if (this.currentModel) {
+          const box = new THREE.Box3().setFromObject(this.currentModel);
+          if (!box.isEmpty()) {
+            const modelCenter = box.getCenter(new THREE.Vector3());
+            topY = modelCenter.y;
+            topLookAtY = modelCenter.y;
+          }
+        }
+        targetPosition = new THREE.Vector3(0, topY + distance, 0);
+        targetLookAt = new THREE.Vector3(0, topLookAtY, 0);
         break;
       case 'Bottom':
-        // Position directly below the model center, no X/Z offset inheritance
-        targetPosition = new THREE.Vector3(0, focusPoint.y - distance, 0);
-        targetLookAt = new THREE.Vector3(0, focusPoint.y, 0);
+        // Position directly below the model center, always at origin X/Z regardless of previous view
+        // Get actual model center if available, otherwise use focus point Y
+        let bottomY = focusPoint.y;
+        let bottomLookAtY = focusPoint.y;
+        if (this.currentModel) {
+          const box = new THREE.Box3().setFromObject(this.currentModel);
+          if (!box.isEmpty()) {
+            const modelCenter = box.getCenter(new THREE.Vector3());
+            bottomY = modelCenter.y;
+            bottomLookAtY = modelCenter.y;
+          }
+        }
+        targetPosition = new THREE.Vector3(0, bottomY - distance, 0);
+        targetLookAt = new THREE.Vector3(0, bottomLookAtY, 0);
         break;
       case 'Isometric':
         // Calculate isometric distance to maintain same zoom level
@@ -3260,6 +4091,127 @@ export class SceneManager {
     console.log('Camera looking at:', center);
   }
 
+  /**
+   * Focus camera on the face/head of the current model
+   * Detects VRM head bone or estimates face position from model geometry
+   */
+  focusOnFace() {
+    if (!this.currentModel || !this.camera || !this.controls) {
+      console.warn('Cannot focus on face: missing model, camera, or controls');
+      return;
+    }
+
+    console.log('🎯 Focusing camera on face...');
+    
+    let facePosition = null;
+    let hasFace = false;
+
+    // Try to find head bone in VRM model
+    if (this.currentVRM && this.currentVRM.humanoid) {
+      const humanBones = this.currentVRM.humanoid.humanBones;
+      
+      // Look for head bone
+      if (humanBones && humanBones.head && humanBones.head.node) {
+        const headBone = humanBones.head.node;
+        facePosition = new THREE.Vector3();
+        headBone.getWorldPosition(facePosition);
+        hasFace = true;
+        console.log('✅ Found VRM head bone at:', facePosition);
+      }
+    }
+
+    // Fallback: Try to find head bone by name in the model
+    if (!hasFace && this.currentModel) {
+      this.currentModel.traverse((child) => {
+        if (child.isBone && (child.name.toLowerCase() === 'head' || 
+                             child.name.toLowerCase().includes('head'))) {
+          facePosition = new THREE.Vector3();
+          child.getWorldPosition(facePosition);
+          hasFace = true;
+          console.log('✅ Found head bone by name at:', facePosition);
+          return; // Stop traversal
+        }
+      });
+    }
+
+    // Fallback: Estimate face position from model bounding box
+    if (!hasFace) {
+      const box = new THREE.Box3().setFromObject(this.currentModel);
+      
+      if (!box.isEmpty() && isFinite(box.min.x)) {
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        // Estimate face position: upper portion of the model, slightly forward
+        facePosition = center.clone();
+        facePosition.y += size.y * 0.3; // Upper portion (head area)
+        facePosition.z += size.z * 0.1; // Slightly forward (face forward)
+        hasFace = true;
+        console.log('📍 Estimated face position from bounding box:', facePosition);
+      }
+    }
+
+    if (!hasFace || !facePosition) {
+      console.warn('⚠️ Could not determine face position, focusing on model center');
+      this.focusOnModel();
+      return;
+    }
+
+    // Calculate camera position for face close-up
+    // Position camera in front of face for head-and-shoulders portrait view
+    const faceDistance = 0.12; // Very close-up distance for portrait view (head and shoulders)
+    const cameraOffset = new THREE.Vector3(0, 0, faceDistance); // Directly in front of face, eye level
+    
+    // Get model's forward direction (usually -Z in VRM)
+    const modelForward = new THREE.Vector3(0, 0, -1);
+    if (this.currentModel) {
+      // Apply model's rotation to forward vector
+      modelForward.applyQuaternion(this.currentModel.quaternion);
+    }
+    
+    // Calculate camera position relative to face
+    const targetCameraPosition = facePosition.clone();
+    targetCameraPosition.add(cameraOffset);
+    
+    // Store starting positions for smooth animation
+    const startCameraPosition = this.camera.position.clone();
+    const startLookAt = this.controls.target ? this.controls.target.clone() : new THREE.Vector3();
+    
+    // Animation parameters
+    const duration = 1000; // 1 second animation
+    const startTime = performance.now();
+    
+    // Animation function
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing function (ease-out)
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      // Interpolate camera position
+      this.camera.position.lerpVectors(startCameraPosition, targetCameraPosition, easeOut);
+      
+      // Interpolate look-at target (face position)
+      if (this.controls.target) {
+        this.controls.target.lerpVectors(startLookAt, facePosition, easeOut);
+      }
+      
+      // Update controls
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        console.log('✅ Camera focused on face at:', facePosition);
+      }
+    };
+    
+    // Start animation
+    requestAnimationFrame(animate);
+  }
+
 
   /**
    * Set render mode with auto-focus
@@ -3291,18 +4243,44 @@ export class SceneManager {
       if (child.isMesh && child.material) {
         // Only store if not already stored
         if (!child.userData.originalMaterial) {
-          // Store original material
-          child.userData.originalMaterial = child.material.clone();
-          child.userData.originalColor = child.material.color.clone();
+          // Store original material (support single or multi-material)
+          if (Array.isArray(child.material)) {
+            child.userData.originalMaterial = child.material.map((m) => (m && typeof m.clone === 'function' ? m.clone() : m));
+            // For array materials, store color from first material if available
+            const firstMaterial = child.material[0];
+            if (firstMaterial && firstMaterial.color) {
+              if (typeof firstMaterial.color.clone === 'function') {
+                child.userData.originalColor = firstMaterial.color.clone();
+              } else {
+                child.userData.originalColor = new THREE.Color(firstMaterial.color);
+              }
+            }
+          } else {
+            child.userData.originalMaterial = child.material && typeof child.material.clone === 'function' ? child.material.clone() : child.material;
+            // Store color if material has a color property
+            if (child.material && child.material.color) {
+              if (typeof child.material.color.clone === 'function') {
+                child.userData.originalColor = child.material.color.clone();
+              } else {
+                // Fallback: create a new Color from the existing one
+                child.userData.originalColor = new THREE.Color(child.material.color);
+              }
+            }
+          }
           
           // Enhanced material preservation for all material types
-          console.log(`🎨 Storing material for: ${child.name} (${child.material.type})`);
+          const materialType = Array.isArray(child.material) 
+            ? `Array[${child.material.length}]` 
+            : (child.material?.type || 'unknown');
+          console.log(`🎨 Storing material for: ${child.name} (${materialType})`);
           
-          // Store material properties
-          child.userData.originalMaterialType = child.material.type;
-          child.userData.originalOpacity = child.material.opacity;
-          child.userData.originalTransparent = child.material.transparent;
-          child.userData.originalSide = child.material.side;
+          // Store material properties (only for single material, not arrays)
+          if (!Array.isArray(child.material) && child.material) {
+            child.userData.originalMaterialType = child.material.type;
+            child.userData.originalOpacity = child.material.opacity;
+            child.userData.originalTransparent = child.material.transparent;
+            child.userData.originalSide = child.material.side;
+          }
           
           // Store textures if they exist
           if (child.material.map) {
@@ -3408,7 +4386,15 @@ export class SceneManager {
           case 'solid':
             // Restore original material if it exists (e.g., coming from UV mode)
             if (child.userData.originalMaterial) {
-              child.material = child.userData.originalMaterial.clone();
+              const orig = child.userData.originalMaterial;
+              if (Array.isArray(orig)) {
+                child.material = orig.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+              } else if (typeof orig?.clone === 'function') {
+                child.material = orig.clone();
+              } else {
+                // Fallback: use the stored object directly
+                child.material = orig || child.material;
+              }
             }
             child.material.wireframe = false;
             child.material.transparent = false;
@@ -3807,7 +4793,9 @@ export class SceneManager {
       }
     } else if (typeof source === 'string') {
       console.log('String source:', source);
-      const parts = source.split('.');
+      // Strip query parameters and hash from URL before extracting extension
+      const urlWithoutQuery = source.split('?')[0].split('#')[0];
+      const parts = urlWithoutQuery.split('.');
       console.log('String parts:', parts);
       if (parts.length > 1) {
         extension = parts.pop().toLowerCase();
@@ -3861,7 +4849,7 @@ export class SceneManager {
    */
   async exportToGLB(options = {}) {
     const {
-      filename = 'open3dstudio_export.glb',
+      filename = 'opennexus3dstudio_export.glb',
       forCharacterStudio = true,
       ...exportOptions
     } = options;
@@ -3895,7 +4883,7 @@ export class SceneManager {
    */
   async exportToVRM(options = {}) {
     const {
-      filename = 'open3dstudio_export.vrm',
+      filename = 'opennexus3dstudio_export.vrm',
       vrmVersion = '0.0',
       metadata = {},
       ...exportOptions
@@ -3936,6 +4924,16 @@ export class SceneManager {
         return;
       }
       
+      // Don't render if XR session is active (XR has its own render loop via setAnimationLoop)
+      if (this.renderer && this.renderer.xr && this.renderer.xr.isPresenting) {
+        // XR is handling rendering, just continue the loop for controls
+        if (this.controls) {
+          this.controls.update();
+        }
+        this.animationId = requestAnimationFrame(animate);
+        return;
+      }
+      
       this.animationId = requestAnimationFrame(animate);
       
       if (this.controls) {
@@ -3971,10 +4969,1309 @@ export class SceneManager {
   }
 
   /**
+   * Enable AR mode with floor alignment matching VR mode
+   * Returns ARButton element that can be added to the UI
+   * @param {HTMLElement} container - Optional container element to add button to
+   * @returns {HTMLElement} ARButton element
+   */
+  enableAR(container = null) {
+    if (!this.renderer || !this.scene) {
+      console.error('❌ Cannot enable AR: renderer or scene not initialized');
+      return null;
+    }
+
+    console.log('📱 Setting up AR mode...');
+
+    // IMPORTANT: Do NOT override renderer.xr.setSession here.
+    // XR session handling (VR + AR) is unified in enableVR() so VR stays "default" and AR gets special treatment.
+
+    // If button already exists, return it instead of creating a new one
+    if (this.arButton) {
+      console.log('📱 AR button already exists, reusing...');
+      return this.arButton;
+    }
+
+    // Create AR button using Three.js ARButton utility
+    // Require bounded-floor for proper physical floor alignment
+    const arButton = ARButton.createButton(this.renderer, {
+      requiredFeatures: ['bounded-floor'],
+      optionalFeatures: ['local-floor', 'local', 'viewer']
+    });
+
+    // Customize button with emoji icon - use MutationObserver to persist changes
+    if (arButton) {
+      // Set emoji icon immediately
+      arButton.innerHTML = '📱';
+      arButton.title = 'Enter Augmented Reality';
+      arButton.setAttribute('aria-label', 'Enter Augmented Reality');
+      
+      // Style the button for icon display
+      arButton.style.fontSize = '1.2rem';
+      arButton.style.padding = '4px 8px';
+      arButton.style.minWidth = '32px';
+      arButton.style.height = '32px';
+      arButton.style.textAlign = 'center';
+      arButton.style.display = 'inline-flex';
+      arButton.style.alignItems = 'center';
+      arButton.style.justifyContent = 'center';
+      
+      // Use MutationObserver to keep emoji when button text changes
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'childList' || mutation.type === 'characterData') {
+            // Restore emoji if text was changed
+            if (arButton.textContent !== '📱' && !arButton.textContent.includes('📱')) {
+              arButton.innerHTML = '📱';
+            }
+          }
+        });
+      });
+      
+      observer.observe(arButton, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+      
+      // Store observer for cleanup
+      arButton._emojiObserver = observer;
+    }
+
+    // Store button reference
+    this.arButton = arButton;
+
+    // Add button to container if provided
+    if (container) {
+      container.appendChild(arButton);
+    }
+
+    console.log('✅ AR button created with emoji icon');
+    return arButton;
+  }
+
+  /**
+   * Enable VR mode with floor alignment
+   * Returns VRButton element that can be added to the UI
+   * @param {HTMLElement} container - Optional container element to add button to
+   * @returns {HTMLElement} VRButton element
+   */
+  enableVR(container = null) {
+    if (!this.renderer || !this.scene) {
+      console.error('❌ Cannot enable VR: renderer or scene not initialized');
+      return null;
+    }
+
+    console.log('🥽 Setting up VR mode...');
+
+    // Store original setSession only if not already stored
+    if (!this.originalXRSetSession) {
+      this.originalXRSetSession = this.renderer.xr.setSession.bind(this.renderer.xr);
+    }
+    const originalSetSession = this.originalXRSetSession;
+    
+    // Always set up the setSession override (even if button exists, we need the handler)
+    this.renderer.xr.setSession = async (session) => {
+      // NOTE:
+      // Some WebXR runtimes (notably some Android XR stacks) do not expose `XRSession.mode`.
+      // In that case, reliably infer AR vs VR from `environmentBlendMode`.
+      const blendMode = session.environmentBlendMode || 'unknown';
+      const sessionMode = session.mode; // may be undefined
+
+      const isAR =
+        sessionMode === 'immersive-ar' ||
+        blendMode === 'alpha-blend' ||
+        blendMode === 'additive';
+
+      // Treat `opaque` as VR. If mode is missing, VR is the safe default for non-AR immersive sessions.
+      const isVR =
+        sessionMode === 'immersive-vr' ||
+        (!isAR && blendMode === 'opaque');
+
+      const isXR = !isAR && !isVR;
+      const xrKind = isAR ? 'AR' : isVR ? 'VR' : 'XR';
+      const xrEmoji = isAR ? '📱' : isVR ? '🥽' : '🔎';
+      // Store mode early to avoid races with async loaders (e.g., sky texture load).
+      this.xrMode = isAR ? 'ar' : isVR ? 'vr' : 'xr';
+
+      // Save the current non-XR view so exiting AR/VR returns to the same 3D renderer view.
+      // Important: only capture if we don't already have a saved view (so VR->AR switching inside XR
+      // doesn't overwrite the original pre-XR view).
+      if (
+        !this.preXRCameraPosition &&
+        this.camera &&
+        this.controls &&
+        !this.renderer?.xr?.isPresenting
+      ) {
+        this.preXRCameraPosition = this.camera.position.clone();
+        this.preXRCameraRotation = this.camera.rotation.clone();
+        this.preXRCameraQuaternion = this.camera.quaternion.clone();
+        this.preXRCameraUp = this.camera.up.clone();
+        this.preXRCameraZoom = this.camera.zoom;
+        this.preXRCameraTarget = this.controls.target.clone();
+        console.log('💾 Saved camera state before XR:', {
+          position: this.preXRCameraPosition,
+          rotation: this.preXRCameraRotation,
+          target: this.preXRCameraTarget,
+          zoom: this.preXRCameraZoom,
+        });
+      }
+
+      // Capture full snapshot of background state before entering XR (for exact restoration on exit)
+      // This ensures the 3D viewer returns to the exact same sky orientation as before XR
+      if (!this.preXRBackgroundSnapshot && this.scene) {
+        const bg = this.scene.background;
+        if (bg instanceof THREE.Texture) {
+          // Store full texture state snapshot
+          this.preXRBackgroundSnapshot = {
+            type: 'texture',
+            textureRef: bg,
+            mapping: bg.mapping,
+            colorSpace: bg.colorSpace,
+            flipY: bg.flipY,
+            needsUpdate: bg.needsUpdate
+          };
+          console.log('💾 Saved background texture snapshot before XR:', {
+            mapping: bg.mapping,
+            colorSpace: bg.colorSpace,
+            flipY: bg.flipY
+          });
+        } else if (bg instanceof THREE.Color) {
+          this.preXRBackgroundSnapshot = {
+            type: 'color',
+            value: bg.clone()
+          };
+          console.log('💾 Saved background color snapshot before XR:', bg);
+        } else {
+          this.preXRBackgroundSnapshot = {
+            type: 'null',
+            value: null
+          };
+          console.log('💾 Saved background snapshot before XR: null');
+        }
+      }
+
+      // Check for XR input diagnostics query param (dev-gated)
+      if (typeof window !== 'undefined' && window.location) {
+        const params = new URLSearchParams(window.location.search);
+        this.xrDebugInputs = params.get('xrDebugInputs') === '1';
+      }
+
+      // ASCII marker for remote log sinks
+      console.log('XR_OVERRIDE setSession called. mode=', sessionMode);
+      console.log('XR_OVERRIDE envBlendMode=', blendMode);
+      console.log(`${xrEmoji} ${xrKind} session starting...`);
+      console.log(`${xrEmoji} Session type:`, sessionMode);
+      console.log(`${xrEmoji} Session features:`, session.enabledFeatures || 'none');
+      
+      // Make WebGL context XR compatible
+      const gl = this.renderer.getContext();
+      if (gl && gl.makeXRCompatible) {
+        await gl.makeXRCompatible();
+      }
+
+      // Request reference space - prioritize floor-aligned spaces for both AR and VR
+      // 'bounded-floor' uses Android XR's boundary floor level settings (aligns Y=0 to physical floor)
+      // 'local-floor' also aligns Y=0 to floor but without boundary information
+      // Both 'bounded-floor' and 'local-floor' allow camera translation (6DoF)
+      // 'viewer' space locks content to head and prevents translation - DO NOT USE for immersive sessions
+      let referenceSpace = null;
+      let referenceSpaceType = null;
+      
+      // Both AR and VR MUST use bounded-floor for proper physical floor alignment
+      // 'bounded-floor' uses Android XR's boundary floor level settings (aligns Y=0 to physical floor)
+      // Try bounded-floor first, fall back to local-floor only if absolutely necessary
+      const refSpaceTypes = ['bounded-floor', 'local-floor'];
+
+      for (const refSpaceType of refSpaceTypes) {
+        try {
+          console.log(`🔄 Requesting ${refSpaceType} reference space for ${xrKind}...`);
+          referenceSpace = await session.requestReferenceSpace(refSpaceType);
+          referenceSpaceType = refSpaceType;
+          console.log(`✅ Successfully using ${refSpaceType} reference space for ${xrKind}`);
+          
+          // Log reference space details
+          if (refSpaceType === 'bounded-floor') {
+            console.log('📐 Using Android XR floor level from boundaries settings');
+            // The reference space origin is at the floor level adjusted in Android XR settings
+            // Y=0 in this reference space corresponds to the physical floor level set by the user
+          } else if (refSpaceType === 'local') {
+            console.log('📐 Using local reference space - allows camera translation in AR/VR');
+            // 'local' space allows 6DoF camera translation and is preferred for AR per WebXR spec
+          } else if (refSpaceType === 'local-floor') {
+            console.log('📐 Using local-floor reference space - floor-aligned with camera translation');
+            // 'local-floor' is like 'local' but with Y=0 at floor level
+          } else if (refSpaceType === 'viewer') {
+            console.warn('⚠️ Using viewer reference space - camera translation will be DISABLED');
+            // 'viewer' space locks content to head - only use as last resort
+          }
+          
+          // Detach previous reset listener (if any) before switching reference spaces.
+          if (this.xrBaseReferenceSpace && this.xrOnReferenceSpaceReset) {
+            try {
+              this.xrBaseReferenceSpace.removeEventListener('reset', this.xrOnReferenceSpaceReset);
+            } catch {
+              // ignore
+            }
+          }
+
+          // Store the base (un-offset) reference space. Rendering may use an offset space for software recenter.
+          this.xrBaseReferenceSpace = referenceSpace;
+          this.xrRenderReferenceSpace = referenceSpace;
+          this.xrReferenceSpace = referenceSpace; // legacy alias
+
+          // Platform recenter (e.g. Home button) can fire a `reset` event on the reference space.
+          // When it happens, re-run our one-time auto-centering so the user returns to X=0.
+          if (this.xrBaseReferenceSpace && typeof this.xrBaseReferenceSpace.addEventListener === 'function') {
+            if (!this.xrOnReferenceSpaceReset) {
+              this.xrOnReferenceSpaceReset = () => {
+                console.log('[REORIENT_FIX] 🎯 XR reference space reset detected (platform recenter). Re-applying X=0 auto-center...');
+                this.xrAutoCentered = false;
+              };
+            }
+            try {
+              this.xrBaseReferenceSpace.addEventListener('reset', this.xrOnReferenceSpaceReset);
+            } catch {
+              // ignore
+            }
+          }
+
+          // CRITICAL: Set reference space type BEFORE calling originalSetSession
+          // This must be done BEFORE Three.js starts presenting, otherwise it will fail with
+          // "Cannot change reference space type while presenting"
+          if (this.renderer.xr && typeof this.renderer.xr.setReferenceSpaceType === 'function') {
+            this.renderer.xr.setReferenceSpaceType(refSpaceType);
+            console.log(`✅ Set Three.js reference space type to: ${refSpaceType} (BEFORE setSession)`);
+          }
+          
+          break; // Success, exit loop
+        } catch (refSpaceError) {
+          console.warn(`⚠️ ${refSpaceType} reference space failed:`, refSpaceError.message);
+          // If bounded-floor fails, warn that floor alignment may be incorrect
+          if (refSpaceType === 'bounded-floor') {
+            console.error('❌ CRITICAL: bounded-floor is not available! Floor alignment will be incorrect.');
+            console.error('❌ Models may appear below or above the physical floor.');
+          }
+        }
+      }
+      
+      // Verify we got a floor-aligned reference space
+      if (!referenceSpace) {
+        throw new Error(`Failed to get any reference space for ${xrKind}. Cannot proceed.`);
+      }
+      
+      if (referenceSpaceType !== 'bounded-floor') {
+        console.error(`❌ WARNING: Using ${referenceSpaceType} instead of bounded-floor. Floor alignment may be incorrect!`);
+      }
+      
+      // Log input sources on session start to help debug which buttons are exposed for long-press recenter.
+      try {
+        const sources = session.inputSources || [];
+        console.log(`${xrEmoji} InputSources at start: ${sources.length}`);
+        sources.forEach((s, i) => {
+          console.log(`${xrEmoji} InputSource[${i}]:`, {
+            handedness: s.handedness,
+            profiles: s.profiles,
+            hasGamepad: !!s.gamepad,
+            buttons: s.gamepad?.buttons?.length,
+            axes: s.gamepad?.axes?.length,
+          });
+        });
+        session.addEventListener('inputsourceschange', (ev) => {
+          console.log(`${xrEmoji} inputsourceschange:`, {
+            added: ev.added ? ev.added.length : 0,
+            removed: ev.removed ? ev.removed.length : 0,
+          });
+        });
+
+        // Track selectstart/selectend holds as an additional "recenter" gesture.
+        // Some headsets/controllers do not expose their system/touchpad buttons via Gamepad,
+        // but do emit select events.
+        // Key by stable XRSpace (targetRaySpace) instead of XRInputSource object ref for reliable tracking
+        session.addEventListener('selectstart', (ev) => {
+          const src = ev?.inputSource;
+          if (!src) {
+            console.warn('[REORIENT_FIX] ⚠️ SELECT_START: No inputSource in event');
+            return;
+          }
+          // Use targetRaySpace as stable key (persists across inputSource object changes)
+          const key = src.targetRaySpace || src;
+          const downAt =
+            typeof performance !== 'undefined' && typeof performance.now === 'function'
+              ? performance.now()
+              : Date.now();
+          this.xrRecenterSelectHoldState.set(key, { downAt, triggered: false });
+          console.log('[REORIENT_FIX] 🎮 SELECT_START: Long-press tracking started', {
+            handedness: src?.handedness,
+            profiles: src?.profiles,
+            hasGamepad: !!src?.gamepad,
+            downAt: downAt,
+            keyType: key === src.targetRaySpace ? 'targetRaySpace' : 'inputSource'
+          });
+        });
+        session.addEventListener('selectend', (ev) => {
+          const src = ev?.inputSource;
+          if (!src) {
+            console.warn('[REORIENT_FIX] ⚠️ SELECT_END: No inputSource in event');
+            return;
+          }
+          const key = src.targetRaySpace || src;
+          const wasTracking = this.xrRecenterSelectHoldState.has(key);
+          this.xrRecenterSelectHoldState.delete(key);
+          if (wasTracking) {
+            console.log('[REORIENT_FIX] 🎮 SELECT_END: Long-press tracking ended (released before threshold)', {
+              handedness: src?.handedness,
+              profiles: src?.profiles
+            });
+          }
+        });
+      } catch {
+        // ignore
+      }
+
+      // Handle VR and AR modes differently
+      if (isVR) {
+        // VR mode: Ensure background is set and create skybox
+        if (this.scene) {
+          try {
+            console.log('🥽 VR mode: Setting up background and skybox...');
+            
+            // VR mode: Ensure background is set (restore if AR cleared it, or ensure texture is loaded)
+            if (!this.scene.background) {
+              if (this.originalSceneBackground) {
+                this.scene.background = this.originalSceneBackground;
+                console.log('✅ VR: Restored background from original (was cleared by AR)');
+              } else {
+                // Background is null and no original stored - load it
+                console.log('⚠️ VR: Background is null, loading texture...');
+                this.setupHDREnvironment();
+              }
+            } else if (this.scene.background instanceof THREE.Color) {
+            // Background is still a Color (texture hasn't loaded yet) - ensure texture loads
+            console.log('⚠️ VR: Background is still a Color, ensuring texture loads...');
+            this.setupHDREnvironment();
+          } else if (this.scene.background instanceof THREE.Texture) {
+            console.log('✅ VR: Background texture is set and ready');
+            // Verify texture is fully loaded and properly configured for XR
+            if (this.scene.background.image && this.scene.background.image.complete) {
+              // Ensure texture is properly configured for XR rendering
+              this.scene.background.mapping = THREE.EquirectangularReflectionMapping;
+              this.scene.background.colorSpace = THREE.SRGBColorSpace;
+              this.scene.background.flipY = false;
+              this.scene.background.needsUpdate = true; // Force texture update
+              
+              console.log('✅ VR: Background texture image is loaded and configured:', {
+                width: this.scene.background.image.width,
+                height: this.scene.background.image.height,
+                colorSpace: this.scene.background.colorSpace,
+                flipY: this.scene.background.flipY,
+                mapping: this.scene.background.mapping
+              });
+              
+              // Explicitly verify the background is on the scene
+              console.log('✅ VR: Scene background verified:', {
+                hasBackground: !!this.scene.background,
+                backgroundType: this.scene.background.constructor.name,
+                isTexture: this.scene.background instanceof THREE.Texture
+              });
+              
+              // Create VR skybox mesh (WebXR immersive VR may not render scene.background correctly)
+              // Use a large sphere with the texture mapped to it to ensure background is visible
+              this.createVRSkybox(this.scene.background);
+            } else {
+              console.warn('⚠️ VR: Background texture image not yet loaded, will create skybox when loaded...');
+              // Set up a listener to create skybox when texture loads
+              if (this.scene.background.image) {
+                this.scene.background.image.onload = () => {
+                  console.log('📸 VR: Background texture finished loading, creating skybox...');
+                  this.createVRSkybox(this.scene.background);
+                };
+              }
+            }
+          }
+          
+          // Ensure renderer clear color is opaque (alpha = 1) for background to be visible
+          // AR mode sets it to transparent, which would hide the background
+          if (this.renderer) {
+            if (this.originalClearColor === undefined) {
+              this.originalClearColor = new THREE.Color();
+              this.renderer.getClearColor(this.originalClearColor);
+              this.originalClearAlpha = this.renderer.getClearAlpha();
+            }
+            // Force opaque clear color for VR (background needs it)
+            this.renderer.setClearColor(this.originalClearColor, 1.0);
+            console.log('✅ VR: Renderer clear color set to opaque - background will be visible');
+          }
+          
+          // Ensure any previous wrapper is fully cleaned up
+          if (this.vrSceneWrapper) {
+            console.warn('⚠️ Previous scene wrapper detected, cleaning up...');
+            // Move children back to scene if wrapper still exists
+            if (this.scene && this.vrSceneWrapper.parent === this.scene) {
+              const oldChildren = [...this.vrSceneWrapper.children];
+              oldChildren.forEach(child => {
+                // Only move if still in wrapper
+                if (child.parent === this.vrSceneWrapper) {
+                  this.scene.add(child);
+                }
+              });
+              this.scene.remove(this.vrSceneWrapper);
+            }
+            // Clear wrapper reference
+            this.vrSceneWrapper = null;
+          }
+
+          // Create scene wrapper for VR content (only wrap 3D models, not lights/cameras)
+          if (!this.vrSceneWrapper) {
+            this.vrSceneWrapper = new THREE.Group();
+            this.vrSceneWrapper.name = 'VRSceneWrapper';
+            
+            // Only wrap 3D models and meshes, NOT lights, cameras, or helpers
+            const children = [...this.scene.children];
+            children.forEach(child => {
+              // Skip lights, cameras, helpers, and the wrapper itself
+              // Only wrap children that are directly in the scene (not already in a wrapper)
+              if (child.parent === this.scene &&
+                  child.type !== 'AmbientLight' && 
+                  child.type !== 'DirectionalLight' && 
+                  child.type !== 'PointLight' && 
+                  child.type !== 'SpotLight' &&
+                  child.type !== 'HemisphereLight' &&
+                  child.type !== 'PerspectiveCamera' &&
+                  child.type !== 'OrthographicCamera' &&
+                  child.name !== 'VRSkybox' &&
+                  child.name !== 'VRSceneWrapper' &&
+                  child.name !== 'ARSceneWrapper' &&
+                  !child.isHelper) {
+                this.vrSceneWrapper.add(child);
+              }
+            });
+            
+            // Add wrapper to scene at origin - it will be positioned in world space
+            this.scene.add(this.vrSceneWrapper);
+            console.log('✅ Created VR scene wrapper');
+          }
+          
+          // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
+          // Models should be positioned so their bottom is at Y=0 (physical floor)
+          // Calculate offset needed to align model bottom to Y=0
+          let floorAlignmentY = 0;
+          if (this.currentModel) {
+            // Calculate bounding box in world space (after model positioning)
+            const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
+            if (!boundingBox.isEmpty()) {
+              const modelBottomY = boundingBox.min.y; // Bottom of model in world space
+              // If model bottom is not at Y=0, we need to offset the wrapper
+              // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
+              floorAlignmentY = -modelBottomY;
+              console.log(`📐 VR Model positioning:`, {
+                modelBottomY: modelBottomY,
+                floorAlignmentY: floorAlignmentY,
+                modelPosition: this.currentModel.position,
+                wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
+              });
+              console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+            } else {
+              console.warn('⚠️ VR: Model bounding box is empty, using default positioning');
+            }
+          }
+          
+          // Set wrapper position in world space (reference space coordinates)
+          // Y=0 in bounded-floor reference space = physical floor level from Android XR boundaries
+          // XR requirement: X must stay at 0 (centered) for both AR and VR modes
+          this.vrSceneWrapper.position.set(0, floorAlignmentY, -0.5);
+          this.vrSceneWrapper.matrixAutoUpdate = true; // Ensure matrix updates
+          
+          console.log('✅ VR scene wrapper position set to:', this.vrSceneWrapper.position);
+          console.log('📐 VR models anchored to floor plane - position fixed in world space');
+          console.log('📐 Models will stay stationary while camera moves');
+          } catch (offsetError) {
+            console.error('❌ Error anchoring VR models:', offsetError);
+          }
+        }
+      } else if (isAR) {
+        // AR mode: Enable pass-through and anchor models to floor
+        if (this.scene) {
+          try {
+            console.log('📱 AR mode: Setting up pass-through and floor anchoring...');
+
+            // AR must not render the VR skybox sphere (it would block pass-through).
+            // Remove it eagerly in case we are switching from VR -> AR without a full VR teardown.
+            if (this.vrSkybox) {
+              console.log('🧹 AR: Removing VR skybox to keep pass-through visible...');
+              try {
+                if (this.vrSkybox.parent) this.vrSkybox.parent.remove(this.vrSkybox);
+                if (this.vrSkybox.geometry) this.vrSkybox.geometry.dispose();
+                if (this.vrSkybox.material) this.vrSkybox.material.dispose();
+              } catch (e) {
+                console.warn('⚠️ AR: Failed to remove VR skybox cleanly:', e?.message || e);
+              } finally {
+                this.vrSkybox = null;
+              }
+            }
+            
+            // Save camera state before entering AR
+            if (this.camera && this.controls) {
+              this.preXRCameraPosition = this.camera.position.clone();
+              this.preXRCameraRotation = this.camera.rotation.clone();
+              this.preXRCameraTarget = this.controls.target.clone();
+              console.log('💾 Saved camera state before AR:', {
+                position: this.preXRCameraPosition,
+                rotation: this.preXRCameraRotation,
+                target: this.preXRCameraTarget
+              });
+            }
+            
+            // Enable AR pass-through by making background transparent
+            if (this.renderer) {
+              try {
+                const attrs =
+                  typeof this.renderer.getContext === 'function'
+                    ? this.renderer.getContext()?.getContextAttributes?.()
+                    : null;
+                if (attrs && attrs.alpha === false) {
+                  console.warn(
+                    '⚠️ AR requested, but WebGL context was created with alpha=false. Pass-through may not be transparent on this device/config.',
+                  );
+                }
+              } catch {
+                // ignore
+              }
+              if (this.originalClearColor === undefined) {
+                this.originalClearColor = new THREE.Color();
+                this.renderer.getClearColor(this.originalClearColor);
+                this.originalClearAlpha = this.renderer.getClearAlpha();
+              }
+              this.renderer.setClearColor(0x000000, 0); // Transparent background
+              if (this.renderer.domElement) {
+                this.renderer.domElement.style.background = 'transparent';
+              }
+              console.log('✅ AR pass-through enabled - background set to transparent');
+            }
+            
+            // Store original background to restore later
+            if (!this.originalSceneBackground) {
+              this.originalSceneBackground = this.scene.background;
+            }
+            this.scene.background = null; // Remove scene background for AR pass-through
+            
+            // Ensure any previous wrapper is fully cleaned up
+            if (this.vrSceneWrapper) {
+              const oldChildren = [...this.vrSceneWrapper.children];
+              oldChildren.forEach(child => {
+                if (child.parent === this.vrSceneWrapper) {
+                  this.scene.add(child);
+                }
+              });
+              this.scene.remove(this.vrSceneWrapper);
+              this.vrSceneWrapper = null;
+            }
+
+            // Create scene wrapper for AR content
+            if (!this.vrSceneWrapper) {
+              this.vrSceneWrapper = new THREE.Group();
+              this.vrSceneWrapper.name = 'ARSceneWrapper';
+              
+              const children = [...this.scene.children];
+              children.forEach(child => {
+                if (child !== this.vrSceneWrapper &&
+                    child.parent === this.scene &&
+                    child.type !== 'AmbientLight' && 
+                    child.type !== 'DirectionalLight' && 
+                    child.type !== 'PointLight' && 
+                    child.type !== 'SpotLight' &&
+                    child.type !== 'HemisphereLight' &&
+                    child.type !== 'PerspectiveCamera' &&
+                    child.type !== 'OrthographicCamera' &&
+                    child.name !== 'VRSkybox' &&
+                    child.name !== 'VRSceneWrapper' &&
+                    child.name !== 'ARSceneWrapper' &&
+                    !child.isHelper) {
+                  this.vrSceneWrapper.add(child);
+                }
+              });
+              
+              this.scene.add(this.vrSceneWrapper);
+              console.log('✅ Created AR scene wrapper');
+              console.log(`📦 Wrapped ${this.vrSceneWrapper.children.length} objects for floor anchoring`);
+            }
+            
+            // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
+            // Models should be positioned so their bottom is at Y=0 (physical floor)
+            // Calculate offset needed to align model bottom to Y=0
+            let floorAlignmentY = 0;
+            if (this.currentModel) {
+              // Calculate bounding box in world space (after model positioning)
+              const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
+              if (!boundingBox.isEmpty()) {
+                const modelBottomY = boundingBox.min.y; // Bottom of model in world space
+                // If model bottom is not at Y=0, we need to offset the wrapper
+                // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
+                floorAlignmentY = -modelBottomY;
+                console.log(`📐 AR Model positioning:`, {
+                  modelBottomY: modelBottomY,
+                  floorAlignmentY: floorAlignmentY,
+                  modelPosition: this.currentModel.position,
+                  wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
+                });
+                console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+              } else {
+                console.warn('⚠️ AR: Model bounding box is empty, using default positioning');
+              }
+            }
+            
+            // Set wrapper position in world space (reference space coordinates)
+            // Y=0 in bounded-floor reference space = physical floor level from Android XR boundaries
+            // XR requirement: X must stay at 0 (centered) for both AR and VR modes
+            this.vrSceneWrapper.position.set(0, floorAlignmentY, -0.5);
+            this.vrSceneWrapper.matrixAutoUpdate = true;
+            this.vrSceneWrapper.userData.isAnchored = true;
+            this.vrSceneWrapper.userData.anchorPosition = this.vrSceneWrapper.position.clone();
+            // Ensure anchorPosition stays centered on X even if something else modifies it later.
+            this.vrSceneWrapper.userData.anchorPosition.x = 0;
+            
+            console.log('✅ AR scene wrapper position set to:', this.vrSceneWrapper.position);
+            console.log('📐 AR models anchored to floor plane at reference space origin');
+            console.log('🔒 Wrapper position locked - will NOT move with head movement');
+            console.log('📱 AR pass-through active - physical background visible');
+          } catch (offsetError) {
+            console.error('❌ Error setting up AR:', offsetError);
+          }
+        }
+      }
+
+      // Store session
+      this.xrSession = session;
+      this.xrRenderer = this.renderer;
+
+      // Ensure renderer is set up for XR rendering
+      if (this.renderer && this.renderer.xr) {
+        const renderSessionMode = isVR ? 'VR' : (isAR ? 'AR' : 'XR');
+        console.log(`🎬 Setting up XR render loop for ${renderSessionMode}...`);
+        
+        // Stop regular render loop if running (XR uses its own loop via setAnimationLoop)
+        if (this.isRendering) {
+          this.stopRenderLoop();
+        }
+        
+        // Capture mode flags for use in render loop
+        const renderIsVR = isVR;
+        const renderIsAR = isAR;
+        
+        // Three.js XR automatically sets up setAnimationLoop when session starts
+        // But we can explicitly set it up to ensure rendering works
+        this.renderer.setAnimationLoop((time, frame) => {
+          if (this.renderer && this.scene && this.camera) {
+            // Don't interfere with Three.js's reference space handling in the render loop
+            // The reference space is set once at session start and Three.js handles it from there
+
+            // Fallback recenter support (long-press on controller/headset inputs)
+            this.maybeHandleXRRecenter(time, frame);
+
+            // Update controls if not in XR (shouldn't happen, but safety check)
+            if (this.controls && !this.renderer.xr.isPresenting) {
+              this.controls.update();
+            }
+            
+            if (renderIsVR) {
+              // XR requirement: keep VR wrapper centered (X=0) even if other logic drifts it.
+              if (this.vrSceneWrapper && this.vrSceneWrapper.name === 'VRSceneWrapper' && this.vrSceneWrapper.position.x !== 0) {
+                this.vrSceneWrapper.position.x = 0;
+              }
+              // VR mode: Ensure renderer clear color is opaque for background to show
+              const currentClearColor = new THREE.Color();
+              const currentAlpha = this.renderer.getClearAlpha();
+              this.renderer.getClearColor(currentClearColor);
+              if (currentAlpha < 1.0) {
+                this.renderer.setClearColor(currentClearColor, 1.0);
+              }
+              
+              // Ensure VR skybox exists (WebXR immersive VR may not render scene.background)
+              if (!this.vrSkybox || !this.vrSkybox.parent) {
+                if (this.scene.background instanceof THREE.Texture) {
+                  if (this.scene.background.image && this.scene.background.image.complete) {
+                    console.log('🔄 VR render loop: Creating missing skybox...');
+                    this.createVRSkybox(this.scene.background);
+                  }
+                } else if (this.scene.background) {
+                  // Background exists but isn't a texture yet - wait
+                } else {
+                  if (this.originalSceneBackground) {
+                    this.scene.background = this.originalSceneBackground;
+                    if (this.scene.background instanceof THREE.Texture && 
+                        this.scene.background.image && 
+                        this.scene.background.image.complete) {
+                      console.log('🔄 VR render loop: Restored background, creating skybox...');
+                      this.createVRSkybox(this.scene.background);
+                    }
+                  } else {
+                    this.setupHDREnvironment();
+                  }
+                }
+              }
+              
+              // Ensure background texture is properly configured
+              if (this.scene.background instanceof THREE.Texture) {
+                if (this.scene.background.image && this.scene.background.image.complete) {
+                  if (this.scene.background.mapping !== THREE.EquirectangularReflectionMapping) {
+                    this.scene.background.mapping = THREE.EquirectangularReflectionMapping;
+                  }
+                  if (this.scene.background.colorSpace !== THREE.SRGBColorSpace) {
+                    this.scene.background.colorSpace = THREE.SRGBColorSpace;
+                  }
+                  this.scene.background.needsUpdate = true;
+                }
+              }
+            } else if (renderIsAR) {
+              // AR mode: keep pass-through transparent + ensure wrapper stays anchored
+              // Safety: ensure VR skybox never renders in AR (it would block pass-through).
+              if (this.vrSkybox) {
+                try {
+                  console.log('🧹 AR render loop: Removing VR skybox...');
+                  if (this.vrSkybox.parent) this.vrSkybox.parent.remove(this.vrSkybox);
+                  if (this.vrSkybox.geometry) this.vrSkybox.geometry.dispose();
+                  if (this.vrSkybox.material) this.vrSkybox.material.dispose();
+                } catch (e) {
+                  console.warn('⚠️ AR render loop: Failed to remove VR skybox:', e?.message || e);
+                } finally {
+                  this.vrSkybox = null;
+                }
+              }
+              if (this.scene && this.scene.background !== null) {
+                this.scene.background = null;
+              }
+              if (this.renderer) {
+                const a = this.renderer.getClearAlpha();
+                if (a !== 0) {
+                  this.renderer.setClearColor(0x000000, 0);
+                }
+                if (this.renderer.domElement) {
+                  this.renderer.domElement.style.background = 'transparent';
+                }
+              }
+
+              if (this.vrSceneWrapper && this.vrSceneWrapper.userData.isAnchored) {
+                const anchorPos = this.vrSceneWrapper.userData.anchorPosition;
+                // XR requirement: keep wrapper centered (X=0) in AR, always.
+                if (this.vrSceneWrapper.position.x !== 0) {
+                  this.vrSceneWrapper.position.x = 0;
+                }
+                if (anchorPos && anchorPos.x !== 0) {
+                  anchorPos.x = 0;
+                }
+                if (anchorPos && !this.vrSceneWrapper.position.equals(anchorPos)) {
+                  console.warn('⚠️ AR wrapper position changed, restoring anchor');
+                  this.vrSceneWrapper.position.copy(anchorPos);
+                }
+                this.vrSceneWrapper.updateMatrixWorld(true);
+              }
+            }
+            
+            // CRITICAL: Ensure our reference space is applied right before rendering
+            // This ensures Three.js uses our offset space when rendering
+            if (this.xrRenderReferenceSpace && this.renderer.xr) {
+              // Force re-application right before render to ensure it's used
+              const currentRefSpace = this.renderer.xr.referenceSpace || 
+                                     (typeof this.renderer.xr.getReferenceSpace === 'function' ? this.renderer.xr.getReferenceSpace() : null);
+              if (currentRefSpace !== this.xrRenderReferenceSpace) {
+                // Silently re-apply (we already logged in the earlier check)
+                try {
+                  if (typeof this.renderer.xr.setReferenceSpace === 'function') {
+                    this.renderer.xr.setReferenceSpace(this.xrRenderReferenceSpace);
+                  } else {
+                    this.renderer.xr.referenceSpace = this.xrRenderReferenceSpace;
+                  }
+                } catch (e) {
+                  // Ignore errors during render loop
+                }
+              }
+            }
+            
+            // Three.js XR handles the actual rendering automatically
+            this.renderer.render(this.scene, this.camera);
+          }
+        });
+        
+        if (this.scene && this.camera) {
+          console.log(`✅ ${renderSessionMode} scene and camera ready for XR rendering`);
+        }
+      }
+
+      // Handle session end
+      session.addEventListener('end', () => {
+         const endMode = isAR ? 'ar' : isVR ? 'vr' : 'xr';
+         console.log(`${endMode === 'ar' ? '📱' : '🥽'} ${endMode.toUpperCase()} session ended`);
+         
+         // Use setTimeout to ensure cleanup happens after session fully ends
+         setTimeout(() => {
+           // Clear XR animation loop
+           if (this.renderer && this.renderer.setAnimationLoop) {
+             this.renderer.setAnimationLoop(null);
+           }
+           
+           // Clean up session state
+           this.handleXRSessionEnd(endMode);
+           
+           // DON'T restore original setSession - keep our override active for re-entry
+           // The override will handle the next session start correctly
+           
+           // Restart regular render loop
+           if (!this.isRendering) {
+             this.startRenderLoop();
+           }
+         }, 0);
+       });
+
+      // Call original setSession - this initializes Three.js XR
+      // The reference space type is already set above, so Three.js will use it
+      const result = await originalSetSession(session);
+      
+      // CRITICAL: Now set our reference space object on Three.js
+      // The type is already set, so we just need to set the actual reference space object
+      if (referenceSpace && this.renderer.xr) {
+        // Set the actual reference space object
+        if (typeof this.renderer.xr.setReferenceSpace === 'function') {
+          this.renderer.xr.setReferenceSpace(referenceSpace);
+          console.log(`✅ Set Three.js reference space object via setReferenceSpace() (${referenceSpaceType})`);
+        } else {
+          // Fallback: direct assignment
+          this.renderer.xr.referenceSpace = referenceSpace;
+          console.log(`✅ Set Three.js reference space object via direct assignment (${referenceSpaceType})`);
+        }
+      }
+      
+      return result;
+    };
+
+    // If button already exists, return it instead of creating a new one
+    if (this.vrButton) {
+      console.log('🥽 VR button already exists, reusing...');
+      return this.vrButton;
+    }
+
+    // Create VR button using Three.js VRButton utility
+    // Note: Some devices may not support 'layers' feature - that's okay, we'll handle it gracefully
+    // Use empty requiredFeatures to avoid blocking on unsupported features
+    let vrButton;
+    try {
+      vrButton = VRButton.createButton(this.renderer, {
+        requiredFeatures: ['bounded-floor'], // Require bounded-floor for proper physical floor alignment
+        optionalFeatures: ['local-floor', 'local', 'viewer']
+      });
+      console.log('✅ VRButton.createButton succeeded');
+    } catch (error) {
+      console.error('❌ VRButton.createButton failed:', error);
+      // Try creating button without feature requirements
+      try {
+        vrButton = VRButton.createButton(this.renderer);
+        console.log('✅ VRButton created with default settings');
+      } catch (fallbackError) {
+        console.error('❌ VRButton creation failed completely:', fallbackError);
+        return null;
+      }
+    }
+
+    // Customize button with emoji icon - use MutationObserver to persist changes
+    if (vrButton) {
+      // Set emoji icon immediately
+      vrButton.innerHTML = '🥽';
+      vrButton.title = 'Enter Virtual Reality';
+      vrButton.setAttribute('aria-label', 'Enter Virtual Reality');
+      
+      // Style the button for icon display
+      vrButton.style.fontSize = '1.2rem';
+      vrButton.style.padding = '4px 8px';
+      vrButton.style.minWidth = '32px';
+      vrButton.style.height = '32px';
+      vrButton.style.textAlign = 'center';
+      vrButton.style.display = 'inline-flex';
+      vrButton.style.alignItems = 'center';
+      vrButton.style.justifyContent = 'center';
+      
+      // Use MutationObserver to keep emoji when button text changes
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'childList' || mutation.type === 'characterData') {
+            // Restore emoji if text was changed
+            if (vrButton.textContent !== '🥽' && !vrButton.textContent.includes('🥽')) {
+              vrButton.innerHTML = '🥽';
+            }
+          }
+        });
+      });
+      
+      observer.observe(vrButton, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+      
+      // Store observer for cleanup
+      vrButton._emojiObserver = observer;
+      
+      // Override button's click handler to manually request session (bypass Three.js internal "layers" feature request)
+      // This fixes the issue where VRButton tries to request "layers" feature which isn't supported on Galaxy XR
+      // Three.js VRButton may use addEventListener, so we intercept at capture phase
+      const clickHandler = async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        
+        console.log('🥽 VR button clicked - manually requesting session...');
+        
+        try {
+          // Check if VR is supported
+          if (!navigator.xr) {
+            console.error('❌ WebXR not available');
+            return;
+          }
+          
+          const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
+          if (!isSupported) {
+            console.error('❌ Immersive VR not supported on this device');
+            return;
+          }
+          
+          // Manually request VR session WITHOUT "layers" feature
+          // This avoids the "Unsupported feature requested: layers" error
+          console.log('🔄 Requesting VR session with compatible features...');
+          const session = await navigator.xr.requestSession('immersive-vr', {
+            requiredFeatures: [], // Don't require any features
+            optionalFeatures: ['bounded-floor', 'local-floor', 'local', 'viewer'] // But allow these if available
+          });
+          
+          console.log('✅ VR session requested successfully');
+          console.log('🥽 Session features:', session.enabledFeatures || 'none');
+          
+          // Manually call our setSession override (which handles reference space, anchoring, etc.)
+          if (this.renderer && this.renderer.xr && this.renderer.xr.setSession) {
+            await this.renderer.xr.setSession(session);
+          }
+        } catch (error) {
+          console.error('❌ Failed to start VR session:', error);
+          console.error('Error details:', {
+            message: error.message,
+            name: error.name
+          });
+        }
+      };
+      
+      // Set both onclick and addEventListener to ensure we catch the click
+      vrButton.onclick = clickHandler;
+      // Also add event listener in capture phase to intercept before Three.js handler
+      vrButton.addEventListener('click', clickHandler, { capture: true, once: false });
+    }
+
+    // Store button reference
+    this.vrButton = vrButton;
+
+    // Add button to container if provided
+    if (container) {
+      container.appendChild(vrButton);
+    }
+
+    console.log('✅ VR button created with emoji icon and custom click handler');
+    return vrButton;
+  }
+
+  /**
+   * Handle XR session end and restore scene structure
+   */
+  handleXRSessionEnd(mode = 'xr') {
+    console.log(`🧹 Cleaning up ${mode.toUpperCase()} session...`);
+
+    // Restore camera position and rotation to pre-XR state
+    if (this.camera && this.preXRCameraPosition) {
+      this.camera.position.copy(this.preXRCameraPosition);
+      if (this.preXRCameraQuaternion) {
+        this.camera.quaternion.copy(this.preXRCameraQuaternion);
+      } else if (this.preXRCameraRotation) {
+        this.camera.rotation.copy(this.preXRCameraRotation);
+      }
+      if (this.preXRCameraUp) {
+        this.camera.up.copy(this.preXRCameraUp);
+      }
+      if (typeof this.preXRCameraZoom === 'number') {
+        this.camera.zoom = this.preXRCameraZoom;
+      }
+      if (typeof this.camera.updateProjectionMatrix === 'function') {
+        this.camera.updateProjectionMatrix();
+      }
+      if (this.controls && this.preXRCameraTarget) {
+        this.controls.target.copy(this.preXRCameraTarget);
+        this.controls.update();
+      }
+      console.log('✅ Camera view restored to pre-XR state:', {
+        position: this.camera.position.clone(),
+        rotation: this.camera.rotation.clone(),
+        target: this.controls?.target?.clone()
+      });
+      // Clear saved state
+      this.preXRCameraPosition = null;
+      this.preXRCameraRotation = null;
+      this.preXRCameraTarget = null;
+      this.preXRCameraQuaternion = null;
+      this.preXRCameraUp = null;
+      this.preXRCameraZoom = null;
+      // Note: preXRBackgroundSnapshot is cleared after restore in AR mode only
+    }
+
+    // Restore scene background for AR (if it was changed for pass-through)
+    // VR mode doesn't modify background, so no restoration needed
+    if (mode === 'ar' && this.preXRBackgroundSnapshot) {
+      if (this.scene) {
+        const snapshot = this.preXRBackgroundSnapshot;
+        if (snapshot.type === 'texture' && snapshot.textureRef) {
+          // Restore exact texture state from snapshot
+          this.scene.background = snapshot.textureRef;
+          this.scene.background.mapping = snapshot.mapping;
+          this.scene.background.colorSpace = snapshot.colorSpace;
+          this.scene.background.flipY = snapshot.flipY;
+          this.scene.background.needsUpdate = true; // Force update to apply restored state
+          console.log('✅ AR background restored to exact pre-XR texture state:', {
+            mapping: snapshot.mapping,
+            colorSpace: snapshot.colorSpace,
+            flipY: snapshot.flipY
+          });
+        } else if (snapshot.type === 'color') {
+          this.scene.background = snapshot.value;
+          console.log('✅ AR background restored to pre-XR color:', snapshot.value);
+        } else {
+          this.scene.background = null;
+          console.log('✅ AR background restored to null');
+        }
+        // Clear snapshot after restore
+        this.preXRBackgroundSnapshot = null;
+      }
+      if (this.renderer && this.originalClearColor !== undefined) {
+        const alpha = this.originalClearAlpha !== undefined ? this.originalClearAlpha : 1;
+        this.renderer.setClearColor(this.originalClearColor, alpha);
+        this.originalClearColor = undefined; // Clear after restore
+        this.originalClearAlpha = undefined;
+        console.log('✅ Renderer clear color restored for AR');
+      }
+    }
+
+    // Clear XR session references
+    this.xrSession = null;
+    this.xrReferenceSpace = null;
+    // Detach reference-space reset listener (platform recenter) before dropping the reference space.
+    if (this.xrBaseReferenceSpace && this.xrOnReferenceSpaceReset) {
+      try {
+        this.xrBaseReferenceSpace.removeEventListener('reset', this.xrOnReferenceSpaceReset);
+      } catch {
+        // ignore
+      }
+    }
+    this.xrBaseReferenceSpace = null;
+    this.xrRenderReferenceSpace = null;
+    this.xrMode = null;
+    this.xrAutoCentered = false;
+    this._xrRefSpaceReapplied = false; // Reset flag for next session
+    this.xrInitialViewerPosition = null; // Clear initial pose
+    this.xrInitialViewerOrientation = null; // Clear initial orientation
+    this.xrRecenterSelectHoldState = new WeakMap();
+
+    // Remove VR skybox if it exists.
+    // Important: this is VR-only content, but it must also be cleared when switching into AR,
+    // otherwise it will block pass-through with an opaque sphere.
+    if (this.vrSkybox && this.scene) {
+      console.log('🧹 Removing VR skybox...');
+      try {
+        if (this.vrSkybox.parent) {
+          this.vrSkybox.parent.remove(this.vrSkybox);
+        }
+        if (this.vrSkybox.geometry) {
+          this.vrSkybox.geometry.dispose();
+        }
+        if (this.vrSkybox.material) {
+          // Also dispose the cloned skybox texture map to avoid leaking GPU memory.
+          const mat = this.vrSkybox.material;
+          const map = mat?.map;
+          if (map && map instanceof THREE.Texture) {
+            map.dispose();
+          }
+          this.vrSkybox.material.dispose();
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to remove VR skybox during session end cleanup:', e?.message || e);
+      } finally {
+        this.vrSkybox = null;
+      }
+      console.log('✅ VR skybox removed');
+    }
+
+    // Restore scene structure if XR wrapper was created (used by both VR and AR)
+    if (this.vrSceneWrapper && this.scene) {
+      console.log(`🧹 Restoring scene structure from ${mode.toUpperCase()} wrapper...`);
+      
+      // Move all children back to scene (make a copy to avoid iteration issues)
+      const children = [...this.vrSceneWrapper.children];
+      children.forEach(child => {
+        // Only move if still in wrapper (safety check)
+        if (child.parent === this.vrSceneWrapper) {
+          this.scene.add(child);
+        }
+      });
+      
+      // Clear wrapper userData
+      if (this.vrSceneWrapper.userData) {
+        this.vrSceneWrapper.userData.isAnchored = false;
+        this.vrSceneWrapper.userData.anchorPosition = null;
+      }
+      
+      // Remove wrapper
+      if (this.vrSceneWrapper.parent === this.scene) {
+        this.scene.remove(this.vrSceneWrapper);
+      }
+      this.vrSceneWrapper = null;
+      
+      console.log('✅ Scene structure restored');
+    }
+
+    // Clear XR renderer reference
+    this.xrRenderer = null;
+
+    console.log(`✅ ${mode.toUpperCase()} session cleanup completed`);
+  }
+
+  /**
+   * Create VR skybox mesh for WebXR immersive VR
+   * In WebXR, scene.background may not render correctly, so we use a mesh-based skybox
+   * @param {THREE.Texture} texture - The background texture to use for the skybox
+   */
+  createVRSkybox(texture) {
+    // IMPORTANT: only create the mesh-based skybox for immersive VR.
+    // If this runs after XR ends (e.g. delayed image.onload), it can pollute the normal 3D viewer
+    // and make the background appear flipped.
+    if (this.xrMode !== 'vr') {
+      return;
+    }
+    if (!this.scene || !texture) {
+      console.warn('⚠️ Cannot create VR skybox: scene or texture missing');
+      return;
+    }
+    
+    // Remove existing skybox if it exists
+    if (this.vrSkybox) {
+      if (this.vrSkybox.parent === this.scene) {
+        this.scene.remove(this.vrSkybox);
+      }
+      if (this.vrSkybox.geometry) {
+        this.vrSkybox.geometry.dispose();
+      }
+      if (this.vrSkybox.material) {
+        this.vrSkybox.material.dispose();
+      }
+      this.vrSkybox = null;
+    }
+    
+    console.log('🌌 Creating VR skybox mesh...');
+    
+    // Create a large sphere geometry for the skybox
+    // Use a large radius to ensure it's always behind everything
+    const skyboxGeometry = new THREE.SphereGeometry(1000, 32, 16);
+    
+    // Create material with the background texture
+    // For equirectangular textures on a sphere, we need to use the texture directly
+    // Don't clone - use the original texture but ensure it's configured correctly
+    if (!texture.image || !texture.image.complete) {
+      console.warn('⚠️ VR skybox: Texture image not ready, waiting...');
+      // Wait for texture to load
+      if (texture.image) {
+        texture.image.onload = () => {
+          console.log('📸 VR skybox: Texture loaded, creating skybox...');
+          this.createVRSkybox(texture);
+        };
+      }
+      return;
+    }
+    
+    // Ensure texture is properly configured for sphere UV mapping.
+    // NOTE: MeshBasicMaterial "map" expects standard UV mapping (NOT EquirectangularReflectionMapping).
+    // Using reflection mapping here can result in a black/invalid sample on some devices.
+    const skyboxTexture = texture.clone();
+    skyboxTexture.mapping = THREE.UVMapping;
+    skyboxTexture.colorSpace = THREE.SRGBColorSpace;
+    // For UV-mapped sphere skyboxes, the correct orientation is typically the opposite of
+    // our equirectangular scene.background setup.
+    // We force flipY=true here to avoid the sky appearing upside-down in immersive VR.
+    skyboxTexture.flipY = true;
+    skyboxTexture.needsUpdate = true;
+    
+    const skyboxMaterial = new THREE.MeshBasicMaterial({
+      map: skyboxTexture,
+      side: THREE.BackSide, // Render inside the sphere (camera is inside)
+      fog: false, // Disable fog for skybox
+      depthWrite: false // Don't write to depth buffer (skybox is always behind)
+    });
+    // Avoid tone mapping affecting the skybox (keeps colors consistent)
+    skyboxMaterial.toneMapped = false;
+    
+    // Create the skybox mesh
+    this.vrSkybox = new THREE.Mesh(skyboxGeometry, skyboxMaterial);
+    this.vrSkybox.name = 'VRSkybox';
+    this.vrSkybox.renderOrder = -1000; // Render first (behind everything)
+    this.vrSkybox.userData.isVRSkybox = true;
+    
+    // Position skybox at origin (camera will be inside it)
+    this.vrSkybox.position.set(0, 0, 0);
+    
+    // Ensure skybox is always visible
+    this.vrSkybox.visible = true;
+    this.vrSkybox.frustumCulled = false; // Don't cull the skybox (it's always in view)
+    
+    // Add to scene
+    this.scene.add(this.vrSkybox);
+    
+    console.log('✅ VR skybox created and added to scene');
+    console.log('🌌 Skybox details:', {
+      radius: 1000,
+      geometry: skyboxGeometry.type,
+      material: skyboxMaterial.type,
+      textureSize: texture.image ? `${texture.image.width}x${texture.image.height}` : 'unknown',
+      textureMapping: skyboxTexture.mapping,
+      visible: this.vrSkybox.visible,
+      frustumCulled: this.vrSkybox.frustumCulled,
+      renderOrder: this.vrSkybox.renderOrder,
+      inScene: this.vrSkybox.parent === this.scene
+    });
+    
+    // Verify skybox is actually in the scene
+    if (this.vrSkybox.parent !== this.scene) {
+      console.error('❌ VR skybox was not added to scene!');
+    }
+  }
+
+  /**
    * Cleanup and dispose of resources
    */
   dispose() {
     console.log('🧹 Cleaning up SceneManager...');
+    
+    // End XR session if active
+    if (this.xrSession) {
+      this.xrSession.end();
+    }
+    
+    // Clean up VR skybox if it exists
+    if (this.vrSkybox && this.scene) {
+      if (this.vrSkybox.parent === this.scene) {
+        this.scene.remove(this.vrSkybox);
+      }
+      if (this.vrSkybox.geometry) {
+        this.vrSkybox.geometry.dispose();
+      }
+      if (this.vrSkybox.material) {
+        this.vrSkybox.material.dispose();
+      }
+      this.vrSkybox = null;
+    }
+    
+    // Restore original setSession when disposing
+    if (this.originalXRSetSession && this.renderer && this.renderer.xr) {
+      this.renderer.xr.setSession = this.originalXRSetSession;
+      this.originalXRSetSession = null;
+    }
     
     // Stop render loop
     this.stopRenderLoop();
@@ -3999,6 +6296,12 @@ export class SceneManager {
       this.scene.clear();
       this.scene = null;
     }
+    
+    // Clear XR-related properties
+    this.vrSceneWrapper = null;
+    this.xrReferenceSpace = null;
+    this.xrSession = null;
+    this.xrRenderer = null;
     
     // Reset state
     this.isInitialized = false;
@@ -4033,26 +6336,4 @@ export class SceneManager {
     }
   }
 
-  /**
-   * Cleanup
-   */
-  dispose() {
-    // Remove event listeners
-    this.eventListeners.forEach((listeners, event) => {
-      if (event === 'resize') {
-        window.removeEventListener('resize', listeners[0]);
-      }
-    });
-    this.eventListeners.clear();
-
-    // Dispose Three.js objects
-    if (this.renderer) {
-      this.renderer.dispose();
-    }
-    if (this.controls) {
-      this.controls.dispose();
-    }
-
-    this.isInitialized = false;
-  }
 }

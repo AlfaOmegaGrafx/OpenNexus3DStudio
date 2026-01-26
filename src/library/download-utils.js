@@ -10,8 +10,22 @@ import { GetMetadataFromAvatar } from "./vrmMetaUtils"
 
 
 function cloneAvatarModel (model){
+  // Fix circular reference issue: VRM objects contain circular references (vrm -> scene -> object -> userData -> vrm)
+  // We need to temporarily remove these circular references before cloning
+  const circularRefs = new Map();
   
-    const clone = model.clone()
+  // Store circular references before removing them
+  model.traverse((child) => {
+    if (child.userData && child.userData.vrm) {
+      circularRefs.set(child, child.userData.vrm);
+      // Temporarily remove circular reference
+      delete child.userData.vrm;
+    }
+  });
+  
+  try {
+    const clone = model.clone();
+    
     /*
       NOTE: After avatar clone, the origIndexBuffer/BufferAttribute in userData will lost many infos:
       From: BufferAttribute {isBufferAttribute: true, name: '', array: Uint32Array(21438), itemSize: 1, count: 21438, …}
@@ -21,14 +35,23 @@ function cloneAvatarModel (model){
     */
     const origIndexBuffers = []
     model.traverse((child) => {
-      if (child.userData.origIndexBuffer)
+      if (child.userData && child.userData.origIndexBuffer)
         origIndexBuffers.push(child.userData.origIndexBuffer)
     })
     clone.traverse((child) => {
-      if (child.userData.origIndexBuffer)
+      if (child.userData && child.userData.origIndexBuffer)
         child.userData.origIndexBuffer = origIndexBuffers.shift()
     })
+    
     return clone;
+  } finally {
+    // Restore circular references in original model
+    circularRefs.forEach((vrm, child) => {
+      if (child.userData) {
+        child.userData.vrm = vrm;
+      }
+    });
+  }
 }
 function getUnopotimizedGLB (model){
 
@@ -127,12 +150,29 @@ export function downloadVRMWithAvatar(model, avatar, fileName, options){
       fileName && fileName !== "" ? fileName : "AvatarCreatorModel"
     }`
     try{
-      // Add fallback options for better compatibility
-      const fallbackOptions = {
-        createTextureAtlas: false, // Disable atlas for better compatibility
-        mergeAppliedMorphs: true,
-        ...options
+      // OPTIMIZED: Enable texture atlas by default (ported from CharacterStudioRedux)
+      // Use atlas sizes from manifest defaults if not provided
+      // FIX: Determine shader type from options (standard supports ORM, toon does not)
+      const useStandardShader = options.shaderType === 'standard' || (options.exportStdAtlas && !options.exportMtoonAtlas);
+      const defaultAtlasOptions = {
+        mToonAtlasSize: 2048,        // OPTIMIZED: Default from CharacterManifestData
+        mToonAtlasSizeTransp: 1024,  // OPTIMIZED: Default from CharacterManifestData
+        stdAtlasSize: 2048,          // OPTIMIZED: Default from CharacterManifestData
+        stdAtlasSizeTransp: 1024,    // OPTIMIZED: Default from CharacterManifestData
+        exportMtoonAtlas: !useStandardShader,  // FIX: Use MToon atlas only for toon shader
+        exportStdAtlas: useStandardShader,     // FIX: Use standard atlas for standard shader (supports ORM)
       };
+      
+      // OPTIMIZED: Enable texture atlas by default (matches CharacterStudioRedux)
+      // IMPORTANT: createTextureAtlas must come AFTER options merge to override any false values
+      const fallbackOptions = {
+        mergeAppliedMorphs: true,
+        ...defaultAtlasOptions,
+        ...options,  // User options override defaults
+        createTextureAtlas: options.createTextureAtlas !== undefined ? options.createTextureAtlas : true  // OPTIMIZED: Force true unless explicitly disabled
+      };
+      
+      console.log('🔄 VRM Export Options:', fallbackOptions);
       
       const vrm = await getVRMData(model, avatar, fallbackOptions);
       saveArrayBuffer(vrm, `${downloadFileName}.vrm`)
@@ -140,14 +180,15 @@ export function downloadVRMWithAvatar(model, avatar, fileName, options){
     }catch(err){
       console.error('downloadVRMWithAvatar failed', err);
       
-      // Try fallback with minimal options
+      // Try fallback with minimal options (but still try atlas)
       try {
         console.log('Attempting fallback VRM export with minimal options...');
         const minimalOptions = {
-          createTextureAtlas: false,
-          mergeAppliedMorphs: false,
+          createTextureAtlas: true,  // OPTIMIZED: Still try atlas in fallback
+          mergeAppliedMorphs: true,
           scale: 1,
-          isVrm0: false
+          isVrm0: true,
+          ...defaultAtlasOptions
         };
         
         const fallbackVrm = await getVRMData(model, avatar, minimalOptions);
@@ -156,7 +197,23 @@ export function downloadVRMWithAvatar(model, avatar, fileName, options){
         resolve();
       } catch (fallbackErr) {
         console.error('Fallback VRM export also failed:', fallbackErr);
-        reject(fallbackErr);
+        // Last resort: no atlas
+        try {
+          console.log('Attempting final fallback without atlas...');
+          const noAtlasOptions = {
+            createTextureAtlas: false,
+            mergeAppliedMorphs: false,
+            scale: 1,
+            isVrm0: true
+          };
+          const finalVrm = await getVRMData(model, avatar, noAtlasOptions);
+          saveArrayBuffer(finalVrm, `${downloadFileName}_no_atlas.vrm`);
+          console.log('Final fallback (no atlas) VRM export successful');
+          resolve();
+        } catch (finalErr) {
+          console.error('All VRM export attempts failed:', finalErr);
+          reject(finalErr);
+        }
       }
     }
   });
@@ -170,17 +227,41 @@ async function getVRMData(model, avatar, options){
 function getOptimizedGLB(model, avatar, options){
   const modelClone = cloneAvatarModel(model)
   
-  // Set default options for better compatibility
+  // OPTIMIZED: Enable texture atlas by default (ported from CharacterStudioRedux)
+  // Set default options with atlas enabled for optimization
+  // IMPORTANT: createTextureAtlas must come AFTER options merge to override any false values
+  // FIX: Determine shader type from options (standard supports ORM, toon does not)
+  const useStandardShader = options.shaderType === 'standard' || (options.exportStdAtlas && !options.exportMtoonAtlas);
   const defaultOptions = {
     mergeAppliedMorphs: true,
-    createTextureAtlas: false, // Disable by default for better compatibility
     scale: 1,
     isVrm0: false,
-    ...options
+    // OPTIMIZED: Use optimized atlas sizes from CharacterManifestData defaults
+    mToonAtlasSize: 2048,
+    mToonAtlasSizeTransp: 1024,
+    stdAtlasSize: 2048,
+    stdAtlasSizeTransp: 1024,
+    exportMtoonAtlas: !useStandardShader,  // FIX: Use MToon atlas only for toon shader
+    exportStdAtlas: useStandardShader,     // FIX: Use standard atlas for standard shader (supports ORM)
+    ...options,  // User options override defaults
+    // Force createTextureAtlas to true unless explicitly set to false
+    createTextureAtlas: options.createTextureAtlas === false ? false : true  // OPTIMIZED: Force true unless explicitly disabled
   };
+  
+  console.log('🔄 getOptimizedGLB - Shader type:', useStandardShader ? 'standard (ORM supported)' : 'toon (no ORM)', {
+    shaderType: options.shaderType,
+    exportMtoonAtlas: defaultOptions.exportMtoonAtlas,
+    exportStdAtlas: defaultOptions.exportStdAtlas
+  });
   
   try {
     if (defaultOptions.createTextureAtlas){
+      console.log('🔄 Using texture atlas mode for VRM export with optimized sizes:', {
+        mToonAtlasSize: defaultOptions.mToonAtlasSize,
+        mToonAtlasSizeTransp: defaultOptions.mToonAtlasSizeTransp,
+        stdAtlasSize: defaultOptions.stdAtlasSize,
+        stdAtlasSizeTransp: defaultOptions.stdAtlasSizeTransp
+      });
       return combine(modelClone, avatar, defaultOptions);
     }
     else{
@@ -356,6 +437,10 @@ function getRootBones (avatar) {
 }
 
 function getHumanoidByBoneNames(skinnedMesh){
+  if (!skinnedMesh || !skinnedMesh.skeleton || !skinnedMesh.skeleton.bones) {
+    console.warn('⚠️ getHumanoidByBoneNames: Invalid skinnedMesh, returning empty humanBones');
+    return {};
+  }
   const humanBones = {}
   skinnedMesh.skeleton.bones.map((bone)=>{
     for (const boneName in VRMHumanBoneName) {
@@ -370,9 +455,18 @@ function getHumanoidByBoneNames(skinnedMesh){
 
 function getAvatarData (avatarModel, vrmMeta, options){
   const skinnedMeshes = findChildrenByType(avatarModel, "SkinnedMesh")
+  if (!skinnedMeshes || skinnedMeshes.length === 0) {
+    console.warn('⚠️ getAvatarData: No SkinnedMesh found in avatarModel, using empty humanBones');
+    return {
+      humanBones: {},
+      materials: avatarModel.userData?.atlasMaterial || [],
+      meta: getVRMMeta(vrmMeta),
+      ...(options.mergeAppliedMorphs ? {expressionManager: getRebindedVRMExpressionManager(avatarModel)} : {}),
+    };
+  }
   return{
     humanBones:getHumanoidByBoneNames(skinnedMeshes[0]),
-    materials : avatarModel.userData.atlasMaterial,
+    materials : avatarModel.userData?.atlasMaterial || [],
     meta : getVRMMeta( vrmMeta),
     ...(options.mergeAppliedMorphs?{expressionManager:getRebindedVRMExpressionManager(avatarModel)}:{}),
   }
@@ -401,7 +495,7 @@ function getVRMMeta( vrmMeta){
   return { ...defaults, ...vrmMeta };
 }
 
-function parseVRM (glbModel, avatar, options){
+async function parseVRM (glbModel, avatar, options){
   const {
     screenshot = null, 
     isVrm0 = false,
@@ -409,6 +503,69 @@ function parseVRM (glbModel, avatar, options){
     scale = 1,
     vrmName = "CharacterCreator"
   } = options
+  
+  // OPTIMIZED: Convert screenshot to ImageBitmap format if needed (for VRMExporterv0 compatibility)
+  // VRMExporterv0 expects: { image: ImageBitmap }
+  let processedScreenshot = screenshot;
+  if (screenshot) {
+    try {
+      console.log('🖼️ Processing screenshot for VRM export:', {
+        isTexture: screenshot.isTexture,
+        hasImage: !!screenshot.image,
+        imageType: screenshot.image?.constructor?.name,
+        imageWidth: screenshot.image?.width,
+        imageHeight: screenshot.image?.height
+      });
+      
+      // If screenshot is a THREE.Texture (from getScreenshotTexture)
+      if (screenshot.isTexture && screenshot.image) {
+        // THREE.Texture.image is an HTMLImageElement or ImageBitmap
+        const imgElement = screenshot.image;
+        if (imgElement instanceof ImageBitmap) {
+          processedScreenshot = { image: imgElement };
+          console.log('✅ Screenshot texture already contains ImageBitmap');
+        } else if (imgElement instanceof HTMLImageElement || imgElement instanceof HTMLCanvasElement) {
+          // Convert HTMLImageElement/Canvas to ImageBitmap
+          const bitmap = await createImageBitmap(imgElement);
+          processedScreenshot = { image: bitmap };
+          console.log('✅ Converted THREE.Texture screenshot to ImageBitmap');
+        } else {
+          // Try to draw to canvas first
+          const canvas = document.createElement('canvas');
+          canvas.width = imgElement.width || 512;
+          canvas.height = imgElement.height || 512;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(imgElement, 0, 0);
+          const bitmap = await createImageBitmap(canvas);
+          processedScreenshot = { image: bitmap };
+          console.log('✅ Converted screenshot via canvas to ImageBitmap');
+        }
+      } 
+      // If screenshot has image property that's not ImageBitmap
+      else if (screenshot.image && !(screenshot.image instanceof ImageBitmap)) {
+        const bitmap = await createImageBitmap(screenshot.image);
+        processedScreenshot = { image: bitmap };
+        console.log('✅ Converted screenshot.image to ImageBitmap');
+      }
+      // If screenshot.image is already ImageBitmap, use as-is
+      else if (screenshot.image instanceof ImageBitmap) {
+        processedScreenshot = screenshot;
+        console.log('✅ Screenshot already in ImageBitmap format');
+      }
+      // If screenshot is already in correct format
+      else if (screenshot.image) {
+        processedScreenshot = screenshot;
+        console.log('✅ Using screenshot as-is');
+      } else {
+        console.warn('⚠️ Screenshot object exists but has no image property');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to process screenshot, using original:', error);
+      processedScreenshot = screenshot; // Use original
+    }
+  } else {
+    console.warn('⚠️ No screenshot provided to parseVRM - thumbnail will be missing');
+  }
 
   const metadataMerged = GetMetadataFromAvatar(avatar, vrmMeta, vrmName);
 
@@ -422,8 +579,28 @@ function parseVRM (glbModel, avatar, options){
     rotation: originalRotation,
     scale: originalScale
   });
+  
+  // FIX: Rotate model 180 degrees around Y-axis to face forward (matches VRM import orientation fix)
+  // This ensures exported VRM models face the correct direction when imported
+  // Apply rotation to root node or hips bone parent (similar to VRM import fix)
+  let rootNode = glbModel;
+  glbModel.traverse((child) => {
+    if (child.isBone && child.name === 'hips' && child.parent) {
+      rootNode = child.parent;
+      return;
+    }
+  });
+  
+  // Rotate the root node 180 degrees around Y-axis
+  rootNode.rotation.y += Math.PI;
+  rootNode.updateMatrixWorld(true);
+  console.log('🔄 Rotated root node 180 degrees around Y-axis for correct export orientation');
 
   return new Promise(async (resolve) => {
+    // Wait for screenshot processing if needed
+    if (screenshot && !processedScreenshot) {
+      // Screenshot processing is async, but we already handled it above
+    }
     /**
      * Because vrm1 Exporter is broken, always default to vrm0 exporter;
      */
@@ -433,6 +610,22 @@ function parseVRM (glbModel, avatar, options){
       ...getVRMBaseData(avatar),
       ...getAvatarData(glbModel, metadataMerged,options),
     }
+    
+    // FIX: Log materials to verify ORM textures are present
+    console.log('🔄 VRM Export - Materials check:', {
+      materialsCount: vrmData.materials?.length || 0,
+      materials: vrmData.materials?.map(mat => ({
+        name: mat.name,
+        hasMap: !!mat.map,
+        hasRoughnessMap: !!mat.roughnessMap,
+        hasMetalnessMap: !!mat.metalnessMap,
+        hasAoMap: !!mat.aoMap,
+        hasNormalMap: !!mat.normalMap,
+        mapName: mat.map?.name,
+        roughnessMapName: mat.roughnessMap?.name,
+        normalMapName: mat.normalMap?.name
+      })) || []
+    });
 
     let skinnedMesh;
     glbModel.traverse(child => {
@@ -481,9 +674,20 @@ function parseVRM (glbModel, avatar, options){
     // XXX collider bones should be taken from springBone.colliderBones
     // const colliderBones = [];
     
+    // FIX: Log screenshot status before export
+    console.log('🔄 VRM Export - Screenshot status:', {
+      hasScreenshot: !!screenshot,
+      hasProcessedScreenshot: !!processedScreenshot,
+      screenshotImageType: processedScreenshot?.image?.constructor?.name,
+      screenshotImageSize: processedScreenshot?.image ? `${processedScreenshot.image.width}x${processedScreenshot.image.height}` : 'N/A',
+      usingProcessed: !!processedScreenshot
+    });
+    
     if(isOutputVRM0){
       // VRM 0.0
-      exporter.parse(vrmData, glbModel, screenshot, rootSpringBones, options.ktxCompression, scale, (vrm) => {
+      console.log('🔄 Starting VRMExporterv0 export...');
+      // OPTIMIZED: Use processed screenshot (ImageBitmap format for VRMExporterv0)
+      exporter.parse(vrmData, glbModel, processedScreenshot || screenshot, rootSpringBones, options.ktxCompression, scale, (vrm) => {
         // Restore original model position after export
         glbModel.position.copy(originalPosition);
         glbModel.rotation.copy(originalRotation);
@@ -493,7 +697,8 @@ function parseVRM (glbModel, avatar, options){
       })
     }else{
       // VRM 1.0 has a different amount of parameters
-      exporter.parse(vrmData, glbModel, screenshot, (vrm) => {
+      // OPTIMIZED: Use processed screenshot (ImageBitmap format)
+      exporter.parse(vrmData, glbModel, processedScreenshot || screenshot, (vrm) => {
         // Restore original model position after export
         glbModel.position.copy(originalPosition);
         glbModel.rotation.copy(originalRotation);

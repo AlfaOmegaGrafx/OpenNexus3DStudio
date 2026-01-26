@@ -68,7 +68,7 @@ export const useSceneStore = create((set, get) => ({
             child.material.transparent = true;
             child.material.opacity = 0.3;
             break;
-          case 'partColorize':
+          case 'partColorize': {
             // Apply different colors to different parts
             const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
             const colorIndex = Math.floor(Math.random() * colors.length);
@@ -77,6 +77,7 @@ export const useSceneStore = create((set, get) => ({
             child.material.transparent = false;
             child.material.opacity = 1.0;
             break;
+          }
           case 'rendered':
             child.material.wireframe = false;
             child.material.transparent = false;

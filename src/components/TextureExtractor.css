@@ -1,47 +1,58 @@
 /* TextureExtractor Component Styles */
 
 .texture-extractor {
-  padding: 20px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-radius: 12px;
+  padding: 0.5rem;
+  background: #3a3a3a;
+  border-radius: 8px;
   color: #fff;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: visible;
+  border: 1px solid #4a4a4a;
+  min-height: fit-content;
+  margin-bottom: 0;
+  margin-top: 0;
 }
 
 .texture-extractor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid #4a4a4a;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .texture-extractor-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 1rem;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #fff;
 }
 
 .texture-extractor-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .btn-extract,
 .btn-download-all {
-  padding: 10px 20px;
+  padding: 0.375rem 0.75rem;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 0.65rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .btn-extract {
@@ -71,17 +82,22 @@
 
 .texture-extractor-empty {
   text-align: center;
-  padding: 60px 20px;
+  padding: 1rem;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 16px;
+  font-size: 0.9rem;
 }
 
 /* Texture Grid */
 .texture-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
   animation: fadeIn 0.5s ease;
+  width: 100%;
+  box-sizing: border-box;
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 @keyframes fadeIn {
@@ -103,6 +119,8 @@
   cursor: pointer;
   transition: all 0.3s ease;
   border: 2px solid transparent;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .texture-card:hover {
@@ -119,7 +137,7 @@
 .texture-preview {
   position: relative;
   width: 100%;
-  height: 200px;
+  height: 500px;
   background: linear-gradient(135deg, #434343 0%, #000000 100%);
   display: flex;
   align-items: center;
@@ -128,29 +146,32 @@
 }
 
 .texture-preview img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
 }
 
 .texture-overlay {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(10px);
-  padding: 6px 12px;
-  border-radius: 6px;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 2px 4px;
+  border-radius: 3px 0 0 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 2px;
+  font-size: 7px;
   font-weight: 500;
+  z-index: 1;
+  pointer-events: none;
+  line-height: 1;
 }
 
 .texture-icon {
-  font-size: 16px;
+  font-size: 8px;
 }
 
 .texture-type {
@@ -159,13 +180,13 @@
 
 /* Texture Info */
 .texture-info {
-  padding: 16px;
+  padding: 12px;
 }
 
 .texture-name {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -176,8 +197,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
+  margin-bottom: 6px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
 }
 
@@ -193,7 +214,7 @@
 }
 
 .texture-material {
-  font-size: 12px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
   white-space: nowrap;
   overflow: hidden;
@@ -202,17 +223,17 @@
 
 /* Texture Actions */
 .texture-actions {
-  padding: 0 16px 16px;
+  padding: 0 12px 12px;
 }
 
 .btn-download {
   width: 100%;
-  padding: 10px;
+  padding: 8px;
   background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -372,8 +393,8 @@
   }
 
   .texture-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
   }
 
   .texture-details-content {

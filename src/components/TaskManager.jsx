@@ -56,9 +56,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   return (
     <div className="task-manager">
       <div className="card">
-        <div className="card-header" style={{ padding: '0.75rem 1rem' }}>
-          <div className="flex justify-between items-center">
-            <h3 className="card-title" style={{ margin: 0, fontSize: '1rem' }}>
+        <div className="card-header">
+          <h3 className="card-title" style={{ margin: 0 }}>
               Tasks {tasks.length > 0 && <span style={{ fontSize: '0.7rem', color: '#888' }}>({tasks.length})</span>}
             </h3>
             <div className="flex gap-1">
@@ -70,37 +69,34 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   setShowNewTask(!showNewTask);
                 }}
                 disabled={!isApiConnected}
-                style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
               >
                 + New
               </button>
               <button 
                 className="btn btn-secondary"
                 onClick={clearCompletedTasks}
-                style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
               >
                 Clear
               </button>
-            </div>
           </div>
         </div>
 
         {!isApiConnected && (
-          <div className="mb-3 p-2" style={{ background: '#f8d7da', color: '#721c24', borderRadius: '4px' }}>
+          <div style={{ background: '#f8d7da', color: '#721c24', borderRadius: '4px', fontSize: '0.6rem', padding: '0.2rem 0.4rem', margin: '0 0.75rem 0.2rem' }}>
             ⚠️ API not connected. Please check your API endpoint.
           </div>
         )}
 
         {showNewTask && (
-          <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid #444' }}>
+          <div style={{ padding: '0.5rem 1rem', borderTop: '1px solid #444' }}>
             <form onSubmit={handleSubmitTask}>
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-1.5 mb-1.5">
                 <div style={{ flex: 1 }}>
                   <select 
                     value={newTaskType} 
                     onChange={(e) => setNewTaskType(e.target.value)}
                     className="input w-full"
-                    style={{ padding: '0.375rem', fontSize: '0.8rem' }}
+                    style={{ padding: '0.375rem', fontSize: '0.65rem' }}
                   >
                     <option value="text-to-3d">Text to 3D</option>
                     <option value="image-to-3d">Image to 3D</option>
@@ -115,7 +111,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     type="submit" 
                     className="btn btn-primary"
                     onClick={() => console.log('TaskManager: Submit button clicked')}
-                    style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
                   >
                     Start
                   </button>
@@ -123,14 +118,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     type="button" 
                     className="btn btn-secondary"
                     onClick={() => setShowNewTask(false)}
-                    style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
                   >
                     Cancel
                   </button>
                 </div>
               </div>
 
-              <div className="mb-2">
+              <div className="mb-1.5">
                 <textarea
                   value={newTaskPrompt}
                   onChange={(e) => setNewTaskPrompt(e.target.value)}
@@ -138,18 +132,18 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   rows="2"
                   placeholder="Describe what you want to generate..."
                   required
-                  style={{ padding: '0.375rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.375rem', fontSize: '0.65rem' }}
                 />
               </div>
 
               {(newTaskType === 'image-to-3d' || newTaskType === 'mesh-painting') && (
-                <div className="mb-2">
+                <div className="mb-1.5">
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleImageChange}
                     className="input w-full"
-                    style={{ padding: '0.25rem', fontSize: '0.8rem' }}
+                    style={{ padding: '0.25rem', fontSize: '0.65rem' }}
                   />
                 </div>
               )}
@@ -157,31 +151,31 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           </div>
         )}
 
-        <div className="task-list" style={{ padding: '0.5rem 1rem' }}>
+        <div className="task-list" style={{ padding: '0 0.75rem 0.3rem' }}>
           {tasks.length === 0 ? (
-            <p className="text-center text-gray-400" style={{ fontSize: '0.8rem', padding: '1rem 0' }}>No tasks yet</p>
+            <p className="text-center text-gray-400" style={{ fontSize: '0.6rem', padding: '0.15rem 0' }}>No tasks yet</p>
           ) : (
             tasks.map((task) => (
               <div key={task.id} className="task-item" style={{ 
-                padding: '0.5rem', 
-                marginBottom: '0.5rem', 
+                padding: '0.375rem', 
+                marginBottom: '0.375rem', 
                 border: '1px solid #444', 
                 borderRadius: '4px',
                 backgroundColor: '#2a2a2a'
               }}>
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex justify-between items-center mb-0.5">
                   <div style={{ flex: 1 }}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold" style={{ fontSize: '0.85rem' }}>{task.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold" style={{ fontSize: '0.75rem' }}>{task.name}</span>
                       <span className={`status ${getStatusColor(task.status)}`} style={{ 
-                        fontSize: '0.7rem', 
-                        padding: '0.125rem 0.375rem',
+                        fontSize: '0.6rem', 
+                        padding: '0.1rem 0.3rem',
                         borderRadius: '3px'
                       }}>
                         {task.status}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400" style={{ fontSize: '0.7rem' }}>
+                    <p className="text-xs text-gray-400" style={{ fontSize: '0.6rem' }}>
                       {task.type} • {formatDate(task.createdAt)}
                     </p>
                   </div>
@@ -189,8 +183,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     onClick={() => removeTask(task.id)}
                     className="btn btn-danger"
                     style={{ 
-                      padding: '0.125rem 0.375rem', 
-                      fontSize: '0.7rem',
+                      padding: '0.1rem 0.3rem', 
+                      fontSize: '0.6rem',
                       minWidth: 'auto'
                     }}
                   >
@@ -199,7 +193,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 </div>
 
                 {task.status === 'running' && (
-                  <div className="progress mb-1" style={{ height: '4px' }}>
+                  <div className="progress mb-0.5" style={{ height: '3px' }}>
                     <div 
                       className="progress-bar" 
                       style={{ width: `${task.progress || 0}%` }}
@@ -208,19 +202,19 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 )}
 
                 {task.prompt && (
-                  <p className="text-xs text-gray-300 mb-1" style={{ fontSize: '0.75rem' }}>
+                  <p className="text-xs text-gray-300 mb-0.5" style={{ fontSize: '0.65rem' }}>
                     "{task.prompt.length > 60 ? task.prompt.substring(0, 60) + '...' : task.prompt}"
                   </p>
                 )}
 
                 {task.error && (
-                  <div className="text-xs text-red-400 mb-1" style={{ fontSize: '0.7rem' }}>
+                  <div className="text-xs text-red-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
                     Error: {task.error}
                   </div>
                 )}
 
                 {task.result && (
-                  <div className="text-xs text-green-400" style={{ fontSize: '0.7rem' }}>
+                  <div className="text-xs text-green-400" style={{ fontSize: '0.6rem' }}>
                     ✓ Completed
                   </div>
                 )}

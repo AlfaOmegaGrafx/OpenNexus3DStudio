@@ -189,6 +189,12 @@ export const SceneProvider = ({ children }) => {
     }
   };
 
+  const focusOnFace = () => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.focusOnFace();
+    }
+  };
+
   const setView = (view) => {
     if (sceneManagerRef.current) {
       sceneManagerRef.current.setView(view);
@@ -244,6 +250,22 @@ export const SceneProvider = ({ children }) => {
     }
   };
 
+  // Enable AR mode - returns ARButton element
+  const enableAR = (container = null) => {
+    if (sceneManagerRef.current) {
+      return sceneManagerRef.current.enableAR(container);
+    }
+    return null;
+  };
+
+  // Enable VR mode - returns VRButton element
+  const enableVR = (container = null) => {
+    if (sceneManagerRef.current) {
+      return sceneManagerRef.current.enableVR(container);
+    }
+    return null;
+  };
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -276,6 +298,7 @@ export const SceneProvider = ({ children }) => {
     setLightIntensity,
     setCameraMode,
     resetCamera,
+    focusOnFace,
     setView,
     toggleStats,
     toggleAutoRotate,
@@ -284,6 +307,10 @@ export const SceneProvider = ({ children }) => {
     setAutoTone,
     setToneMapping,
     setExposure,
+    
+    // XR Controls
+    enableAR,
+    enableVR,
     
     // Refs
     containerRef,

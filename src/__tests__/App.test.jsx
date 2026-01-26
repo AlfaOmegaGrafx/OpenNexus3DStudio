@@ -58,7 +58,7 @@ describe('App', () => {
   it('should render the main application', () => {
     render(<App />);
     
-    expect(screen.getByText('Open3DStudio')).toBeInTheDocument();
+    expect(screen.getByText('OpenNexus3DStudio')).toBeInTheDocument();
     expect(screen.getByTestId('scene-provider')).toBeInTheDocument();
     expect(screen.getByTestId('task-provider')).toBeInTheDocument();
   });
@@ -79,7 +79,7 @@ describe('App', () => {
     const app = screen.getByRole('application', { hidden: true }) || document.querySelector('.app');
     expect(app).toBeInTheDocument();
     
-    const header = screen.getByText('Open3DStudio').closest('header');
+    const header = screen.getByText('OpenNexus3DStudio').closest('header');
     expect(header).toBeInTheDocument();
   });
 });

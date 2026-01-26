@@ -31,30 +31,34 @@ export const Core3DProvider = ({ children }) => {
 
   // Initialize Core3D service
   const initializeCore3D = useCallback(async (key) => {
-    if (!key) {
+    if (!key || !key.trim()) {
       setError('API key is required');
       return false;
     }
 
+    const trimmedKey = key.trim();
+    
     try {
       setIsLoading(true);
       setError(null);
       
-      core3dService.initialize(key);
-      setApiKey(key);
-      localStorage.setItem('core3d_api_key', key);
+      // Update service first
+      core3dService.initialize(trimmedKey);
+      
+      // Then update state and storage
+      setApiKey(trimmedKey);
+      localStorage.setItem('core3d_api_key', trimmedKey);
       setIsInitialized(true);
       
-      // Load initial data
-      await Promise.all([
-        loadModels(),
-        loadMaterials(),
-        loadUserDesigns()
-      ]);
+      console.log('✅ Core3D API key updated and service initialized');
+      
+      // Don't auto-load data - let users request it explicitly
+      // This prevents 404 errors if endpoints don't exist
       
       return true;
     } catch (err) {
       setError(err.message);
+      console.error('❌ Core3D API initialization failed:', err);
       return false;
     } finally {
       setIsLoading(false);
@@ -65,11 +69,18 @@ export const Core3DProvider = ({ children }) => {
   const loadModels = useCallback(async () => {
     try {
       const modelsData = await core3dService.getModels();
-      setModels(modelsData);
-      return modelsData;
+      if (modelsData) {
+        setModels(modelsData);
+        return modelsData;
+      }
+      // 404 or null response - endpoint doesn't exist, that's okay
+      return [];
     } catch (err) {
-      console.error('Failed to load models:', err);
-      setError(err.message);
+      // Only set error for non-404 errors
+      if (err.status !== 404 && !err.message.includes('404')) {
+        console.error('Failed to load models:', err);
+        setError(err.message);
+      }
       return [];
     }
   }, []);
@@ -78,11 +89,18 @@ export const Core3DProvider = ({ children }) => {
   const loadMaterials = useCallback(async () => {
     try {
       const materialsData = await core3dService.getMaterials();
-      setMaterials(materialsData);
-      return materialsData;
+      if (materialsData) {
+        setMaterials(materialsData);
+        return materialsData;
+      }
+      // 404 or null response - endpoint doesn't exist, that's okay
+      return [];
     } catch (err) {
-      console.error('Failed to load materials:', err);
-      setError(err.message);
+      // Only set error for non-404 errors
+      if (err.status !== 404 && !err.message.includes('404')) {
+        console.error('Failed to load materials:', err);
+        setError(err.message);
+      }
       return [];
     }
   }, []);
@@ -91,11 +109,18 @@ export const Core3DProvider = ({ children }) => {
   const loadUserDesigns = useCallback(async () => {
     try {
       const designsData = await core3dService.getUserDesigns();
-      setUserDesigns(designsData);
-      return designsData;
+      if (designsData) {
+        setUserDesigns(designsData);
+        return designsData;
+      }
+      // 404 or null response - endpoint doesn't exist, that's okay
+      return [];
     } catch (err) {
-      console.error('Failed to load user designs:', err);
-      setError(err.message);
+      // Only set error for non-404 errors
+      if (err.status !== 404 && !err.message.includes('404')) {
+        console.error('Failed to load user designs:', err);
+        setError(err.message);
+      }
       return [];
     }
   }, []);
@@ -111,15 +136,19 @@ export const Core3DProvider = ({ children }) => {
       setGenerationProgress(0);
       setError(null);
 
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setGenerationProgress(prev => Math.min(prev + 10, 90));
-      }, 500);
-
-      const design = await core3dService.generateDesign(modelId, materialId, options);
-      
-      clearInterval(progressInterval);
-      setGenerationProgress(100);
+      // Pass progress callback to service for real-time updates
+      const design = await core3dService.generateDesign(modelId, materialId, {
+        ...options,
+        onProgress: (status, progress) => {
+          // Update progress based on generation status
+          // Status: pending -> 0-90%, ok -> 100%
+          if (status === 'pending') {
+            setGenerationProgress(Math.min(progress, 90));
+          } else if (status === 'ok') {
+            setGenerationProgress(100);
+          }
+        }
+      });
       
       setCurrentDesign(design);
       await loadUserDesigns(); // Refresh user designs
@@ -194,17 +223,43 @@ export const Core3DProvider = ({ children }) => {
     }
   }, [isInitialized, loadMaterials]);
 
+  // Create token
+  const createToken = useCallback(async (tokenData = {}) => {
+    if (!isInitialized) {
+      throw new Error('Core3D not initialized');
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const token = await core3dService.createToken(tokenData);
+      return token;
+    } catch (err) {
+      console.error('Failed to create token:', err);
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isInitialized]);
+
   // Clear error
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // Auto-initialize if API key exists
+  // Auto-initialize if API key exists in localStorage (but don't use default token)
   useEffect(() => {
-    if (apiKey && !isInitialized) {
-      initializeCore3D(apiKey);
+    const storedKey = localStorage.getItem('core3d_api_key');
+    
+    // Only auto-initialize if there's a stored key (not default token)
+    if (!isInitialized && storedKey && storedKey.trim() && storedKey !== 'EzrwCUN') {
+      setApiKey(storedKey);
+      initializeCore3D(storedKey).catch(err => {
+        console.error('Auto-initialization failed:', err);
+      });
     }
-  }, [apiKey, isInitialized, initializeCore3D]);
+  }, [isInitialized, initializeCore3D]);
 
   // Set up event listeners
   useEffect(() => {
@@ -261,6 +316,7 @@ export const Core3DProvider = ({ children }) => {
     exportDesign,
     uploadModel,
     uploadMaterial,
+    createToken,
     setSelectedModel,
     setSelectedMaterial,
     setCurrentDesign,

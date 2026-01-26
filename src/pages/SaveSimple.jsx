@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styles from './Save.module.css';
 
 // Import actual icons from the project
@@ -20,6 +20,24 @@ const SaveSimple = ({ onNavigate }) => {
     transparentSize: 1024,
     twoSidedMaterial: false
   });
+
+  const opaqueSliderRef = useRef(null);
+  const transparentSliderRef = useRef(null);
+
+  // Calculate progress percentage for the blue fill indicator
+  useEffect(() => {
+    if (opaqueSliderRef.current) {
+      const progress = ((atlasSettings.opaqueSize - 256) / (2048 - 256)) * 100;
+      opaqueSliderRef.current.style.setProperty('--slider-progress', `${progress}%`);
+    }
+  }, [atlasSettings.opaqueSize]);
+
+  useEffect(() => {
+    if (transparentSliderRef.current) {
+      const progress = ((atlasSettings.transparentSize - 256) / (2048 - 256)) * 100;
+      transparentSliderRef.current.style.setProperty('--slider-progress', `${progress}%`);
+    }
+  }, [atlasSettings.transparentSize]);
 
   const handleOptionChange = (option) => {
     setDownloadOptions(prev => ({
@@ -95,6 +113,7 @@ const SaveSimple = ({ onNavigate }) => {
         <div className={styles.atlasControl}>
           <label>Opaque: {atlasSettings.opaqueSize} x {atlasSettings.opaqueSize}</label>
           <input 
+            ref={opaqueSliderRef}
             type="range" 
             min="256" 
             max="2048" 
@@ -106,6 +125,7 @@ const SaveSimple = ({ onNavigate }) => {
         <div className={styles.atlasControl}>
           <label>Transparent: {atlasSettings.transparentSize} x {atlasSettings.transparentSize}</label>
           <input 
+            ref={transparentSliderRef}
             type="range" 
             min="256" 
             max="2048" 

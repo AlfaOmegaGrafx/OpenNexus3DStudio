@@ -1,6 +1,6 @@
 # Shared 3D Viewer System
 
-This document explains the shared 3D viewer system that allows both CharacterStudio and Open3DStudio to use the same 3D viewing capabilities.
+This document explains the shared 3D viewer system that allows both CharacterStudio and Open3DStudio (OpenNexus3DStudio) to use the same 3D viewing capabilities.
 
 ## Overview
 
@@ -12,7 +12,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
 
 1. **Shared3DViewer** (`src/components/Shared3DViewer.jsx`)
    - Base 3D viewer component with Three.js integration
-   - Handles both CharacterStudio and Open3DStudio modes
+   - Handles both CharacterStudio and Open3DStudio (OpenNexus3DStudio) modes
    - Provides common 3D viewing functionality
 
 2. **Universal3DViewer** (`src/components/Universal3DViewer.jsx`)
@@ -21,7 +21,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
    - Handles context switching between applications
 
 3. **Core3DViewer** (`src/components/Core3DViewer.jsx`)
-   - Open3DStudio-specific viewer component
+   - Open3DStudio (OpenNexus3DStudio)-specific viewer component
    - Optimized for Core3D design workflows
    - Integrates with Core3D API and designs
 
@@ -47,7 +47,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
 - **VRM Export**: Export models in VRM format
 - **Character Studio Integration**: Seamless workflow integration
 
-### Open3DStudio Features
+### Open3DStudio (OpenNexus3DStudio) Features
 - **Core3D Integration**: Direct API integration
 - **Design Preview**: Real-time design visualization
 - **Material Application**: Dynamic material switching
@@ -89,7 +89,7 @@ import Scene3D from './components/Scene3D';
 />
 ```
 
-### Open3DStudio Usage
+### Open3DStudio (OpenNexus3DStudio) Usage
 
 ```jsx
 import Core3DViewer from './components/Core3DViewer';
@@ -108,7 +108,7 @@ import Core3DViewer from './components/Core3DViewer';
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `mode` | string | 'auto' | Application mode ('characterstudio' or 'open3dstudio') |
+| `mode` | string | 'auto' | Application mode ('characterstudio' or 'opennexus3dstudio' / 'open3dstudio') |
 | `model` | object | null | 3D model to display |
 | `renderMode` | string | 'solid' | Rendering mode |
 | `showControls` | boolean | true | Show control panel |
@@ -139,7 +139,7 @@ import Core3DViewer from './components/Core3DViewer';
 
 ### Context Integration
 - Uses `SceneContext` for CharacterStudio features
-- Uses `Core3DContext` for Open3DStudio features
+- Uses `Core3DContext` for Open3DStudio (OpenNexus3DStudio) features
 - Maintains state consistency across components
 
 ## Performance Considerations
@@ -279,6 +279,6 @@ import Core3DViewer from './components/Core3DViewer';
 For issues related to:
 - **3D Viewer**: Check component documentation
 - **CharacterStudio**: Review scene management docs
-- **Open3DStudio**: Check Core3D integration docs
+- **Open3DStudio (OpenNexus3DStudio)**: Check Core3D integration docs
 - **Performance**: Monitor browser dev tools
 - **Compatibility**: Test on different browsers/devices

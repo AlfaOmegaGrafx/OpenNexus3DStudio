@@ -200,14 +200,14 @@
 
 
 .editorContainer {
-  margin-top: 10px;
+  margin-top: 5px;
   width: 100%; /* Full width for trait buttons */
   display: grid;
   grid-template-columns: 1fr 1fr; /* Two equal columns */
-  gap: 16px; /* Increased spacing between grid items */
+  gap: 12px; /* Moderate spacing between grid items */
   height: auto; /* Let height adjust to content */
   align-content: start; /* Align content to top */
-  padding-bottom: 20px; /* Add bottom padding to ensure content is visible */
+  padding-bottom: 15px; /* Moderate bottom padding */
 }
 
 .sideMenu {
@@ -349,12 +349,12 @@
 .sideMenu {
   position: fixed;
   left: 47px;
-  top: 48px;
-  height: -webkit-calc(100vh - 48px);
-  height: calc(100vh - 48px);
+  top: 150px; /* Below header (~96px) + scene controls row (~50px) */
+  height: -webkit-calc(100vh - 150px);
+  height: calc(100vh - 150px);
   backdrop-filter: blur(22.5px);
   background: rgba(5, 11, 14, 0.8);
-  z-index: 1000;
+  z-index: 999; /* Below scene controls (1001) but above viewport */
   user-select: none;
   display: flex;
   flex-direction: column;
@@ -375,14 +375,14 @@
   letter-spacing: 1px;
   position: relative;
   z-index: 10;
-  margin-top: 40px; /* Move down further from CharacterStudio header */
+  margin-top: 10px; /* Reduced since sideMenu is already positioned below controls */
   margin-bottom: 20px; /* More spacing below title */
 }
 
 .traitsContainer {
   position: relative;
-  margin-top: 20px; /* Move traits down from title */
-  margin-bottom: 100px; /* Reduced bottom margin to show more content */
+  margin-top: 10px; /* Reduced top margin */
+  margin-bottom: 80px; /* Increased bottom margin to ensure space above buttons */
   z-index: 1; /* Lower z-index to go behind CharacterStudio header */
   width: 95%; /* Use almost all available horizontal space */
   max-width: none; /* Remove width constraint to use all space */
@@ -449,19 +449,19 @@
   transform: translateY(-20px) !important;
 }
 .editorButton {
-  padding: 20px 24px; /* Increased padding for larger buttons */
+  padding: 16px 20px; /* Increased padding for larger buttons */
   display: flex;
   position: relative;
   align-items: center;
-  gap: 14px; /* Increased gap between icon and text */
+  gap: 12px; /* Moderate gap between icon and text */
   cursor: pointer;
   border-radius: 10px; /* Larger border radius */
   transition: all 0.2s ease;
   margin-bottom: 1px;
   width: 100%; /* Full width within grid cell */
   min-width: auto; /* Remove minimum width constraint */
-  font-size: 1.1rem; /* Larger font size */
-  min-height: 60px; /* Increased minimum height */
+  font-size: 1rem; /* Standard font size */
+  min-height: 65px; /* Increased minimum height */
 }
 
 .editorButton:hover {
@@ -482,13 +482,13 @@
 /* previously in Selector.jsx */
 .selectorContainerPos {
   position: absolute;
-  top: 98px;
+  top: 200px; /* Adjusted to be below scene controls */
   left: 280px;
-  height: -webkit-calc(100vh - 176px);
-  height: calc(100vh - 176px);
+  height: -webkit-calc(100vh - 200px);
+  height: calc(100vh - 200px);
   backdrop-filter: blur(22.5px);
   background: rgba(5, 11, 14, 0.8);
-  z-index: 1000;
+  z-index: 999; /* Below scene controls but above viewport */
 }
 
 .selector-container {

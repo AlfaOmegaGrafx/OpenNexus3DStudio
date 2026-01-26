@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: url('/assets/backgrounds/background4.jpg') center center / cover no-repeat fixed;
+  background: #1a1a1a;
   color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
@@ -315,13 +315,15 @@
   background: #2a2a2a;
 }
 
-/* CharacterStudio Viewport Overlay - Locked to HDR Sky position */
+/* CharacterStudio Viewport Overlay - Responsive positioning */
 .character-studio-viewport-overlay {
   position: fixed;
-  top: calc(50vh - 337.5px + 800px - 200px - 300px + 100px - 20px + 10px);
-  left: calc(50vw + 368px - 300px + 100px - 50px + 5px + 5px - 300px + 100px - 100px + 200px - 500px + 100px + 200px - 50px + 50px);
-  width: 1000px;
-  height: 675px;
+  top: 50%;
+  left: 50%;
+  width: min(90vw, 1000px);
+  height: min(90vh, 675px);
+  max-width: calc(100vw - 80px); /* Account for sidebars */
+  max-height: calc(100vh - 80px); /* Account for header */
   background: rgba(42, 42, 42, 0.95);
   border-radius: 8px;
   border: 2px solid rgba(0, 122, 204, 0.8);
@@ -360,12 +362,12 @@
   position: fixed;
   top: 1px; /* Start below the header */
   right: 0;
-  width: 400px;
+  width: min(400px, 30vw); /* Responsive width, max 400px */
   height: calc(100vh - 1px); /* Adjust height to account for header */
   background: #2a2a2a;
   border-left: 1px solid #3a3a3a;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
-  z-index: 5; /* Lower than title bar to go behind it */
+  z-index: 999; /* Below header (1001) but above 3D viewport */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -388,7 +390,7 @@
 /* Anchored Right Hamburger Menu */
 .anchored-right-hamburger {
   position: fixed;
-  top: 96px;
+  top: 139px;
   right: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -569,7 +571,7 @@
   flex-shrink: 0;
   margin-top: 0;
   margin-left: 50px;
-  z-index: 1002; /* Very high z-index to overlay everything */
+  z-index: 999; /* Below main header (1001) but above viewport */
 }
 
 .character-studio-title {
@@ -585,6 +587,8 @@
   overflow-y: auto;
   padding: 0;
   background: #2a2a2a;
+  position: relative;
+  z-index: 999; /* Same as sidebar, below header */
 }
 
 /* CharacterStudio Scrollbar styling */
@@ -619,7 +623,7 @@
 /* CharacterStudio viewport is completely independent of left sidebar state */
 /* When CharacterStudio sidebar is open, adjust viewport (regardless of left sidebar state) */
 .app-content.has-character-studio .main-viewport {
-  margin-right: 400px !important;
+  margin-right: min(400px, 30vw) !important;
 }
 
 /* When CharacterStudio sidebar is collapsed, remove right margin (regardless of left sidebar state) */
@@ -629,7 +633,7 @@
 
 /* Ensure CharacterStudio viewport is completely independent of left sidebar state */
 .app-content.main-sidebar-collapsed.has-character-studio .main-viewport {
-  margin-right: 400px !important;
+  margin-right: min(400px, 30vw) !important;
   margin-left: 0;
 }
 
@@ -640,13 +644,9 @@
 
 /* Note: CharacterStudio viewport is now completely independent of left sidebar state */
 
-/* Main viewport synchronization with hamburger states */
-.app-content.main-sidebar-collapsed .main-viewport {
-  display: none;
-}
-
-.app-content:not(.main-sidebar-collapsed) .main-viewport {
-  display: block;
+/* Main viewport should always be visible - never hide it */
+.app-content .main-viewport {
+  display: block !important;
 }
 
 /* Independent CharacterStudio viewport control - Locked to HDR Sky position */
@@ -1018,8 +1018,11 @@
 .app-content {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible; /* Allow scrolling when content exceeds viewport */
   transition: margin-top 0.3s ease;
+  height: calc(100vh - 96px);
+  min-height: 0;
+  max-height: calc(100vh - 96px); /* Prevent exceeding viewport */
 }
 
 .app-content.has-progress {
@@ -1028,7 +1031,7 @@
 
 .sidebar {
   width: 320px;
-  height: 100vh;
+  height: 100%;
   background: #2a2a2a;
   border-right: 1px solid #3a3a3a;
   padding: 0.5rem;
@@ -1049,7 +1052,7 @@
 /* Anchored Left Hamburger Menu */
 .anchored-left-hamburger {
   position: fixed;
-  top: 96px;
+  top: 139px;
   left: 0;
   background: #3a3a3a;
   border: 1px solid #555;
@@ -1198,24 +1201,46 @@
   flex: 1;
   position: relative;
   background: #1a1a1a;
+  width: 100%;
+  height: 100%;
+  min-width: 0; /* Allow flexbox to shrink */
+  min-height: 0; /* Allow flexbox to shrink */
+  overflow-y: auto; /* Allow vertical scrolling */
+  overflow-x: hidden; /* Prevent horizontal scrolling */
 }
 
 /* Scrollbar styling */
-.sidebar::-webkit-scrollbar {
-  width: 6px;
+.sidebar::-webkit-scrollbar,
+.main-viewport::-webkit-scrollbar,
+.character-studio-sidebar::-webkit-scrollbar {
+  width: 8px;
 }
 
-.sidebar::-webkit-scrollbar-track {
+.sidebar::-webkit-scrollbar-track,
+.main-viewport::-webkit-scrollbar-track,
+.character-studio-sidebar::-webkit-scrollbar-track {
   background: #2a2a2a;
 }
 
-.sidebar::-webkit-scrollbar-thumb {
+.sidebar::-webkit-scrollbar-thumb,
+.main-viewport::-webkit-scrollbar-thumb,
+.character-studio-sidebar::-webkit-scrollbar-thumb {
   background: #555;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
+.sidebar::-webkit-scrollbar-thumb:hover,
+.main-viewport::-webkit-scrollbar-thumb:hover,
+.character-studio-sidebar::-webkit-scrollbar-thumb:hover {
   background: #777;
+}
+
+/* Firefox scrollbar styling */
+.sidebar,
+.main-viewport,
+.character-studio-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2a2a2a;
 }
 
 /* Responsive design */
@@ -2537,15 +2562,31 @@
 .character-studio-overlay-content {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 2rem;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.overlay-3d-canvas {
+  width: 100%;
+  max-width: 800px;
+  height: 500px;
+  min-height: 400px;
+  position: relative;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .overlay-info {
   text-align: center;
   color: #ffffff;
-  max-width: 500px;
+  max-width: 800px;
+  width: 100%;
 }
 
 .overlay-info p {
@@ -2864,7 +2905,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  z-index: 1001; /* Same as header to be above Character Studio panels */
   height: auto;
   margin-top: 1px;
   margin-left: -5px;
@@ -2957,6 +2998,11 @@
 
 .control-select:hover {
   border-color: #666;
+}
+
+.control-select option {
+  background: #2a2a2a;
+  color: #ffffff;
 }
 
 .control-button {

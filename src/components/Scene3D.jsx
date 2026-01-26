@@ -2,7 +2,19 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useScene } from '../context/SceneContext';
 import { useCore3D } from '../context/Core3DContext';
 
-const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
+/**
+ * Scene3D Component - Shared 3D Viewport
+ * 
+ * This component provides the main 3D viewport that is shared between:
+ * - OpenNexus3DStudio (main application)
+ * - CharacterStudio (sidebar panels)
+ * 
+ * Both applications access the same scene via SceneContext, ensuring:
+ * - Single source of truth for the 3D scene
+ * - Real-time updates when CharacterStudio panels modify the model
+ * - Consistent rendering and state management
+ */
+const Scene3D = ({ model, renderMode }) => {
   const mountRef = useRef(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -128,6 +140,48 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
       updateRenderMode(renderMode);
     }
   }, [renderMode, currentRenderMode, updateRenderMode]);
+
+  // Load Core3D design when it changes
+  useEffect(() => {
+    if (!isInitialized || !sceneManager || !currentDesign) return;
+
+    const loadCore3DDesign = async () => {
+      try {
+        console.log('🎨 Scene3D: Loading Core3D design:', currentDesign);
+        
+        // If design has a 3D model URL, load it
+        if (currentDesign.model_url) {
+          await sceneManager.loadModel(currentDesign.model_url, {
+            format: 'auto',
+            optimize: true,
+            center: true,
+            scale: 1
+          });
+          console.log('✅ Scene3D: Core3D design loaded successfully');
+        } else if (currentDesign.preview_url) {
+          // If only preview available, show as texture on a plane
+          console.log('📸 Scene3D: Loading Core3D design preview as texture');
+          const THREE = await import('three');
+          const geometry = new THREE.PlaneGeometry(2, 2);
+          const textureLoader = new THREE.TextureLoader();
+          const texture = textureLoader.load(currentDesign.preview_url);
+          const material = new THREE.MeshBasicMaterial({ 
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide
+          });
+          
+          const plane = new THREE.Mesh(geometry, material);
+          sceneManager.scene.add(plane);
+          console.log('✅ Scene3D: Core3D design preview loaded');
+        }
+      } catch (error) {
+        console.error('❌ Scene3D: Failed to load Core3D design:', error);
+      }
+    };
+
+    loadCore3DDesign();
+  }, [isInitialized, sceneManager, currentDesign]);
 
   // Handle window resize
   useEffect(() => {
@@ -328,167 +382,6 @@ const Scene3D = ({ model, renderMode, showCharacterStudioOverlay = false }) => {
           position: 'relative'
         }}
       />
-      
-      
-      
-      {/* CharacterStudio Overlay - Integrated into main viewer */}
-      {showCharacterStudioOverlay && (
-        <div className="character-studio-overlay">
-          <div className="character-studio-overlay-title">
-            CharacterStudio 3D View 
-            <span className="overlay-status">VISIBLE</span>
-          </div>
-          <div className="character-studio-overlay-content">
-            <div className="overlay-info">
-              <p>Enhanced 3D viewing with CharacterStudio features</p>
-              
-              {/* Export Tools Section */}
-              <div className="overlay-section">
-                <h4>Export Tools</h4>
-                <div className="overlay-buttons">
-                  <button 
-                    onClick={handleVRMExport}
-                    className="overlay-button vrm-button"
-                    disabled={!currentModel}
-                    title="Export current model as VRM"
-                  >
-                    🎭 Export VRM
-                  </button>
-                  <button 
-                    onClick={handleGLBExport}
-                    className="overlay-button glb-button"
-                    disabled={!currentModel}
-                    title="Export current model as GLB"
-                  >
-                    📦 Export GLB
-                  </button>
-                </div>
-              </div>
-
-              {/* CharacterStudio Features */}
-              <div className="overlay-section">
-                <h4>CharacterStudio Features</h4>
-                <div className="overlay-buttons">
-                  <button 
-                    onClick={handleMaterialEditor}
-                    className="overlay-button material-button"
-                    title="Open material editor"
-                  >
-                    🎨 Material Editor
-                  </button>
-                  <button 
-                    onClick={handleBlendShapes}
-                    className="overlay-button blend-button"
-                    title="Open blend shapes controls"
-                  >
-                    ✨ Blend Shapes
-                  </button>
-                </div>
-              </div>
-
-              {/* Core3D Integration */}
-              {core3dInitialized && (
-                <div className="overlay-section">
-                  <h4>Core3D Integration</h4>
-                  <div className="overlay-buttons">
-                    <button 
-                      onClick={handleCore3DGenerate}
-                      className="overlay-button core3d-generate-button"
-                      disabled={!core3dModel || !core3dMaterial}
-                      title="Generate Core3D design with selected model and material"
-                    >
-                      ✨ Generate Design
-                    </button>
-                    <button 
-                      onClick={handleCore3DExport}
-                      className="overlay-button core3d-export-button"
-                      disabled={!currentDesign}
-                      title="Export current Core3D design"
-                    >
-                      📤 Export Design
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Loot Assets Integration */}
-              <div className="overlay-section">
-                <h4>Loot Assets</h4>
-                <div className="overlay-buttons">
-                  <button 
-                    onClick={handleLoadLootAssets}
-                    className="overlay-button loot-load-button"
-                    disabled={lootAssetsLoaded}
-                    title="Load loot assets manifest and traits"
-                  >
-                    🎒 Load Assets
-                  </button>
-                  <button 
-                    onClick={handleLoadLootCharacter}
-                    className="overlay-button loot-character-button"
-                    disabled={!lootAssetsLoaded}
-                    title="Load default loot character"
-                  >
-                    👤 Load Character
-                  </button>
-                  <button 
-                    onClick={handleRandomizeLootCharacter}
-                    className="overlay-button loot-random-button"
-                    disabled={!lootAssetsLoaded}
-                    title="Generate random loot character"
-                  >
-                    🎲 Randomize
-                  </button>
-                  <button 
-                    onClick={handleExportLootCharacter}
-                    className="overlay-button loot-export-button"
-                    disabled={!currentLootCharacter}
-                    title="Export current loot character as VRM"
-                  >
-                    📤 Export Character
-                  </button>
-                </div>
-              </div>
-
-              {/* Status Information */}
-              <div className="overlay-status-info">
-                <div className="status-item">
-                  <span className="status-label">Model:</span>
-                  <span className="status-value">{currentModel ? '✅ Loaded' : '❌ None'}</span>
-                </div>
-                {core3dInitialized && (
-                  <div className="status-item">
-                    <span className="status-label">Core3D:</span>
-                    <span className="status-value">✅ Connected</span>
-                  </div>
-                )}
-                {currentDesign && (
-                  <div className="status-item">
-                    <span className="status-label">Design:</span>
-                    <span className="status-value">✅ Ready</span>
-                  </div>
-                )}
-                <div className="status-item">
-                  <span className="status-label">Loot Assets:</span>
-                  <span className="status-value">{lootAssetsLoaded ? '✅ Loaded' : '❌ Not Loaded'}</span>
-                </div>
-                {currentLootCharacter && (
-                  <div className="status-item">
-                    <span className="status-label">Loot Character:</span>
-                    <span className="status-value">✅ Ready</span>
-                  </div>
-                )}
-                {availableTraits.length > 0 && (
-                  <div className="status-item">
-                    <span className="status-label">Traits:</span>
-                    <span className="status-value">{availableTraits.length} Available</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       
       {isLoading && (
         <div className="loading-overlay">

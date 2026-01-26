@@ -51,6 +51,8 @@ class SharedHDRManager {
       if (scene && scene.environment !== undefined) {
         scene.environment = this.hdrTexture;
         scene.environmentIntensity = this.intensity;
+        // Also set as background for blue sky effect
+        scene.background = this.hdrTexture;
       }
     });
   }
@@ -63,6 +65,8 @@ class SharedHDRManager {
     if (this.isLoaded) {
       scene.environment = this.hdrTexture;
       scene.environmentIntensity = this.intensity;
+      // Also set as background for blue sky effect
+      scene.background = this.hdrTexture;
     }
   }
 
@@ -82,6 +86,30 @@ class SharedHDRManager {
         scene.environment = null;
       }
     });
+  }
+
+  /**
+   * Clear HDR environment from a specific scene
+   * @param {THREE.Scene} targetScene - The scene to clear HDR from
+   */
+  clearFromScene(targetScene) {
+    if (targetScene && targetScene.environment !== undefined) {
+      targetScene.environment = null;
+    }
+  }
+
+  /**
+   * Apply HDR environment to a specific scene
+   * @param {THREE.Scene} targetScene - The scene to apply HDR to
+   */
+  applyToScene(targetScene) {
+    if (!this.hdrTexture || !targetScene) return;
+    if (targetScene.environment !== undefined) {
+      targetScene.environment = this.hdrTexture;
+      targetScene.environmentIntensity = this.intensity;
+      // Also set as background for blue sky effect
+      targetScene.background = this.hdrTexture;
+    }
   }
 
   /**

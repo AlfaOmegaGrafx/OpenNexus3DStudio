@@ -40,6 +40,30 @@ export const CHAINS = {
     previewLink: 'https://goerli.etherscan.io//address/',
     brandColor: 'rgb(123,63,228)',
   },
+  Base: {
+    chainName: 'Base Mainnet',
+    name: 'Base',
+    blockExplorerUrls: ['https://basescan.org'],
+    chainId: '8453',
+    symbol: 'ETH',
+    rpcUrls: ['https://mainnet.base.org'],
+    decimals: 18,
+    contract_name: 'base',
+    previewLink: 'https://basescan.org/address/',
+    brandColor: 'rgb(0,82,255)',
+  },
+  BaseSepolia: {
+    chainName: 'Base Sepolia Testnet',
+    name: 'Base Sepolia',
+    blockExplorerUrls: ['https://sepolia.basescan.org'],
+    chainId: '84532',
+    symbol: 'ETH',
+    rpcUrls: ['https://sepolia.base.org'],
+    decimals: 18,
+    contract_name: 'basesepolia',
+    previewLink: 'https://sepolia.basescan.org/address/',
+    brandColor: 'rgb(0,82,255)',
+  },
 };
 
 export const CharacterContract = {

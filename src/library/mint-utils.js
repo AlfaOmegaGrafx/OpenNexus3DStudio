@@ -1,4 +1,4 @@
-import { BigNumber, ethers } from "ethers"
+import { ethers } from "ethers"
 import { getVRMBlobData } from "./download-utils"
 import { CharacterContract, EternalProxyContract, webaverseGenesisAddress } from "../components/Contract"
 import { SolanaManager } from "./solanaManager"
@@ -40,7 +40,7 @@ async function getContract(address) {
   ];
 
   const key = await import.meta.env.ALCHEMY_API_KEY;
-  const defaultProvider = new ethers.providers.AlchemyProvider('mainnet', key);
+  const defaultProvider = new ethers.AlchemyProvider('mainnet', key);
 
   //const defaultProvider = new ethers.providers.AlchemyProvider('mainnet', key);
   // Use Ethereum mainnet provider
@@ -66,10 +66,10 @@ async function getContract(address) {
 async function getTokenPrice(){
   if (tokenPrice != null)
     return tokenPrice
-  const defaultProvider = new ethers.providers.StaticJsonRpcProvider('https://polygon-rpc.com/')
+  const defaultProvider = new ethers.JsonRpcProvider('https://polygon-rpc.com/')
   const contract = new ethers.Contract(CharacterContract.address, CharacterContract.abi, defaultProvider)
   const tp = await contract.tokenPrice()
-  tokenPrice = BigNumber.from(tp).mul(1);
+  tokenPrice = tp; // In ethers v6, values are already BigInt, no need for BigNumber
   return tokenPrice
 }
 
@@ -198,13 +198,17 @@ export function fetchOwnedNFTs (walletAddress, network, collection){
     case 'polygon':{
       return fetchFromOpensea(walletAddress, "matic", collection);
     }
+    case 'base':{
+      // Base uses same OpenSea API format as Ethereum
+      return fetchFromOpensea(walletAddress, "base", collection);
+    }
     case 'solana':{
       console.warn("solana work in progress");
       return Promise.resolve(false);
       return fetchFromMetaplex(walletAddress, collection);
     }
     default:{
-      console.log("Unsupported Netwrok: " + walletAddress)
+      console.log("Unsupported Network: " + network)
       return Promise.resolve(false);
     }
   }
@@ -270,17 +274,40 @@ const fetchFromMetaplex = (walletAddress, collection) =>{
 /**
  * Switches the active wallet to a specific blockchain and retrieves the wallet address.
  * 
- * @param {string} network - The blockchain name (`"ethereum"`, `"polygon"` or `"solana"`).
- * @param {string} wallet - The wallet name (`"metamask"`, `"phantom"` or `"solana"`).
+ * @param {string} network - The blockchain name (`"ethereum"`, `"polygon"`, `"base"`, or `"solana"`).
+ * @param {string} walletType - Optional wallet type (`"metamask"`, `"phantom"`, `"thirdweb-smart"`, `"thirdweb-inapp"`, or `"solana"`).
  * @returns {Promise<string>} A promise resolving to the active wallet address, or an empty string on error.
  */
-export function connectWallet(network) {
-  console.log("connect wallet:", network);
+export function connectWallet(network, walletType = null) {
+  console.log("connect wallet:", network, walletType);
   return new Promise(async (resolve, reject) => {
     try {
       switch (network.toLowerCase()) {
         case 'ethereum':
-        case 'polygon': {
+        case 'polygon':
+        case 'base': {
+          // Check for Thirdweb wallet types first
+          if (walletType === 'thirdweb-smart' || walletType === 'thirdweb-inapp') {
+            try {
+              const { ThirdwebSmartWalletManager } = await import('./thirdwebSmartWallet');
+              const { ThirdwebInAppWalletManager } = await import('./thirdwebInAppWallet');
+              
+              if (walletType === 'thirdweb-smart') {
+                const smartWallet = new ThirdwebSmartWalletManager({ chain: network.toLowerCase() });
+                const address = await smartWallet.connectSmartWallet({ sponsorGas: true });
+                return resolve(address);
+              } else {
+                const inAppWallet = new ThirdwebInAppWalletManager({ chain: network.toLowerCase() });
+                const address = await inAppWallet.showConnectionModal();
+                return resolve(address);
+              }
+            } catch (error) {
+              console.warn('Thirdweb wallet connection failed, falling back to MetaMask:', error);
+              // Fall through to MetaMask
+            }
+          }
+
+          // Default to MetaMask/Ethereum wallet
           if (!window.ethereum) {
             return reject(new Error('Ethereum wallet is not available.'));
           }
@@ -288,8 +315,9 @@ export function connectWallet(network) {
           const chainIdMap = {
             ethereum: '0x1', // Ethereum Mainnet
             polygon: '0x89', // Polygon Mainnet
+            base: '0x2105', // Base Mainnet (8453 in decimal)
           };
-          const targetChain = network.toLowerCase() == ethereum ? chainIdMap.ethereum : chainIdMap.polygon;
+          const targetChain = chainIdMap[network.toLowerCase()] || chainIdMap.ethereum;
 
           await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
@@ -493,9 +521,8 @@ export async function mintAsset(avatar, screenshot, model, name, needCheckOT){
 
         let price = await getTokenPrice()
 
-        const signer = new ethers.providers.Web3Provider(
-          window.ethereum,
-        ).getSigner()
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
         const contract = new ethers.Contract(CharacterContract.address, CharacterContract.abi, signer)
         try {
           const options = {
@@ -519,9 +546,9 @@ export async function mintAsset(avatar, screenshot, model, name, needCheckOT){
 const checkOT = async (address) => {
     if(address) {
       const address = '0x6e58309CD851A5B124E3A56768a42d12f3B6D104'
-      const ethersigner = ethers.getDefaultProvider("mainnet", {
-        alchemy: import.meta.env.VITE_ALCHEMY_API_KEY,
-      })
+      const ethersigner = new ethers.JsonRpcProvider(
+        `https://eth-mainnet.g.alchemy.com/v2/${import.meta.env.VITE_ALCHEMY_API_KEY}`
+      )
       const contract = new ethers.Contract(EternalProxyContract.address, EternalProxyContract.abi, ethersigner);
       const webaBalance = await contract.beneficiaryBalanceOf(address, webaverseGenesisAddress, 1);
       if(parseInt(webaBalance) > 0) return true;

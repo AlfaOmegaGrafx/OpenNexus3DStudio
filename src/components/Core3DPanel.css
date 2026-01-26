@@ -53,6 +53,10 @@
 
 .core3d-content {
   padding: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 /* Error Banner */
@@ -125,20 +129,28 @@
   gap: 0.25rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid #3a3a3a;
+  flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tab-button {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem;
   background: none;
   border: none;
   color: #a0a0a0;
   cursor: pointer;
   border-radius: 6px 6px 0 0;
   transition: all 0.2s ease;
-  font-size: 0.9rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+  max-width: 100%;
 }
 
 .tab-button:hover {
@@ -153,16 +165,22 @@
 }
 
 .tab-icon {
-  font-size: 1rem;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .tab-label {
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Tab Content */
 .tab-content {
   min-height: 300px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Setup Form */
@@ -354,14 +372,16 @@
 /* Models & Materials Grid */
 .core3d-models,
 .core3d-materials {
-  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
 }
 
 .models-header,
 .materials-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -376,6 +396,17 @@
 .materials-controls {
   display: flex;
   gap: 0.5rem;
+  width: 100%;
+}
+
+.models-controls .btn,
+.materials-controls .btn {
+  font-size: 0.75rem;
+  padding: 5px 12px;
+  white-space: nowrap;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
 }
 
 .upload-section {
@@ -486,6 +517,11 @@
 .form-select:focus {
   outline: none;
   border-color: #3b82f6;
+}
+
+.form-select option {
+  background: #2a2a2a;
+  color: #ffffff;
 }
 
 .models-grid,
@@ -708,6 +744,16 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.selection-group {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .selection-group h5 {
@@ -726,6 +772,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
 .selected-item {
@@ -733,6 +782,8 @@
   align-items: center;
   gap: 1rem;
   width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .item-preview {
@@ -759,6 +810,12 @@
 
 .item-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: relative;
 }
 
 .item-name {
@@ -766,23 +823,42 @@
   font-weight: 500;
   font-size: 0.9rem;
   display: block;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .item-remove {
   background: none;
   border: none;
-  color: #6b7280;
+  color: #9ca3af;
   cursor: pointer;
-  font-size: 1.2rem;
-  padding: 0.25rem;
+  font-size: 1.4rem;
+  padding: 0;
   border-radius: 50%;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  position: relative;
+  z-index: 10;
+  line-height: 1;
 }
 
 .item-remove:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+  transform: scale(1.1);
 }
 
 .selection-placeholder {
@@ -1106,6 +1182,17 @@
 @media (max-width: 768px) {
   .designer-selection {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .selection-group {
+    width: 100%;
+  }
+  
+  .model-selector,
+  .material-selector {
+    width: 100%;
+    min-height: 100px;
   }
   
   .models-grid,
@@ -1123,11 +1210,22 @@
   
   .core3d-tabs {
     flex-wrap: wrap;
+    gap: 0.15rem;
   }
   
   .tab-button {
-    flex: 1;
-    min-width: 80px;
+    flex: 1 1 auto;
+    min-width: 60px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.7rem;
+  }
+  
+  .tab-label {
+    display: none;
+  }
+  
+  .tab-icon {
+    font-size: 0.9rem;
   }
   
   .core3d-viewer-tab {

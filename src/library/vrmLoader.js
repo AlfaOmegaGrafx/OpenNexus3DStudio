@@ -1,5 +1,5 @@
 /**
- * VRMLoader - VRM model loading and processing for Open3DStudio
+ * VRMLoader - VRM model loading and processing for OpenNexus3DStudio
  * Based on CharacterStudio's VRM handling patterns
  */
 import * as THREE from 'three';
@@ -303,7 +303,7 @@ export class VRMLoader {
       humanoid: null, // No humanoid bones
       expressionManager: null, // No expressions
       userData: {
-        open3dstudio: {
+        opennexus3dstudio: {
           fallbackMode: true,
           hasHumanoidBones: false,
           loaded: true,
@@ -344,7 +344,7 @@ export class VRMLoader {
   }
 
   /**
-   * Process VRM model for Open3DStudio
+   * Process VRM model for OpenNexus3DStudio
    * @param {Object} vrm - VRM object
    * @param {Object} options - Processing options
    */
@@ -384,8 +384,8 @@ export class VRMLoader {
     // Ensure blend shapes are properly detected
     this.ensureBlendShapes(vrm);
 
-    // Add Open3DStudio metadata
-    this.addOpen3DStudioMetadata(vrm);
+    // Add OpenNexus3DStudio metadata
+    this.addOpenNexus3DStudioMetadata(vrm);
 
     console.log('✅ VRM Loader: VRM model processing completed');
     return vrm;
@@ -535,8 +535,8 @@ export class VRMLoader {
       Object.keys(humanBones).forEach(boneName => {
         const boneData = humanBones[boneName];
         if (boneData && boneData.node) {
-          // Add Open3DStudio bone metadata
-          boneData.node.userData.open3dstudio = {
+          // Add OpenNexus3DStudio bone metadata
+          boneData.node.userData.opennexus3dstudio = {
             boneType: boneName,
             isHumanBone: true
           };
@@ -553,8 +553,8 @@ export class VRMLoader {
     scene.traverse((child) => {
       if (child.isBone) {
         // Add bone metadata
-        child.userData.open3dstudio = {
-          ...child.userData.open3dstudio,
+        child.userData.opennexus3dstudio = {
+          ...child.userData.opennexus3dstudio,
           isBone: true,
           boneIndex: child.boneIndex || -1
         };
@@ -579,11 +579,11 @@ export class VRMLoader {
       Object.keys(expressions).forEach(expressionName => {
         const expression = expressions[expressionName];
         if (expression) {
-          // Add Open3DStudio expression metadata
+          // Add OpenNexus3DStudio expression metadata
           if (!expression.userData) {
             expression.userData = {};
           }
-          expression.userData.open3dstudio = {
+          expression.userData.opennexus3dstudio = {
             expressionName,
             isBlendShape: true
           };
@@ -613,8 +613,8 @@ export class VRMLoader {
             child.material.userData.vrmMaterial = true;
           }
           
-          // Add Open3DStudio material metadata
-          child.material.userData.open3dstudio = {
+          // Add OpenNexus3DStudio material metadata
+          child.material.userData.opennexus3dstudio = {
             isVRMMaterial: true,
             processed: true
           };
@@ -749,12 +749,12 @@ export class VRMLoader {
   }
 
   /**
-   * Add Open3DStudio metadata
+   * Add OpenNexus3DStudio metadata
    * @param {Object} vrm - VRM object
    */
-  addOpen3DStudioMetadata(vrm) {
+  addOpenNexus3DStudioMetadata(vrm) {
     if (!vrm) {
-      console.warn('VRM object is undefined, cannot add Open3DStudio metadata');
+      console.warn('VRM object is undefined, cannot add OpenNexus3DStudio metadata');
       return;
     }
     
@@ -762,7 +762,7 @@ export class VRMLoader {
       vrm.userData = {};
     }
     
-    vrm.userData.open3dstudio = {
+    vrm.userData.opennexus3dstudio = {
       loaded: true,
       loadDate: new Date().toISOString(),
       version: '1.0.0',
@@ -851,7 +851,7 @@ export class VRMLoader {
     }
 
     // Check if this is a fallback VRM (no humanoid bones)
-    const isFallbackVRM = vrm.userData?.open3dstudio?.fallbackMode === true;
+    const isFallbackVRM = vrm.userData?.opennexus3dstudio?.fallbackMode === true;
     
     if (!vrm.humanoid && !isFallbackVRM) {
       warnings.push('VRM model lacks humanoid structure');

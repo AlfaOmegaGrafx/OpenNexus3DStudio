@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
+import * as THREE from '../library/three.js';
 import './SceneControlsCompact.css';
 
 /**
@@ -19,6 +20,7 @@ const SceneControlsCompact = ({
     setLightIntensity,
     setCameraMode,
     resetCamera,
+    focusOnFace,
     setView,
     toggleStats,
     toggleAutoRotate,
@@ -27,16 +29,21 @@ const SceneControlsCompact = ({
     setAutoTone,
     setToneMapping,
     setExposure,
-    updateRenderMode
+    updateRenderMode,
+    enableAR,
+    enableVR,
+    isInitialized
   } = useScene();
   const [lighting, setLightingState] = useState('studio');
   const [cameraMode, setCameraModeState] = useState('orbit');
   const [showStats, setShowStats] = useState(false);
   const [lightIntensity, setLightIntensityState] = useState(1.0);
   const [selectedView, setSelectedView] = useState('Select View');
+  const [viewLookLocked, setViewLookLocked] = useState(false);
   const [autoTone, setAutoToneState] = useState(false);
   const [toneMapping, setToneMappingState] = useState('ACES');
   const [exposure, setExposureState] = useState(1.0);
+  const xrControlsRef = useRef(null);
 
   const handleRenderModeChange = (mode) => {
     console.log(`🎨 Render mode changed to: ${mode}`);
@@ -75,6 +82,13 @@ const SceneControlsCompact = ({
     }
   };
 
+  const handleFocusFace = () => {
+    console.log('👤 Focusing on face');
+    if (focusOnFace) {
+      focusOnFace();
+    }
+  };
+
   const handleResetCamera = () => {
     console.log('🔄 Resetting camera');
     resetCamera();
@@ -109,9 +123,122 @@ const SceneControlsCompact = ({
   };
 
   const handleViewChange = (view) => {
-    console.log('👁️ View changed:', view);
+    console.log('👁️ View changed:', view, 'Position Locked:', viewLookLocked);
     setSelectedView(view);
+    
+    if (view === 'Select View') {
+      return; // Don't do anything if "Select View" is selected
+    }
+    
+    if (viewLookLocked) {
+      // When locked: All views available, but ensure full model is visible
+      // Use setView but with full model visibility calculation
+      if (sceneManager && sceneManager.camera && sceneManager.controls && sceneManager.currentModel) {
+        const camera = sceneManager.camera;
+        const controls = sceneManager.controls;
+        
+        // Get model bounding box to calculate full model view
+        const box = new THREE.Box3().setFromObject(sceneManager.currentModel);
+        if (box.isEmpty()) {
+          // Fallback to standard setView if no valid bounding box
+          setView(view);
+          return;
+        }
+        
+        const modelCenter = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        
+        // Calculate distance to show full model (similar to focusOnModel)
+        const distance = maxDim > 0 ? maxDim * 1.5 : 2.0; // Slightly further to ensure full model
+        
+        // Calculate target position based on view
+        let targetPosition;
+        
+        switch (view) {
+          case 'Front':
+            targetPosition = new THREE.Vector3(modelCenter.x, modelCenter.y, modelCenter.z + distance);
+            break;
+          case 'Back':
+            targetPosition = new THREE.Vector3(modelCenter.x, modelCenter.y, modelCenter.z - distance);
+            break;
+          case 'Left':
+            targetPosition = new THREE.Vector3(modelCenter.x - distance, modelCenter.y, modelCenter.z);
+            break;
+          case 'Right':
+            targetPosition = new THREE.Vector3(modelCenter.x + distance, modelCenter.y, modelCenter.z);
+            break;
+          case 'Top':
+            // Top view: Always directly above model center, X and Z at origin (0, Y, 0)
+            targetPosition = new THREE.Vector3(0, modelCenter.y + distance, 0);
+            break;
+          case 'Bottom':
+            // Bottom view: Always directly below model center, X and Z at origin (0, Y, 0)
+            targetPosition = new THREE.Vector3(0, modelCenter.y - distance, 0);
+            break;
+          case 'Isometric': {
+            const isoDistance = distance / Math.sqrt(3);
+            targetPosition = new THREE.Vector3(
+              modelCenter.x + isoDistance,
+              modelCenter.y + isoDistance,
+              modelCenter.z + isoDistance
+            );
+            break;
+          }
+          default:
+            setView(view);
+            return;
+        }
+        
+        // For Top and Bottom views, ensure target is at origin X/Z
+        let targetLookAt = modelCenter.clone();
+        if (view === 'Top' || view === 'Bottom') {
+          targetLookAt = new THREE.Vector3(0, modelCenter.y, 0);
+        }
+        
+        // Animate camera to position
+        const startPosition = camera.position.clone();
+        const startTarget = controls.target.clone();
+        const duration = 1000; // 1 second animation
+        const startTime = Date.now();
+        
+        const animate = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+          
+          camera.position.lerpVectors(startPosition, targetPosition, easeProgress);
+          controls.target.lerpVectors(startTarget, targetLookAt, easeProgress);
+          controls.update();
+          
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            console.log('✅ Camera moved to', view, 'view showing full model');
+          }
+        };
+        
+        animate();
+      } else {
+        // Fallback to standard setView
+        setView(view);
+      }
+    } else {
+      // When unlocked: Use standard setView behavior
     setView(view);
+    }
+  };
+  
+  const handleViewLookToggle = () => {
+    const newLocked = !viewLookLocked;
+    setViewLookLocked(newLocked);
+    console.log('🔒 Position Locked:', newLocked);
+    
+    if (newLocked) {
+      console.log('📌 Position locked - All views show full model');
+    } else {
+      console.log('🔓 Position unlocked - Standard view behavior');
+    }
   };
 
   const handleAutoToneChange = (checked) => {
@@ -130,6 +257,78 @@ const SceneControlsCompact = ({
     console.log('📸 Exposure changed:', value);
     setExposureState(value);
     setExposure(value);
+  };
+
+  // Auto-create XR buttons when scene is initialized
+  useEffect(() => {
+    if (sceneManager && isInitialized && xrControlsRef.current) {
+      // Small delay to ensure renderer is ready
+      const timer = setTimeout(() => {
+        if (xrControlsRef.current) {
+          // Remove any existing buttons first
+          const existingButtons = xrControlsRef.current.querySelectorAll('button[class*="Button"]');
+          existingButtons.forEach(btn => btn.remove());
+          
+          // Create VR and AR buttons
+          handleEnableVR();
+          handleEnableAR();
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [sceneManager, isInitialized]);
+
+  const handleEnableAR = () => {
+    console.log('📱 Setting up AR button...');
+    try {
+      // Use ref instead of querySelector for better reliability
+      const xrControlsContainer = xrControlsRef.current;
+      if (xrControlsContainer) {
+        // Remove existing AR button if any (check for Three.js ARButton class)
+        const existingARButton = xrControlsContainer.querySelector('button[class*="ARButton"], button[title*="AR"]');
+        if (existingARButton) {
+          existingARButton.remove();
+        }
+        
+        const arButton = enableAR(xrControlsContainer);
+        if (arButton) {
+          console.log('✅ AR button created and added to UI');
+        } else {
+          console.warn('⚠️ AR button not available - WebXR may not be supported');
+        }
+      } else {
+        console.warn('⚠️ XR controls container ref not available');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create AR button:', error);
+    }
+  };
+
+  const handleEnableVR = () => {
+    console.log('🥽 Setting up VR button...');
+    try {
+      // Use ref instead of querySelector for better reliability
+      const xrControlsContainer = xrControlsRef.current;
+      if (xrControlsContainer) {
+        // Remove existing VR button if any (check for Three.js VRButton class)
+        const existingVRButton = xrControlsContainer.querySelector('button[class*="VRButton"], button[title*="VR"]');
+        if (existingVRButton) {
+          existingVRButton.remove();
+        }
+        
+        const vrButton = enableVR(xrControlsContainer);
+        if (vrButton) {
+          console.log('✅ VR button created and added to UI');
+        } else {
+          console.warn('⚠️ VR button not available - WebXR may not be supported');
+        }
+      } else {
+        console.warn('⚠️ XR controls container ref not available');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create VR button:', error);
+    }
   };
 
   return (
@@ -169,6 +368,32 @@ const SceneControlsCompact = ({
         </div>
       </div>
 
+      {/* View Selector */}
+      <div className="view-controls">
+        <label className="control-label">View:</label>
+        <select 
+          className="control-select"
+          value={selectedView}
+          onChange={(e) => handleViewChange(e.target.value)}
+        >
+          <option value="Select View">Select View</option>
+          <option value="Front">Front</option>
+          <option value="Back">Back</option>
+          <option value="Left">Left</option>
+          <option value="Right">Right</option>
+          <option value="Top">Top</option>
+          <option value="Bottom">Bottom</option>
+          <option value="Isometric">Isometric</option>
+        </select>
+        <button 
+          className={`control-button ${viewLookLocked ? 'active' : ''}`}
+          onClick={handleViewLookToggle}
+          title={viewLookLocked ? "Position Locked - Views show full model" : "Position Unlocked - All view options available"}
+        >
+          {viewLookLocked ? '🔒' : '🔓'}
+        </button>
+      </div>
+
       {/* Original Camera Controls */}
       <div className="camera-controls">
         <label className="control-label">Camera</label>
@@ -187,6 +412,13 @@ const SceneControlsCompact = ({
           title="Focus on Model"
         >
           🎯
+        </button>
+        <button 
+          className="control-button"
+          onClick={handleFocusFace}
+          title="Focus on Face"
+        >
+          👤
         </button>
         <button 
           className="control-button"
@@ -230,23 +462,10 @@ const SceneControlsCompact = ({
         </button>
       </div>
 
-      {/* View Selector */}
-      <div className="view-controls">
-        <label className="control-label">View:</label>
-        <select 
-          className="control-select"
-          value={selectedView}
-          onChange={(e) => handleViewChange(e.target.value)}
-        >
-          <option value="Select View">Select View</option>
-          <option value="Front">Front</option>
-          <option value="Back">Back</option>
-          <option value="Left">Left</option>
-          <option value="Right">Right</option>
-          <option value="Top">Top</option>
-          <option value="Bottom">Bottom</option>
-          <option value="Isometric">Isometric</option>
-        </select>
+      {/* XR Controls */}
+      <div className="xr-controls" ref={xrControlsRef}>
+        <label className="control-label">XR</label>
+        {/* VRButton and ARButton will be added here by enableVR/enableAR */}
       </div>
 
       {/* Auto Tone Checkbox and Dropdown */}

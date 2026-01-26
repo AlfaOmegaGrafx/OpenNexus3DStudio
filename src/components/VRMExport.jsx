@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
 import { VRMExporter } from '../library/VRMExporter';
 
@@ -7,20 +7,22 @@ const VRMExport = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isImagesExpanded, setIsImagesExpanded] = useState(false);
   const [vrmMetadata, setVrmMetadata] = useState(null);
+  const cardHeaderRef = useRef(null);
   const [exportOptions, setExportOptions] = useState({
-    filename: 'open3dstudio_export.vrm',
+    filename: 'opennexus3dstudio_export.vrm',
     vrmVersion: '0.0',
-    title: 'Open3DStudio Export',
-    author: 'Open3DStudio',
+    title: 'OpenNexus3DStudio Export',
+    author: 'OpenNexus3DStudio',
     version: '1.0.0',
     allowedUserName: 'Everyone',
     commercialUssageName: 'Allow',
     optimize: true,
     includeExpressions: true,
-    includeHumanoidBones: true
+    includeHumanoidBones: true,
+    shaderType: 'standard' // 'standard' or 'toon' - standard supports ORM textures, toon does not
   });
 
-  const { currentModel, sceneManager } = useScene();
+  const { currentModel, sceneManager, characterManager } = useScene();
   const [vrmExporter] = useState(() => new VRMExporter());
 
   // Extract VRM metadata when a VRM model is loaded
@@ -1540,11 +1542,15 @@ const VRMExport = () => {
   }, [sceneManager?.currentVRM]);
 
   const handleExport = async () => {
-    // Use the correct model reference - prefer currentVRM if available, fallback to currentModel
+    console.log('🚀 VRM Export - Starting export process...');
+    // OPTIMIZED: Use characterManager.downloadVRM() which uses the optimized atlas path
+    // This ensures texture atlas is enabled and uses VRMExporterv0 for compatibility
+    
     const modelToExport = sceneManager?.currentVRM?.scene || currentModel;
     
-    console.log('🔍 VRM Export Debug:', {
+    console.log('🔄 VRM Export Debug:', {
       hasSceneManager: !!sceneManager,
+      hasCharacterManager: !!characterManager,
       hasCurrentVRM: !!sceneManager?.currentVRM,
       hasCurrentVRMScene: !!sceneManager?.currentVRM?.scene,
       hasCurrentModel: !!currentModel,
@@ -1554,14 +1560,17 @@ const VRMExport = () => {
     });
     
     if (!modelToExport) {
+      console.error('❌ VRM Export - No model to export');
       alert('No model to export');
       return;
     }
 
+    // Check if characterManager is available and has avatar data
+    if (!characterManager || !characterManager.avatar) {
+      console.warn('⚠️ characterManager not available, falling back to VRMExporter');
+      // Fallback to old method if characterManager not available
     try {
       setIsExporting(true);
-      
-      // Create VRM metadata
       const metadata = {
         title: exportOptions.title,
         author: exportOptions.author,
@@ -1569,28 +1578,304 @@ const VRMExport = () => {
         allowedUserName: exportOptions.allowedUserName,
         commercialUssageName: exportOptions.commercialUssageName
       };
-
-      // Create humanoid bones if needed
-      const humanoidBones = exportOptions.includeHumanoidBones 
-        ? vrmExporter.createDefaultHumanoidBones(modelToExport)
-        : {};
-
-      // Create expressions if needed
-      const expressions = exportOptions.includeExpressions
-        ? vrmExporter.createDefaultExpressions()
-        : {};
-
       const result = await vrmExporter.exportToVRM(modelToExport, {
         filename: exportOptions.filename,
         vrmVersion: exportOptions.vrmVersion,
         metadata,
-        humanoidBones,
-        expressions,
-        optimize: exportOptions.optimize
+          optimize: exportOptions.optimize,
+          useTextureAtlas: true,  // OPTIMIZED: Enable atlas in fallback
+          atlasSize: 2048  // OPTIMIZED: Use optimized atlas size
+        });
+        alert(`VRM model exported successfully as ${result.filename}`);
+      } catch (error) {
+        console.error('VRM export failed:', error);
+        alert(`VRM export failed: ${error.message}`);
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      
+      // OPTIMIZED: Use downloadVRMWithAvatar directly with the correct model from sceneManager
+      // - Texture atlas enabled by default
+      // - VRMExporterv0 for compatibility
+      // - Automatic screenshot/thumbnail generation
+      // - Optimized atlas sizes (2048/1024)
+      
+      // Determine shader type and set atlas options accordingly
+      // Standard shader supports ORM textures, Toon (MToon) does not
+      const useStandardShader = exportOptions.shaderType === 'standard';
+      
+      const exportOptions_optimized = {
+        vrmMeta: {
+          title: exportOptions.title,
+          author: exportOptions.author,
+          version: exportOptions.version,
+          allowedUserName: exportOptions.allowedUserName,
+          commercialUssageName: exportOptions.commercialUssageName
+        },
+        // OPTIMIZED: These options ensure atlas is enabled
+        createTextureAtlas: true,
+        mergeAppliedMorphs: true,
+        // FIX: Set atlas type based on shader selection
+        // Standard shader = exportStdAtlas: true (supports ORM textures)
+        // Toon shader = exportMtoonAtlas: true (no ORM textures)
+        exportMtoonAtlas: !useStandardShader,  // Use MToon atlas only for toon shader
+        exportStdAtlas: useStandardShader,     // Use standard atlas for standard shader (supports ORM)
+        mToonAtlasSize: 2048,
+        mToonAtlasSizeTransp: 1024,
+        stdAtlasSize: 2048,
+        stdAtlasSizeTransp: 1024,
+        isVrm0: true,  // Use VRM 0.0 for compatibility
+        outputVRM0: true,
+        // Screenshot options with defaults
+        screenshotResolution: [512, 512],
+        screenshotFaceDistance: 1,
+        screenshotFaceOffset: [0, 0, 0],
+        screenshotBackground: [0.1, 0.1, 0.1],
+        screenshotFOV: 75
+      };
+      
+      console.log('🔄 VRM Export - Shader type:', exportOptions.shaderType, {
+        useStandardShader,
+        exportMtoonAtlas: exportOptions_optimized.exportMtoonAtlas,
+        exportStdAtlas: exportOptions_optimized.exportStdAtlas,
+        note: useStandardShader ? 'Standard shader will export ORM textures' : 'Toon shader will not export ORM textures'
       });
       
+      console.log('🔄 Using optimized VRM export path with texture atlas:', exportOptions_optimized);
+      
+      // Extract filename without extension
+      const filenameWithoutExt = exportOptions.filename.replace(/\.vrm$/i, '');
+      
+      // Use the model from sceneManager.currentVRM.scene (the actual VRM model)
+      // Construct minimal avatar structure from VRM data
+      const vrmModel = sceneManager?.currentVRM?.scene || modelToExport;
+      let avatarToUse = characterManager?.avatar || {};
+      
+      // If avatar is empty, construct from VRM
+      if (!avatarToUse || Object.keys(avatarToUse).length === 0) {
+        const vrmData = sceneManager?.currentVRM;
+        if (vrmData) {
+          avatarToUse = {
+            "CUSTOM": {
+              vrm: vrmData,
+              model: vrmModel
+            }
+          };
+          console.log('✅ Constructed avatar from sceneManager.currentVRM');
+        } else {
+          // Fallback: create minimal structure
+          avatarToUse = {
+            "CUSTOM": {
+              vrm: {
+                meta: exportOptions_optimized.vrmMeta || {},
+                humanoid: {},
+                materials: [],
+                scene: vrmModel
+              },
+              model: vrmModel
+            }
+          };
+          console.log('⚠️ Created minimal avatar structure');
+        }
+      }
+      
+      // Import downloadVRMWithAvatar
+      const { downloadVRMWithAvatar } = await import('../library/download-utils');
+      
+      // Focus on face first, then generate screenshot
+      try {
+        // Step 1: Focus camera on face using sceneManager (for visual feedback)
+        if (sceneManager && sceneManager.focusOnFace && vrmModel) {
+          console.log('🎯 Focusing camera on face...');
+          sceneManager.focusOnFace();
+          
+          // Wait for camera to focus (animation takes ~1 second)
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          console.log('✅ Camera focused on face');
+        }
+        
+        // Step 2: Generate screenshot
+        if (characterManager && characterManager._getPortaitScreenshotTexture) {
+          // Ensure all required screenshot options are provided
+          const screenshotOptions = {
+            screenshotResolution: exportOptions_optimized.screenshotResolution || [512, 512],
+            screenshotFaceDistance: exportOptions_optimized.screenshotFaceDistance || 1,
+            screenshotFaceOffset: exportOptions_optimized.screenshotFaceOffset || [0, 0, 0],
+            screenshotBackground: exportOptions_optimized.screenshotBackground || [0.1, 0.1, 0.1],
+            screenshotFOV: exportOptions_optimized.screenshotFOV || 75,
+            ...exportOptions_optimized
+          };
+          
+          // Temporarily set characterModel to VRM model so _getPortaitScreenshotTexture can find head bone
+          const originalCharacterModel = characterManager.characterModel;
+          let modelSwapped = false;
+          
+          // Check if characterModel has SkinnedMesh
+          let hasSkinnedMesh = false;
+          if (characterManager.characterModel) {
+            characterManager.characterModel.traverse((o) => {
+              if (o.isSkinnedMesh) {
+                hasSkinnedMesh = true;
+              }
+            });
+          }
+          
+          // If characterModel doesn't have SkinnedMesh, temporarily use VRM model
+          if (!hasSkinnedMesh && vrmModel) {
+            // Check if VRM model has SkinnedMesh
+            vrmModel.traverse((o) => {
+              if (o.isSkinnedMesh) {
+                hasSkinnedMesh = true;
+              }
+            });
+            
+            if (hasSkinnedMesh) {
+              // Temporarily swap characterModel to VRM model for screenshot
+              characterManager.characterModel = vrmModel;
+              modelSwapped = true;
+              console.log('🔄 Temporarily using VRM model for face-focused screenshot');
+            }
+          }
+          
+          if (hasSkinnedMesh) {
+            // Use characterManager's screenshot method which focuses on face automatically
+            const screenshotTexture = characterManager._getPortaitScreenshotTexture(false, screenshotOptions);
+            
+            // FIX: Convert THREE.Texture to ImageBitmap format for VRMExporterv0
+            // VRMExporterv0 expects: { image: ImageBitmap }
+            if (screenshotTexture && screenshotTexture.isTexture) {
+              try {
+                const imgElement = screenshotTexture.image;
+                if (imgElement instanceof ImageBitmap) {
+                  exportOptions_optimized.screenshot = { image: imgElement };
+                  console.log('✅ Screenshot generated from characterManager (face-focused, ImageBitmap format)');
+                } else if (imgElement instanceof HTMLImageElement || imgElement instanceof HTMLCanvasElement) {
+                  const bitmap = await createImageBitmap(imgElement);
+                  exportOptions_optimized.screenshot = { image: bitmap };
+                  console.log('✅ Screenshot generated from characterManager (face-focused, converted to ImageBitmap)');
+                } else {
+                  // Try to get image from texture source
+                  const canvas = document.createElement('canvas');
+                  canvas.width = screenshotTexture.image?.width || 512;
+                  canvas.height = screenshotTexture.image?.height || 512;
+                  const ctx = canvas.getContext('2d');
+                  if (screenshotTexture.image) {
+                    ctx.drawImage(screenshotTexture.image, 0, 0);
+                    const bitmap = await createImageBitmap(canvas);
+                    exportOptions_optimized.screenshot = { image: bitmap };
+                    console.log('✅ Screenshot generated from characterManager (face-focused, via canvas conversion)');
+                  } else {
+                    console.warn('⚠️ Screenshot texture has no image, skipping screenshot');
+                  }
+                }
+              } catch (error) {
+                console.error('❌ Failed to convert screenshot texture to ImageBitmap:', error);
+                // Continue without screenshot
+              }
+            } else if (screenshotTexture && screenshotTexture.image instanceof ImageBitmap) {
+              exportOptions_optimized.screenshot = screenshotTexture;
+              console.log('✅ Screenshot already in correct format (ImageBitmap)');
+            } else {
+              console.warn('⚠️ Screenshot texture format not recognized:', screenshotTexture);
+            }
+            
+            // Restore original characterModel if we swapped it
+            if (modelSwapped) {
+              characterManager.characterModel = originalCharacterModel;
+            }
+          } else {
+            // Fallback: Use sceneManager's renderer to create screenshot
+            if (sceneManager && sceneManager.renderer && sceneManager.camera) {
+              console.log('📸 Generating screenshot using sceneManager renderer...');
+              const width = screenshotOptions.screenshotResolution[0];
+              const height = screenshotOptions.screenshotResolution[1];
+              
+              // Render the scene
+              sceneManager.renderer.render(sceneManager.scene, sceneManager.camera);
+              
+              // Get screenshot as data URL
+              const canvas = sceneManager.renderer.domElement;
+              const dataURL = canvas.toDataURL('image/png');
+              
+              // Convert data URL to ImageBitmap for VRMExporterv0
+              const img = new Image();
+              img.src = dataURL;
+              await new Promise((resolve, reject) => {
+                img.onload = async () => {
+                  try {
+                    const bitmap = await createImageBitmap(img);
+                    exportOptions_optimized.screenshot = { image: bitmap };
+                    console.log('✅ Screenshot generated from sceneManager (face-focused)');
+                    resolve();
+                  } catch (err) {
+                    reject(err);
+                  }
+                };
+                img.onerror = reject;
+              });
+            } else {
+              console.warn('⚠️ Cannot generate screenshot: missing renderer or camera');
+            }
+          }
+        } else {
+          // Fallback: Use sceneManager's renderer directly
+          if (sceneManager && sceneManager.renderer && sceneManager.camera) {
+            console.log('📸 Generating screenshot using sceneManager renderer (fallback)...');
+            const width = exportOptions_optimized.screenshotResolution?.[0] || 512;
+            const height = exportOptions_optimized.screenshotResolution?.[1] || 512;
+            
+            // Render the scene
+            sceneManager.renderer.render(sceneManager.scene, sceneManager.camera);
+            
+            // Get screenshot as data URL
+            const canvas = sceneManager.renderer.domElement;
+            const dataURL = canvas.toDataURL('image/png');
+            
+            // Convert data URL to ImageBitmap for VRMExporterv0
+            const img = new Image();
+            img.src = dataURL;
+            await new Promise((resolve, reject) => {
+              img.onload = async () => {
+                try {
+                  const bitmap = await createImageBitmap(img);
+                  exportOptions_optimized.screenshot = { image: bitmap };
+                  console.log('✅ Screenshot generated from sceneManager (face-focused, fallback)');
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              };
+              img.onerror = reject;
+            });
+          } else {
+            console.warn('⚠️ characterManager or sceneManager not available, skipping screenshot');
+          }
+        }
+      } catch (screenshotError) {
+        console.warn('⚠️ Failed to generate screenshot, continuing without it:', screenshotError);
+        // Continue without screenshot - it's optional
+      }
+      
+      // FIX: Verify screenshot is set before export
+      console.log('🔍 Final exportOptions_optimized.screenshot before export:', {
+        exists: !!exportOptions_optimized.screenshot,
+        hasImage: !!exportOptions_optimized.screenshot?.image,
+        imageType: exportOptions_optimized.screenshot?.image?.constructor?.name,
+        imageWidth: exportOptions_optimized.screenshot?.image?.width,
+        imageHeight: exportOptions_optimized.screenshot?.image?.height
+      });
+      
+      console.log('🚀 VRM Export - Calling downloadVRMWithAvatar...');
+      await downloadVRMWithAvatar(vrmModel, avatarToUse, filenameWithoutExt, exportOptions_optimized);
+      console.log('✅ VRM Export - downloadVRMWithAvatar completed successfully');
+      
       // Show success message
-      alert(`VRM model exported successfully as ${result.filename}`);
+      alert(`VRM model exported successfully as ${exportOptions.filename}\n✅ Texture atlas enabled\n✅ Optimized file size`);
     } catch (error) {
       console.error('VRM export failed:', error);
       alert(`VRM export failed: ${error.message}`);
@@ -1659,9 +1944,22 @@ const VRMExport = () => {
   return (
     <div className="vrm-export">
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" ref={cardHeaderRef}>
           <button 
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => {
+              const newExpanded = !isExpanded;
+              setIsExpanded(newExpanded);
+              // Auto-scroll header into view when expanding
+              if (newExpanded && cardHeaderRef.current) {
+                setTimeout(() => {
+                  cardHeaderRef.current?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                  });
+                }, 0);
+              }
+            }}
             className="expand-icon-button"
             title={isExpanded ? "Collapse VRM Export" : "Expand VRM Export"}
           >
@@ -1750,6 +2048,21 @@ const VRMExport = () => {
                   <option value="Allow">Allow</option>
                   <option value="Disallow">Disallow</option>
                 </select>
+              </div>
+
+              <div className="option-group">
+                <label className="block mb-1">Shader Type:</label>
+                <select
+                  value={exportOptions.shaderType}
+                  onChange={(e) => handleOptionChange('shaderType', e.target.value)}
+                  className="input w-full"
+                >
+                  <option value="standard">Standard (PBR with ORM textures)</option>
+                  <option value="toon">Toon (MToon - no ORM textures)</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Standard shader supports ORM (Occlusion/Roughness/Metalness) textures. Toon shader is optimized for anime-style rendering.
+                </p>
               </div>
 
               <div className="option-group">

@@ -1,9 +1,12 @@
 /**
- * VRMExporter - VRM model export for Open3DStudio
+ * VRMExporter - VRM model export for OpenNexus3DStudio
  * Based on CharacterStudio's VRM export patterns
  */
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { createTextureAtlas } from './create-texture-atlas.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { getOptimizedTextureOptions, getOptimizedAtlasOptions } from './textureOptimizer.js';
 
 export class VRMExporter {
   constructor() {
@@ -25,7 +28,19 @@ export class VRMExporter {
       expressions = {},
       materials = [],
       screenshot = null,
-      optimize = true
+      optimize = true,
+      // size optimization knobs - OPTIMIZED: Changed from 4096 to 1024 for 16x size reduction
+      maxTextureSize = 1024,  // OPTIMIZED: Changed from 4096 (CharacterStudioRedux optimization)
+      forcePowerOfTwoTextures = false,  // OPTIMIZED: Changed from true (allows exact sizes, avoids upscaling)
+      forceIndices = true,
+      truncateDrawRange = true
+      ,
+      // content optimization knobs
+      useTextureAtlas = true,
+      atlasSize = 2048,  // OPTIMIZED: Changed from 4096 to 2048 (matches Redux defaults)
+      mergeStaticMeshes = false,
+      // orientation
+      ensureForwardMinusZ = true
     } = options;
 
     try {
@@ -57,22 +72,140 @@ export class VRMExporter {
       // Clone textures to prevent immutable texture errors
       this.cloneTexturesForExport(model);
 
+      // Optionally enforce forward orientation (VRM expects -Z forward)
+      let originalQuaternion = null;
+      if (ensureForwardMinusZ) {
+        originalQuaternion = model.quaternion.clone();
+        try {
+          // Many sources use +Z; rotate 180deg around Y to face -Z
+          model.rotateY(Math.PI);
+        } catch (_) {}
+      }
+
+      // Optionally create a texture atlas to reduce texture count and size
+      // Uses optimized squaresplit algorithm for better space utilization
+      if (useTextureAtlas) {
+        try {
+          const meshes = [];
+          model.traverse((child) => { 
+            if (child.isMesh || child.isSkinnedMesh) meshes.push(child); 
+          });
+          if (meshes.length > 0) {
+            // Detect material type (mtoon vs standard)
+            let hasMToon = false;
+            meshes.forEach((mesh) => {
+              const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+              if (mat && mat.type === 'ShaderMaterial' && mat.userData?.vrmMaterial) {
+                hasMToon = true;
+              }
+            });
+
+            const { bakeObjects, material: atlasMaterial } = await createTextureAtlas({
+              meshes,
+              atlasSize,
+              mtoon: hasMToon,
+              transparentMaterial: false,
+              transparentTexture: false,
+              twoSidedMaterial: false,
+              includeNonTexturedMeshesInAtlas: false
+            });
+            
+            if (atlasMaterial && atlasMaterial.map) {
+              // Apply optimized atlas material to all baked meshes
+              for (const { mesh } of bakeObjects) {
+                if (mesh && mesh.material) {
+                  const currentMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                  // Use the optimized atlas material
+                  if (Array.isArray(mesh.material)) {
+                    mesh.material = [atlasMaterial];
+                  } else {
+                    mesh.material = atlasMaterial;
+                  }
+                  mesh.material.needsUpdate = true;
+                }
+              }
+              console.log('VRM Export: Texture atlas created successfully with', bakeObjects.length, 'meshes');
+            }
+          }
+        } catch (err) {
+          console.warn('VRM Export: texture atlas step skipped due to error:', err);
+        }
+      }
+
+      // Optional: conservatively merge non-skinned static meshes sharing the same material
+      if (mergeStaticMeshes) {
+        try {
+          const groups = new Map();
+          model.traverse((child) => {
+            if (!child.isMesh || child.isSkinnedMesh) return;
+            const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+            if (!mat || typeof mat.type !== 'string' || !child.geometry) return;
+            // Only merge if transform is identity to avoid baking transforms incorrectly
+            const isIdentity = child.position.lengthSq() === 0 &&
+                               child.rotation.x === 0 && child.rotation.y === 0 && child.rotation.z === 0 &&
+                               child.scale.x === 1 && child.scale.y === 1 && child.scale.z === 1;
+            if (!isIdentity) return;
+            const key = `${mat.type}:${mat.uuid}`;
+            if (!groups.has(key)) groups.set(key, { material: mat, meshes: [] });
+            groups.get(key).meshes.push(child);
+          });
+
+          groups.forEach(({ material, meshes }) => {
+            if (meshes.length < 2) return;
+            const geoms = [];
+            for (const m of meshes) {
+              const g = m.geometry?.clone();
+              if (g) geoms.push(g);
+            }
+            if (geoms.length >= 2) {
+              const merged = BufferGeometryUtils.mergeGeometries(geoms, true);
+              if (merged) {
+                const mergedMesh = new THREE.Mesh(merged, material);
+                const parent = meshes[0].parent || model;
+                parent.add(mergedMesh);
+                for (const m of meshes) {
+                  m.parent?.remove(m);
+                }
+              }
+            }
+          });
+        } catch (e) {
+          console.warn('VRM Export: static mesh merge skipped due to error:', e);
+        }
+      }
+
       // Create a scene and export as GLTF first
       const scene = new THREE.Scene();
       scene.add(model);
       
-      // Export as standard GLTF with proper binary data
+      // Remove heavy/circular and nonessential userData before export to reduce size
+      this.stripCircularUserData(model);
+      this.stripAllUserData(model);
+
+      // Export as standard GLTF JSON (not binary) so we can build a correct GLB with VRM
+      // Use optimized texture options (ensures maxTextureSize doesn't exceed 1024)
+      const optimizedTextureOptions = getOptimizedTextureOptions({
+        maxTextureSize,
+        forcePowerOfTwoTextures,
+        truncateDrawRange,
+      });
+      
       const gltfData = await this.gltfExporter.parseAsync(scene, {
-        binary: true,
+        binary: false,
         includeCustomExtensions: false,
         animations: [],
         onlyVisible: false,
-        truncateDrawRange: false,
+        truncateDrawRange: optimizedTextureOptions.truncateDrawRange,
         embedImages: true,
-        maxTextureSize: 4096,
-        forceIndices: false,
-        forcePowerOfTwoTextures: false
+        maxTextureSize: optimizedTextureOptions.maxTextureSize,  // Ensures max 1024
+        forceIndices,
+        forcePowerOfTwoTextures: optimizedTextureOptions.forcePowerOfTwoTextures
       });
+
+      // Restore orientation after export
+      if (ensureForwardMinusZ && originalQuaternion) {
+        model.quaternion.copy(originalQuaternion);
+      }
       
       console.log('VRM Export: GLTF data structure:', {
         scenes: gltfData.scenes?.length || 0,
@@ -88,25 +221,37 @@ export class VRMExporter {
         animations: gltfData.animations?.length || 0
       });
 
-      // Debug binary data
+      // Debug buffers
       if (gltfData.buffers && gltfData.buffers.length > 0) {
         const buffer = gltfData.buffers[0];
-        console.log('VRM Export: Buffer details:', {
-          hasData: !!buffer.data,
-          dataType: buffer.data ? buffer.data.constructor.name : 'no data',
-          dataSize: buffer.data ? buffer.data.byteLength : 0,
-          bufferType: buffer.type || 'unknown'
+        console.log('VRM Export: Buffer[0] info:', {
+          hasUri: !!buffer.uri,
+          uriPrefix: typeof buffer.uri === 'string' ? buffer.uri.substring(0, 32) : null,
         });
       } else {
         console.warn('VRM Export: No buffers found in GLTF data');
       }
 
-      // Create VRM 0.0 file structure manually
+      // Resolve humanoid and expressions from options → model.vrm → defaults
+      const modelVRM = model.userData?.vrm || {};
+      const effectiveHumanBones = Array.isArray(humanoidBones) && humanoidBones.length > 0
+        ? humanoidBones
+        : (Array.isArray(modelVRM?.humanoid?.humanBones) && modelVRM.humanoid.humanBones.length > 0
+            ? modelVRM.humanoid.humanBones
+            : this.createDefaultHumanoidBones(model));
+
+      const effectiveExpressions = (expressions && (Object.keys(expressions).length > 0))
+        ? expressions
+        : (modelVRM?.expressions && (Object.keys(modelVRM.expressions).length > 0)
+            ? modelVRM.expressions
+            : this.createDefaultExpressions());
+
+      // Create VRM 0.0 file structure manually (ensure humanoid and expressions exist)
       const glbData = await this.createVRM0File(gltfData, {
         vrmVersion,
         metadata,
-        humanoidBones,
-        expressions,
+        humanoid: { humanBones: effectiveHumanBones },
+        expressions: effectiveExpressions,
         materials,
         screenshot,
         blendShapes: extractedBlendShapes
@@ -257,8 +402,8 @@ export class VRMExporter {
       specVersion: "0.0",
       meta: {
         version: "0.0",
-        title: options.metadata?.title || 'Open3DStudio Export',
-        author: options.metadata?.author || 'Open3DStudio',
+        title: options.metadata?.title || 'OpenNexus3DStudio Export',
+        author: options.metadata?.author || 'OpenNexus3DStudio',
         contactInformation: "",
         reference: "",
         texture: -1,
@@ -301,7 +446,7 @@ export class VRMExporter {
     const vrmGltf = {
       asset: {
         version: "2.0",
-        generator: "Open3DStudio VRM Exporter"
+        generator: "OpenNexus3DStudio VRM Exporter"
       },
       scene: 0,
       scenes: ensureArray(gltfData.scenes),
@@ -335,8 +480,8 @@ export class VRMExporter {
       specVersion: "0.0",
       meta: {
         version: "0.0",
-        title: options.metadata?.title || 'Open3DStudio Export',
-        author: options.metadata?.author || 'Open3DStudio',
+        title: options.metadata?.title || 'OpenNexus3DStudio Export',
+        author: options.metadata?.author || 'OpenNexus3DStudio',
         contactInformation: "",
         reference: "",
         texture: -1,
@@ -386,15 +531,19 @@ export class VRMExporter {
     const scene = new THREE.Scene();
     scene.add(model);
     
+    // OPTIMIZED: Use optimized texture options (ported from CharacterStudioRedux)
+    const optimizedTextureOptions = getOptimizedTextureOptions();
+    
     // Export as standard GLTF/GLB - VRM applications can often read GLTF files
     const gltfData = await this.gltfExporter.parseAsync(scene, {
       binary: true,
       includeCustomExtensions: false,
       animations: [],
       onlyVisible: false,
-      truncateDrawRange: false,
+      truncateDrawRange: optimizedTextureOptions.truncateDrawRange,
       embedImages: true,
-      maxTextureSize: 4096
+      maxTextureSize: optimizedTextureOptions.maxTextureSize,  // OPTIMIZED: 1024 instead of 4096
+      forcePowerOfTwoTextures: optimizedTextureOptions.forcePowerOfTwoTextures  // OPTIMIZED: false instead of true
     });
 
     // Return the GLB data directly - many VRM applications can import GLTF files
@@ -412,15 +561,15 @@ export class VRMExporter {
     const vrmFile = {
       asset: {
         version: "2.0",
-        generator: "Open3DStudio VRM Exporter"
+        generator: "OpenNexus3DStudio VRM Exporter"
       },
       extensions: {
         VRM: {
           specVersion: "0.0",
           meta: {
             version: "0.0",
-            title: vrmData.meta?.title || "Open3DStudio Export",
-            author: vrmData.meta?.author || "Open3DStudio",
+            title: vrmData.meta?.title || "OpenNexus3DStudio Export",
+            author: vrmData.meta?.author || "OpenNexus3DStudio",
             contactInformation: "",
             reference: "",
             texture: -1,
@@ -537,15 +686,15 @@ export class VRMExporter {
     const vrmFile = {
       asset: {
         version: "2.0",
-        generator: "Open3DStudio VRM Exporter"
+        generator: "OpenNexus3DStudio VRM Exporter"
       },
       extensions: {
         VRM: {
           specVersion: "0.0",
           meta: {
             version: "0.0",
-            title: vrmData.meta?.title || "Open3DStudio Export",
-            author: vrmData.meta?.author || "Open3DStudio",
+            title: vrmData.meta?.title || "OpenNexus3DStudio Export",
+            author: vrmData.meta?.author || "OpenNexus3DStudio",
             contactInformation: vrmData.meta?.contactInformation || "",
             reference: vrmData.meta?.reference || "",
             texture: vrmData.meta?.texture || -1,
@@ -663,19 +812,18 @@ export class VRMExporter {
     // Get actual binary data from GLTF export
     let binaryBuffer = new ArrayBuffer(0);
     if (gltfData && gltfData.buffers && gltfData.buffers.length > 0) {
-      const buffer = gltfData.buffers[0];
-      if (buffer && buffer.data) {
-        // Validate that the buffer data is actually an ArrayBuffer
-        if (buffer.data instanceof ArrayBuffer) {
-          binaryBuffer = buffer.data;
-          console.log('VRM Export: Using actual binary data, size:', binaryBuffer.byteLength);
-        } else {
-          console.warn('VRM Export: Buffer data is not ArrayBuffer, type:', typeof buffer.data, buffer.data.constructor.name);
-          // Try to convert to ArrayBuffer if it's a Uint8Array
-          if (buffer.data instanceof Uint8Array) {
-            binaryBuffer = buffer.data.buffer.slice(buffer.data.byteOffset, buffer.data.byteOffset + buffer.data.byteLength);
-            console.log('VRM Export: Converted Uint8Array to ArrayBuffer, size:', binaryBuffer.byteLength);
-          }
+      const buffer0 = gltfData.buffers[0];
+      // In JSON export, buffer is a data URI; decode it
+      if (buffer0 && typeof buffer0.uri === 'string' && buffer0.uri.startsWith('data:')) {
+        try {
+          const base64 = buffer0.uri.split(',')[1];
+          const raw = atob(base64);
+          const arr = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+          binaryBuffer = arr.buffer;
+          console.log('VRM Export: Decoded BIN data from data URI, size:', binaryBuffer.byteLength);
+        } catch (e) {
+          console.warn('VRM Export: Failed to decode data URI buffer:', e);
         }
       }
     }
@@ -686,10 +834,13 @@ export class VRMExporter {
       binaryBuffer = new ArrayBuffer(0);
     }
     
-    // Ensure JSON is padded to 4-byte boundary
+    // Ensure JSON is padded to 4-byte boundary using space (0x20) per spec
     const jsonPadding = (4 - (jsonBuffer.length % 4)) % 4;
     const paddedJsonBuffer = new Uint8Array(jsonBuffer.length + jsonPadding);
     paddedJsonBuffer.set(jsonBuffer);
+    for (let i = 0; i < jsonPadding; i++) {
+      paddedJsonBuffer[jsonBuffer.length + i] = 0x20;
+    }
     
     // Create GLB header (12 bytes)
     const header = new ArrayBuffer(12);
@@ -710,10 +861,17 @@ export class VRMExporter {
     
     // Binary chunk header (8 bytes) - only if we have binary data
     let binaryChunkHeader = null;
+    let paddedBinary = null;
     if (binaryBuffer.byteLength > 0) {
+      // Pad BIN to 4-byte boundary with zeros
+      const binPadding = (4 - (binaryBuffer.byteLength % 4)) % 4;
+      paddedBinary = new Uint8Array(binaryBuffer.byteLength + binPadding);
+      paddedBinary.set(new Uint8Array(binaryBuffer));
+      // zeros are fine for BIN padding
+
       binaryChunkHeader = new ArrayBuffer(8);
       const binaryChunkView = new DataView(binaryChunkHeader);
-      binaryChunkView.setUint32(0, binaryBuffer.byteLength, true);
+      binaryChunkView.setUint32(0, paddedBinary.byteLength, true);
       binaryChunkView.setUint32(4, 0x004E4942, true); // "BIN\0"
     }
     
@@ -722,7 +880,7 @@ export class VRMExporter {
                        jsonChunkHeader.byteLength + 
                        paddedJsonBuffer.length + 
                        (binaryChunkHeader ? binaryChunkHeader.byteLength : 0) + 
-                       (binaryBuffer.byteLength > 0 ? binaryBuffer.byteLength : 0);
+                       (paddedBinary ? paddedBinary.byteLength : 0);
     
     // Create final GLB buffer
     const glbBuffer = new ArrayBuffer(totalLength);
@@ -745,13 +903,13 @@ export class VRMExporter {
     offset += paddedJsonBuffer.length;
     
     // Copy binary chunk header and data if available
-    if (binaryChunkHeader && binaryBuffer.byteLength > 0) {
+    if (binaryChunkHeader && paddedBinary) {
       glbView.set(new Uint8Array(binaryChunkHeader), offset);
       offset += binaryChunkHeader.byteLength;
       
       // Copy binary data
-      glbView.set(new Uint8Array(binaryBuffer), offset);
-      offset += binaryBuffer.byteLength;
+      glbView.set(paddedBinary, offset);
+      offset += paddedBinary.byteLength;
     }
     
     console.log('VRM Export: Final GLB size:', glbBuffer.byteLength);
@@ -874,6 +1032,42 @@ export class VRMExporter {
     };
 
     console.log('✅ VRM Export: Model transform preserved');
+  }
+
+  /**
+   * Remove heavy or circular fields from userData to avoid exporter JSON issues
+   * @param {THREE.Object3D} root
+   */
+  stripCircularUserData(root) {
+    const keysToStrip = new Set(['gltf', 'parser', 'opennexus3dstudio', 'scene', 'parent']);
+    root.traverse((node) => {
+      if (!node.userData) return;
+      for (const key of Object.keys(node.userData)) {
+        if (keysToStrip.has(key)) {
+          delete node.userData[key];
+        }
+      }
+    });
+  }
+
+  /**
+   * Aggressively strip userData to shrink JSON size
+   * Keeps only minimal safe primitives; removes nested objects/arrays
+   * @param {THREE.Object3D} root
+   */
+  stripAllUserData(root) {
+    root.traverse((node) => {
+      if (!node.userData) return;
+      const kept = {};
+      for (const [k, v] of Object.entries(node.userData)) {
+        if (v == null) continue;
+        const t = typeof v;
+        if (t === 'string' || t === 'number' || t === 'boolean') {
+          kept[k] = v;
+        }
+      }
+      node.userData = kept;
+    });
   }
 
   /**

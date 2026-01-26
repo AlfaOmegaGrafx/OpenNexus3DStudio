@@ -386,7 +386,7 @@
 /* Scrollbar styling for webkit browsers */
 .troubleshooting-guide-main::-webkit-scrollbar,
 .troubleshooting-guide-sidebar::-webkit-scrollbar {
-  width: 8px;
+  width: var(--scrollbar-size, 8px);
 }
 
 .troubleshooting-guide-main::-webkit-scrollbar-track,

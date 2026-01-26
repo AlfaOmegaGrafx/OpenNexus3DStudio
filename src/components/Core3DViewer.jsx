@@ -3,7 +3,7 @@ import Universal3DViewer from './Universal3DViewer';
 
 /**
  * Core3D-specific 3D Viewer Component
- * Optimized for Open3DStudio and Core3D design workflows
+ * Optimized for OpenNexus3DStudio and Core3D design workflows
  */
 const Core3DViewer = ({ 
   design = null,
@@ -20,7 +20,7 @@ const Core3DViewer = ({
   return (
     <div className={`core3d-viewer ${className}`} style={style}>
       <Universal3DViewer
-        mode="open3dstudio"
+        mode="opennexus3dstudio"
         model={design || model}
         renderMode={renderMode}
         showControls={showControls}
@@ -29,7 +29,7 @@ const Core3DViewer = ({
         enableExport={true}
         onModelLoad={onDesignLoad}
         onModelError={onDesignError}
-        className="open3dstudio-viewer"
+        className="opennexus3dstudio-viewer"
       />
     </div>
   );

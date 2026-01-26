@@ -97,22 +97,59 @@ export const TaskProvider = ({ children }) => {
     }
   }, []); // Empty dependency array to run only once
 
-  // Periodic connection check
+  // Periodic connection check with exponential backoff
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (taskManagerRef.current) {
-        taskManagerRef.current.checkConnection();
-      }
-    }, 10000); // Check every 10 seconds
+    let isChecking = false;
+    let consecutiveFailures = 0;
+    let timeoutId = null;
+    const initialInterval = 10000; // Start with 10 seconds
+    const maxBackoff = 60000; // Max 60 seconds between checks when disconnected
 
-    return () => clearInterval(interval);
+    const getNextInterval = () => {
+      if (consecutiveFailures === 0) {
+        return initialInterval;
+      }
+      // Exponential backoff: 10s, 20s, 40s, 60s (max)
+      return Math.min(initialInterval * Math.pow(2, consecutiveFailures - 1), maxBackoff);
+    };
+
+    const performCheck = async () => {
+      if (isChecking || !taskManagerRef.current) return;
+      
+      isChecking = true;
+      try {
+        const connected = await taskManagerRef.current.checkConnection();
+        
+        if (connected) {
+          consecutiveFailures = 0;
+        } else {
+          consecutiveFailures++;
+        }
+      } catch (error) {
+        consecutiveFailures++;
+      } finally {
+        isChecking = false;
+        
+        // Schedule next check with updated interval
+        const nextInterval = getNextInterval();
+        timeoutId = setTimeout(() => {
+          performCheck();
+        }, nextInterval);
+      }
+    };
+
+    // Initial check
+    performCheck();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
-  // Check API connection
+  // Check API connection with debouncing
   const checkConnection = async () => {
     if (taskManagerRef.current) {
       const result = await taskManagerRef.current.checkConnection();
-      console.log('Manual connection check result:', result);
       return result;
     }
     return false;

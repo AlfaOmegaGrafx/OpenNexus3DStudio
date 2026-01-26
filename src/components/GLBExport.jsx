@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
 
 const GLBExport = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const cardHeaderRef = useRef(null);
   const [exportOptions, setExportOptions] = useState({
-    filename: 'open3dstudio_export.glb',
+    filename: 'opennexus3dstudio_export.glb',
     forCharacterStudio: true,
     optimize: true,
     includeTextures: true,
@@ -60,9 +61,22 @@ const GLBExport = () => {
   return (
     <div className="glb-export">
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" ref={cardHeaderRef}>
           <button 
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => {
+              const newExpanded = !isExpanded;
+              setIsExpanded(newExpanded);
+              // Auto-scroll header into view when expanding
+              if (newExpanded && cardHeaderRef.current) {
+                setTimeout(() => {
+                  cardHeaderRef.current?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                  });
+                }, 0);
+              }
+            }}
             className="expand-icon-button"
             title={isExpanded ? "Collapse GLB Export" : "Expand GLB Export"}
           >

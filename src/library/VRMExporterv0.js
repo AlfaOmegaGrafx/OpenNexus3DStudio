@@ -174,41 +174,153 @@ export default class VRMExporterv0 {
 
         const uniqueMaterialNames = uniqueMaterials.map((material) => material.name);
 
-        const icon = screenshot
-            ? { name: "icon", imageBitmap: screenshot.image }
-            : null; // TODO: ない場合もある
+        // FIX: Log material properties to debug ORM texture detection
+        console.log('🔄 VRMExporterv0 - Unique materials analysis:', {
+          totalMaterials: uniqueMaterials.length,
+          materialDetails: uniqueMaterials.map(mat => ({
+            name: mat.name,
+            hasMap: !!mat.map,
+            hasRoughnessMap: !!mat.roughnessMap,
+            hasMetalnessMap: !!mat.metalnessMap,
+            hasAoMap: !!mat.aoMap,
+            hasNormalMap: !!mat.normalMap,
+            mapImageType: mat.map?.image?.constructor?.name,
+            roughnessMapImageType: mat.roughnessMap?.image?.constructor?.name,
+            normalMapImageType: mat.normalMap?.image?.constructor?.name
+          }))
+        });
 
-        const mainImages = uniqueMaterials
+        // OPTIMIZED: Resize textures to max 1024px for size reduction (ported from CharacterStudioRedux)
+        const MAX_TEXTURE_SIZE = 1024; // OPTIMIZED: Changed from unlimited to 1024 for 16x size reduction
+
+        // OPTIMIZED: Resize screenshot/icon if needed
+        // FIX: Ensure screenshot is properly formatted and not using texture atlas
+        let icon = null;
+        if (screenshot) {
+          try {
+            // Verify screenshot has image property and it's an ImageBitmap
+            if (screenshot.image && screenshot.image instanceof ImageBitmap) {
+              console.log('✅ Screenshot icon: Valid ImageBitmap found, dimensions:', screenshot.image.width, 'x', screenshot.image.height);
+              icon = { 
+                name: "icon", 
+                imageBitmap: screenshot.image.width > MAX_TEXTURE_SIZE || screenshot.image.height > MAX_TEXTURE_SIZE
+                    ? await resizeImageBitmap(screenshot.image, MAX_TEXTURE_SIZE)
+                    : screenshot.image
+              };
+            } else {
+              console.warn('⚠️ Screenshot icon: Invalid format, screenshot.image is not ImageBitmap:', typeof screenshot.image);
+            }
+          } catch (error) {
+            console.error('❌ Screenshot icon: Error processing screenshot:', error);
+          }
+        } else {
+          console.warn('⚠️ Screenshot icon: No screenshot provided, thumbnail will be missing');
+        }
+        
+        // Helper function to resize ImageBitmap if needed
+        const processImageBitmap = async (imageBitmap, name) => {
+            if (imageBitmap.width > MAX_TEXTURE_SIZE || imageBitmap.height > MAX_TEXTURE_SIZE) {
+                console.log(`🔄 Resizing texture ${name} from ${imageBitmap.width}x${imageBitmap.height} to max ${MAX_TEXTURE_SIZE}px`);
+                return await resizeImageBitmap(imageBitmap, MAX_TEXTURE_SIZE);
+            }
+            return imageBitmap;
+        };
+        
+        // Process main images with texture size limiting
+        const mainImages = await Promise.all(
+            uniqueMaterials
             .filter((material) => material.map)
-            .map((material) => {
+                .map(async (material) => {
                 if (!material.map)
                     throw new Error(material.name + " map is null");
-                return { name: material.name, imageBitmap: material.map.image };
-            });
-        const shadeImages = uniqueMaterials
+                    const resized = await processImageBitmap(material.map.image, material.name);
+                    return { name: material.name, imageBitmap: resized };
+                })
+        );
+        
+        // Process shade images with texture size limiting
+        const shadeImages = await Promise.all(
+            uniqueMaterials
             .filter((material) => material.userData.shadeTexture)
-            .map((material) => {
+                .map(async (material) => {
                 if (!material.userData.shadeTexture)
                     throw new Error(material.userData.shadeTexture + " map is null");
-                return { name: material.name + "_shade", imageBitmap: material.userData.shadeTexture.image };
-            });
-        const ormImages = uniqueMaterials
-            .filter((material) => material.roughnessMap)
-            .map((material) => {
-                if (!material.roughnessMap)
-                    return null;
-                return { name: material.name + "_orm", imageBitmap: material.roughnessMap.image };
-            });
+                    const resized = await processImageBitmap(material.userData.shadeTexture.image, material.name + "_shade");
+                    return { name: material.name + "_shade", imageBitmap: resized };
+                })
+        );
+        
+        // Process ORM images with texture size limiting
+        // FIX: Check multiple ORM texture sources (roughnessMap, metalnessMap, aoMap)
+        // ORM textures can be stored in any of these properties
+        // IMPORTANT: For MToon materials, check the standard material wrapper, not the VRM material
+        // The VRM material (userData.vrmMaterial) doesn't have ORM textures - they're on the standard material
+        const ormImages = await Promise.all(
+            uniqueMaterials
+                .map(async (material) => {
+                    // For MToon materials, the ORM textures are on the standard material, not the VRM material
+                    // Check the original material first (before extracting userData.vrmMaterial)
+                    let ormTexture = material.roughnessMap || material.metalnessMap || material.aoMap;
+                    
+                    // If not found on the material itself, check if it's a MToon material with a standard material wrapper
+                    if (!ormTexture && material.userData?.vrmMaterial) {
+                        // The standard material wrapper should have the ORM textures
+                        // But we're already on the standard material, so check if it's nested
+                        // Actually, for MToon, the material IS the standard material with userData.vrmMaterial
+                        // So the ORM textures should be directly on this material
+                        // But if they're not, they might not have been set during atlas generation
+                    }
+                    
+                    if (!ormTexture || !ormTexture.image) {
+                        return null; // No ORM texture for this material
+                    }
+                    const resized = await processImageBitmap(ormTexture.image, material.name + "_orm");
+                    return { name: material.name + "_orm", imageBitmap: resized };
+                })
+                .filter((result) => result !== null)
+        );
+        console.log('🔄 ORM images detected:', ormImages.length, 'out of', uniqueMaterials.length, 'materials');
 
-        const normalImages = uniqueMaterials
-            .filter((material) => material.roughnessMap)
-            .map((material) => {
+        // Process normal images with texture size limiting
+        const normalImages = await Promise.all(
+            uniqueMaterials
+                .filter((material) => material.normalMap)
+                .map(async (material) => {
                 if (!material.normalMap)
-                    return null
-                return { name: material.name + "_normal", imageBitmap: material.normalMap.image };
-            });
+                        return null;
+                    const resized = await processImageBitmap(material.normalMap.image, material.name + "_normal");
+                    return { name: material.name + "_normal", imageBitmap: resized };
+                })
+        );
+        
         const images = [...mainImages, ...shadeImages, ...ormImages, ...normalImages].filter(element => element !== null);
+        console.log('🖼️ VRMExporterv0: Total images to export:', {
+          mainImages: mainImages.length,
+          shadeImages: shadeImages.length,
+          ormImages: ormImages.length,
+          normalImages: normalImages.filter(img => img !== null).length,
+          total: images.length,
+          icon: icon ? 'present' : 'missing'
+        });
+        
+        // FIX: Calculate icon index BEFORE calling toOutputImages
+        // toOutputImages appends icon to images, so icon index = images.length (before icon is added)
+        // After toOutputImages, the icon will be at index images.length in outputImages
+        const iconImageIndex = icon ? images.length : undefined;
         const outputImages = toOutputImages(images, icon, isktx2 ? "image/ktx2" : "image/png");
+        
+        console.log('🖼️ VRM thumbnail icon index calculation:', {
+          iconExists: !!icon,
+          iconHasImageBitmap: !!(icon && icon.imageBitmap),
+          imagesLength: images.length,
+          outputImagesLength: outputImages.length,
+          calculatedIconIndex: iconImageIndex,
+          mainImagesCount: mainImages.length,
+          shadeImagesCount: shadeImages.length,
+          ormImagesCount: ormImages.length,
+          normalImagesCount: normalImages.filter(img => img !== null).length,
+          note: 'Icon should be at index = images.length (after all texture images, before icon is added to outputImages)'
+        });
         const outputSamplers = toOutputSamplers(outputImages);
         const outputTextures = toOutputTextures(outputImages, isktx2);
         const outputMaterials = toOutputMaterials(uniqueMaterials, images);
@@ -681,8 +793,17 @@ export default class VRMExporterv0 {
         console.log(outputSecondaryAnimation);
 
 
-        // Ensure thumbnail is embedded and referenced correctly
-        outputVrmMeta.texture = icon ? outputImages.length - 1 : undefined;
+        // FIX: Ensure thumbnail is embedded and referenced correctly
+        // iconImageIndex was calculated as images.length (before icon is added to outputImages)
+        // After toOutputImages, the icon is at index images.length in outputImages
+        // This index should point to the icon image in the outputImages array
+        if (icon && iconImageIndex !== undefined) {
+            outputVrmMeta.texture = iconImageIndex;
+            console.log('🖼️ VRM thumbnail icon index set:', iconImageIndex, 'total images:', images.length, 'total outputImages:', outputImages.length, 'icon exists:', !!icon, 'icon name:', icon.name);
+        } else {
+            console.warn('⚠️ VRM thumbnail icon not set - icon:', !!icon, 'iconImageIndex:', iconImageIndex);
+            outputVrmMeta.texture = undefined;
+        }
         const bufferViews = await Promise.all(
             images.map(async (image) => ({
                 buffer: isktx2 ? await imageBitmap2ktx2(image.imageBitmap) : imageBitmap2png(image.imageBitmap),
@@ -730,6 +851,10 @@ export default class VRMExporterv0 {
             };
             bufferOffset += bufferView.buffer.byteLength;
             if (bufferView.type === MeshDataType.IMAGE) {
+                // FIX: Verify icon index is correct
+                if (imageIndex === iconImageIndex && icon) {
+                    console.log('🖼️ Assigning bufferView to icon at imageIndex:', imageIndex, 'iconImageIndex:', iconImageIndex);
+                }
                 outputImages[imageIndex++].bufferView = index;
                 index++;
             }
@@ -1033,6 +1158,45 @@ async function imageBitmap2ktx2(image) {
   return ktx2Data;
 }
   
+
+/**
+ * Resize ImageBitmap to maximum size while maintaining aspect ratio
+ * OPTIMIZED: Added texture size limiting (ported from CharacterStudioRedux optimization)
+ * @param {ImageBitmap} imageBitmap - Image to resize
+ * @param {number} maxSize - Maximum width or height (default: 1024)
+ * @returns {Promise<ImageBitmap>} Resized ImageBitmap
+ */
+async function resizeImageBitmap(imageBitmap, maxSize = 1024) {
+    // If image is already smaller than maxSize, return as-is
+    if (imageBitmap.width <= maxSize && imageBitmap.height <= maxSize) {
+        return imageBitmap;
+    }
+    
+    // Calculate new dimensions maintaining aspect ratio
+    let newWidth = imageBitmap.width;
+    let newHeight = imageBitmap.height;
+    
+    if (newWidth > maxSize || newHeight > maxSize) {
+        const aspectRatio = newWidth / newHeight;
+        if (newWidth > newHeight) {
+            newWidth = maxSize;
+            newHeight = Math.round(maxSize / aspectRatio);
+        } else {
+            newHeight = maxSize;
+            newWidth = Math.round(maxSize * aspectRatio);
+        }
+    }
+    
+    // Create canvas and resize
+    const canvas = document.createElement('canvas');
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageBitmap, 0, 0, newWidth, newHeight);
+    
+    // Convert back to ImageBitmap
+    return await createImageBitmap(canvas);
+}
 
 function imageBitmap2png(image) {
     const canvas = document.createElement('canvas');
@@ -1343,7 +1507,12 @@ const toOutputMaterials = (uniqueMaterials, images) => {
         let baseColor;
         let VRMC_materials_mtoon = null;
 
-        material = material.userData.vrmMaterial ? material.userData.vrmMaterial : material;
+        // FIX: Store original material to access ORM textures (for MToon, ORM is on standard material, not VRM material)
+        const originalMaterial = material;
+        // Extract VRM material if it exists (for MToon materials)
+        const vrmMaterial = material.userData.vrmMaterial;
+        // For material processing, use VRM material if available, otherwise use original
+        material = vrmMaterial || material;
         if (material.type === "ShaderMaterial") {
             //VRMC_materials_mtoon = material.userData.gltfExtensions.VRMC_materials_mtoon;
             VRMC_materials_mtoon = {};
@@ -1377,12 +1546,20 @@ const toOutputMaterials = (uniqueMaterials, images) => {
         }
 
         let metalicRoughnessIndex = -1;
-        if (material.roughnessMap)
-            metalicRoughnessIndex = images.map((image) => image.name).indexOf(material.name + "_orm");
+        // FIX: For MToon materials, check originalMaterial for ORM textures (they're on the standard material wrapper)
+        const ormTexture = originalMaterial.roughnessMap || originalMaterial.metalnessMap || originalMaterial.aoMap;
+        if (ormTexture) {
+            // Use originalMaterial.name for the texture name lookup (matches how ORM images were named)
+            metalicRoughnessIndex = images.map((image) => image.name).indexOf(originalMaterial.name + "_orm");
+        }
 
         let normalTextureIndex = -1;
-        if (material.normalMap)
-            normalTextureIndex = images.map((image) => image.name).indexOf(material.name + "_normal");
+        // FIX: For MToon materials, check originalMaterial for normal textures
+        const normalTexture = originalMaterial.normalMap;
+        if (normalTexture) {
+            // Use originalMaterial.name for the texture name lookup (matches how normal images were named)
+            normalTextureIndex = images.map((image) => image.name).indexOf(originalMaterial.name + "_normal");
+        }
 
         const baseTexture = baseTxrIndex >= 0 ? {
             extensions: {

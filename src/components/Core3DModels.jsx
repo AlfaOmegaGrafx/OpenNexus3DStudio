@@ -1,14 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { useCore3D } from '../context/Core3DContext';
 
-const Core3DModels = () => {
+// Demo models for when API is not available
+const DEMO_MODELS = [
+  {
+    id: 'demo-1',
+    name: 'Character Base',
+    description: 'A versatile character base model perfect for customization',
+    category: 'character',
+    thumbnail: null,
+    polygons: 5000
+  },
+  {
+    id: 'demo-2',
+    name: 'Furniture Set',
+    description: 'Modern furniture collection with multiple pieces',
+    category: 'furniture',
+    thumbnail: null,
+    polygons: 12000
+  },
+  {
+    id: 'demo-3',
+    name: 'Vehicle Model',
+    description: 'High-detail vehicle model with interior',
+    category: 'vehicle',
+    thumbnail: null,
+    polygons: 25000
+  },
+  {
+    id: 'demo-4',
+    name: 'Architecture',
+    description: 'Building structure with detailed facades',
+    category: 'architecture',
+    thumbnail: null,
+    polygons: 18000
+  }
+];
+
+const Core3DModels = ({ onNavigateToDesigner }) => {
   const { 
     models, 
     selectedModel, 
     setSelectedModel, 
     loadModels, 
     uploadModel, 
-    isLoading 
+    isLoading,
+    isInitialized
   } = useCore3D();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,24 +53,71 @@ const Core3DModels = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
+  const [useDemoData, setUseDemoData] = useState(false);
+  const [hasTriedLoading, setHasTriedLoading] = useState(false);
+  
+  // Use demo data if API models are empty
+  const displayModels = (models && models.length > 0) ? models : (useDemoData ? DEMO_MODELS : []);
 
   useEffect(() => {
-    if (models.length === 0) {
-      loadModels();
+    if (isInitialized && !hasTriedLoading) {
+      setHasTriedLoading(true);
+      loadModels().then((result) => {
+        // If API returns null or empty array, enable demo data
+        if (!result || result.length === 0) {
+          setUseDemoData(true);
+        }
+      }).catch(err => {
+        console.warn('Failed to load models (this is okay if endpoint doesn\'t exist):', err);
+        // Enable demo data on error
+        setUseDemoData(true);
+      });
     }
-  }, [models.length, loadModels]);
+  }, [isInitialized, hasTriedLoading, loadModels]);
 
-  const filteredModels = models.filter(model => {
-    const matchesSearch = model.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         model.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredModels = (displayModels || []).filter(model => {
+    if (!model) return false;
+    const matchesSearch = (model.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (model.description || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || model.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const categories = ['all', ...new Set(models.map(model => model.category).filter(Boolean))];
+  const categories = ['all', ...new Set((displayModels || []).map(model => model?.category).filter(Boolean))];
+  
+  const handleRefresh = async () => {
+    setUseDemoData(false);
+    try {
+      await loadModels();
+    } catch (err) {
+      console.warn('Failed to load models:', err);
+      // If API fails, offer demo data
+      if (models.length === 0) {
+        setUseDemoData(true);
+      }
+    }
+  };
+  
+  const handleUseInDesigner = () => {
+    if (selectedModel && onNavigateToDesigner) {
+      onNavigateToDesigner();
+    }
+  };
 
   const handleModelSelect = (model) => {
+    console.log('🎯 Core3DModels: Model selected:', model);
     setSelectedModel(model);
+  };
+
+  const handleLoadInViewport = async () => {
+    if (!selectedModel) {
+      console.warn('⚠️ Core3DModels: No model selected');
+      return;
+    }
+    
+    console.log('🎯 Core3DModels: Load in viewport clicked for:', selectedModel);
+    // Trigger a re-selection to ensure the useEffect in Scene3D fires
+    setSelectedModel({...selectedModel, _loadTrigger: Date.now()});
   };
 
   const handleFileUpload = async (event) => {
@@ -80,19 +164,41 @@ const Core3DModels = () => {
   };
 
   return (
-    <div className="core3d-models">
+    <div className="core3d-models" style={{ width: '100%', boxSizing: 'border-box' }}>
       <div className="models-header">
         <h4>3D Models Library</h4>
         <div className="models-controls">
+          <button
+            onClick={handleRefresh}
+            className="btn btn-secondary btn-sm"
+            disabled={isLoading}
+            title="Refresh models list"
+          >
+            {isLoading ? '⏳ Loading...' : '🔄 Refresh'}
+          </button>
           <button
             onClick={() => setShowUpload(!showUpload)}
             className="btn btn-primary btn-sm"
             disabled={isUploading}
           >
-            {isUploading ? 'Uploading...' : 'Upload Model'}
+            {isUploading ? 'Uploading...' : '📤 Upload Model'}
           </button>
         </div>
       </div>
+      
+      {useDemoData && (
+        <div className="demo-data-notice" style={{
+          padding: '0.75rem',
+          marginBottom: '1rem',
+          background: 'rgba(79, 172, 254, 0.1)',
+          border: '1px solid rgba(79, 172, 254, 0.3)',
+          borderRadius: '6px',
+          fontSize: '0.85rem',
+          color: '#4facfe'
+        }}>
+          📦 Showing demo models. Connect to Core3D API to access the full library.
+        </div>
+      )}
 
       {showUpload && (
         <div className="upload-section">
@@ -161,7 +267,34 @@ const Core3DModels = () => {
           <div className="empty-state">
             <div className="empty-icon">🎭</div>
             <p>No models found</p>
-            <p className="empty-subtitle">Try adjusting your search or upload a new model</p>
+            <p className="empty-subtitle">
+              {displayModels.length === 0 
+                ? 'Load models from API or upload your own model'
+                : 'Try adjusting your search or filter'}
+            </p>
+            {displayModels.length === 0 && (
+              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                <button
+                  onClick={handleRefresh}
+                  className="btn btn-primary btn-sm"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Loading...' : '🔄 Load from API'}
+                </button>
+                <button
+                  onClick={() => setUseDemoData(true)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  📦 Use Demo Models
+                </button>
+                <button
+                  onClick={() => setShowUpload(true)}
+                  className="btn btn-primary btn-sm"
+                >
+                  📤 Upload Model
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           filteredModels.map(model => (
@@ -210,11 +343,31 @@ const Core3DModels = () => {
           <h5>Selected Model: {selectedModel.name}</h5>
           <p>{selectedModel.description}</p>
           <div className="model-actions">
-            <button className="btn btn-sm btn-primary">
-              Use in Designer
+            <button 
+              className="btn btn-sm btn-primary"
+              onClick={handleLoadInViewport}
+              disabled={!selectedModel}
+            >
+              🎯 Load in Viewport
             </button>
-            <button className="btn btn-sm btn-secondary">
-              View Details
+            <button 
+              className="btn btn-sm btn-primary"
+              onClick={handleUseInDesigner}
+              disabled={!selectedModel}
+            >
+              ✨ Use in Designer
+            </button>
+            <button 
+              className="btn btn-sm btn-secondary"
+              onClick={() => {
+                if (selectedModel?.model_url) {
+                  window.open(selectedModel.model_url, '_blank');
+                } else {
+                  alert(`Model: ${selectedModel.name}\nCategory: ${selectedModel.category}\nPolygons: ${selectedModel.polygons || 'N/A'}`);
+                }
+              }}
+            >
+              ℹ️ View Details
             </button>
           </div>
         </div>

@@ -543,13 +543,16 @@ export async function combine(model,avatar, options) {
 
     let {
         transparentColor = new THREE.Color(1,1,1),
-        mToonAtlasSize = 4096, 
-        mToonAtlasSizeTransp = 4096, 
-        stdAtlasSize = 4096, 
-        stdAtlasSizeTransp = 4096,
+        // OPTIMIZED: Default atlas sizes changed from 4096 to match CharacterStudioRedux optimization
+        // These defaults can be overridden by CharacterManifestData.js which sets 2048/1024
+        mToonAtlasSize = 2048,  // OPTIMIZED: Changed from 4096 (matches Redux default)
+        mToonAtlasSizeTransp = 1024,  // OPTIMIZED: Changed from 4096 (matches Redux default)
+        stdAtlasSize = 2048,  // OPTIMIZED: Changed from 4096 (matches Redux default)
+        stdAtlasSizeTransp = 1024,  // OPTIMIZED: Changed from 4096 (matches Redux default)
         includeNonTexturedMeshesInAtlas = false,
-        exportMtoonAtlas = false, 
-        exportStdAtlas = true,
+        // OPTIMIZED: Changed defaults to match CharacterStudioRedux (from CharacterManifestData.js)
+        exportMtoonAtlas = true,  // OPTIMIZED: Changed from false - enables MToon atlas by default
+        exportStdAtlas = false,   // OPTIMIZED: Changed from true - standard atlas disabled by default
         mergeAppliedMorphs = false,
         isVrm0 = false,
         scale = 1,
