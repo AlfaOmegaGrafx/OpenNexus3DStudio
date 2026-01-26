@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import * as THREE from 'three';
 import { useScene } from '../context/SceneContext';
 import { useCore3D } from '../context/Core3DContext';
 

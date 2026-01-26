@@ -1,42 +1,13 @@
-# VR Floor Anchoring Fix
+# VR Floor Anchoring Fix (Consolidated)
 
-## Problem
-When entering VR mode, the 3D model was not properly positioned relative to the physical floor. While the position was set to `(0, 1.0, -0.5)` per `VR_POSITIONING.md`, the model's actual bounding box wasn't considered, which could cause the model to appear at incorrect heights. Additionally, VR mode was not using Galaxy XR's configured floor level adjustment settings from the device.
+This document has been **consolidated** into:
 
-## Root Cause
-1. The VR scene offset was set to a fixed position `(0, 1.0, -0.5)` without considering the model's actual bounding box
-2. The code was not prioritizing `bounded-floor` reference space, which uses Galaxy XR's configured floor level and boundary settings
-3. When using floor-aligned reference spaces (like `local-floor` or `bounded-floor`), Y=0 represents the physical floor level. The code set Y=1.0 to raise the model 1 unit above the floor, but if the model's origin or bottom was not at Y=0 in its local space, the model would not be properly positioned relative to the floor
-4. The reference space was not being properly set on the Three.js renderer, preventing proper floor alignment
+- `docs/XR_MODE_FLOOR_ANCHORING_AND_BACKGROUNDS.md`
 
-## Solution
-
-### Automatic Floor Anchoring (Implemented)
-The code now:
-1. **Prioritizes `bounded-floor` reference space** to use Galaxy XR's configured floor level and boundary settings (same as AR mode)
-2. **Automatically calculates the model's bounding box** when entering VR mode
-3. **Adjusts the VR scene offset's Y position** so the model's bottom aligns with Y=0 (physical floor level)
-4. **Properly sets the reference space on Three.js renderer** to ensure floor alignment is active
-
-**Location**: `src/library/sceneManager.js` - `enableVR()` method
-
-**How it works**:
-
-#### Step 1: Request Floor-Aligned Reference Space
-1. Requests `bounded-floor` first (uses Galaxy XR floor level settings, same as AR mode)
-2. Falls back to `local-floor` if bounded-floor isn't available
-3. Falls back to `local` or `viewer` if floor-aligned spaces aren't supported
-4. Sets the reference space on Three.js renderer and XR manager
-
-#### Step 2: Calculate Model Position
-1. After moving all scene children into `vrSceneOffset`
-2. Calculate bounding box of all models (meshes and groups) in the offset group
-3. Find the model's bottom Y coordinate (`modelBottomY`)
-4. Adjust `vrSceneOffset.position.y` by `-modelBottomY` to align model bottom with floor (Y=0)
-5. Update the fixed position in `userData` to preserve the adjustment
-6. The render loop ensures the position stays fixed in the reference space
-
-## Technical Details
+That document reflects the current correct VR behavior:
+- Floor alignment uses floor-aligned reference spaces (`bounded-floor` preferred on Galaxy XR)
+- Wrapper positioning uses **X=0**, **Z=-0.5**, **Y computed from model bounding box**
+- VR background is virtual/opaque (not pass-through)
 
 ### Reference Space Types
 - **`bounded-floor`** (PRIORITY): Uses Galaxy XR's configured boundary and floor level settings. Y=0 is physical floor as configured in device settings. This is the preferred option for Galaxy XR (same as AR mode).

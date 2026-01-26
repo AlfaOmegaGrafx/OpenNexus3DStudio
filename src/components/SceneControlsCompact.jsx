@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
 import * as THREE from '../library/three.js';
 import './SceneControlsCompact.css';
@@ -29,7 +29,10 @@ const SceneControlsCompact = ({
     setAutoTone,
     setToneMapping,
     setExposure,
-    updateRenderMode
+    updateRenderMode,
+    enableAR,
+    enableVR,
+    isInitialized
   } = useScene();
   const [lighting, setLightingState] = useState('studio');
   const [cameraMode, setCameraModeState] = useState('orbit');
@@ -40,6 +43,7 @@ const SceneControlsCompact = ({
   const [autoTone, setAutoToneState] = useState(false);
   const [toneMapping, setToneMappingState] = useState('ACES');
   const [exposure, setExposureState] = useState(1.0);
+  const xrControlsRef = useRef(null);
 
   const handleRenderModeChange = (mode) => {
     console.log(`🎨 Render mode changed to: ${mode}`);
@@ -172,7 +176,7 @@ const SceneControlsCompact = ({
             // Bottom view: Always directly below model center, X and Z at origin (0, Y, 0)
             targetPosition = new THREE.Vector3(0, modelCenter.y - distance, 0);
             break;
-          case 'Isometric':
+          case 'Isometric': {
             const isoDistance = distance / Math.sqrt(3);
             targetPosition = new THREE.Vector3(
               modelCenter.x + isoDistance,
@@ -180,6 +184,7 @@ const SceneControlsCompact = ({
               modelCenter.z + isoDistance
             );
             break;
+          }
           default:
             setView(view);
             return;
@@ -252,6 +257,78 @@ const SceneControlsCompact = ({
     console.log('📸 Exposure changed:', value);
     setExposureState(value);
     setExposure(value);
+  };
+
+  // Auto-create XR buttons when scene is initialized
+  useEffect(() => {
+    if (sceneManager && isInitialized && xrControlsRef.current) {
+      // Small delay to ensure renderer is ready
+      const timer = setTimeout(() => {
+        if (xrControlsRef.current) {
+          // Remove any existing buttons first
+          const existingButtons = xrControlsRef.current.querySelectorAll('button[class*="Button"]');
+          existingButtons.forEach(btn => btn.remove());
+          
+          // Create VR and AR buttons
+          handleEnableVR();
+          handleEnableAR();
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [sceneManager, isInitialized]);
+
+  const handleEnableAR = () => {
+    console.log('📱 Setting up AR button...');
+    try {
+      // Use ref instead of querySelector for better reliability
+      const xrControlsContainer = xrControlsRef.current;
+      if (xrControlsContainer) {
+        // Remove existing AR button if any (check for Three.js ARButton class)
+        const existingARButton = xrControlsContainer.querySelector('button[class*="ARButton"], button[title*="AR"]');
+        if (existingARButton) {
+          existingARButton.remove();
+        }
+        
+        const arButton = enableAR(xrControlsContainer);
+        if (arButton) {
+          console.log('✅ AR button created and added to UI');
+        } else {
+          console.warn('⚠️ AR button not available - WebXR may not be supported');
+        }
+      } else {
+        console.warn('⚠️ XR controls container ref not available');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create AR button:', error);
+    }
+  };
+
+  const handleEnableVR = () => {
+    console.log('🥽 Setting up VR button...');
+    try {
+      // Use ref instead of querySelector for better reliability
+      const xrControlsContainer = xrControlsRef.current;
+      if (xrControlsContainer) {
+        // Remove existing VR button if any (check for Three.js VRButton class)
+        const existingVRButton = xrControlsContainer.querySelector('button[class*="VRButton"], button[title*="VR"]');
+        if (existingVRButton) {
+          existingVRButton.remove();
+        }
+        
+        const vrButton = enableVR(xrControlsContainer);
+        if (vrButton) {
+          console.log('✅ VR button created and added to UI');
+        } else {
+          console.warn('⚠️ VR button not available - WebXR may not be supported');
+        }
+      } else {
+        console.warn('⚠️ XR controls container ref not available');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create VR button:', error);
+    }
   };
 
   return (
@@ -383,6 +460,12 @@ const SceneControlsCompact = ({
         >
           🖥️
         </button>
+      </div>
+
+      {/* XR Controls */}
+      <div className="xr-controls" ref={xrControlsRef}>
+        <label className="control-label">XR</label>
+        {/* VRButton and ARButton will be added here by enableVR/enableAR */}
       </div>
 
       {/* Auto Tone Checkbox and Dropdown */}

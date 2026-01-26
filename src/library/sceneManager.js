@@ -1320,10 +1320,19 @@ export class SceneManager {
       console.log('🔄 Starting GLTF/GLB model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       const startTime = Date.now();
       
       this.gltfLoader.load(
-        source,
+        url,
         (gltf) => {
           const loadTime = Date.now() - startTime;
           console.log(`✅ GLTF/GLB loaded successfully in ${loadTime}ms`);
@@ -1403,6 +1412,11 @@ export class SceneManager {
             }
           }
           
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
           resolve(gltf.scene);
         },
         (progress) => {
@@ -1411,6 +1425,11 @@ export class SceneManager {
           this.emit('modelLoadingProgress', { progress: percentComplete });
         },
         (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
           const loadTime = Date.now() - startTime;
           console.error(`❌ GLTF/GLB loading failed after ${loadTime}ms:`, {
             message: error.message,
@@ -1428,11 +1447,34 @@ export class SceneManager {
    */
   async loadOBJ(source) {
     return new Promise((resolve, reject) => {
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       this.objLoader.load(
-        source,
-        (obj) => resolve(obj),
+        url,
+        (obj) => {
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
+          resolve(obj);
+        },
         (progress) => this.emit('modelLoadingProgress', { progress }),
-        (error) => reject(error)
+        (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
+          reject(error);
+        }
       );
     });
   }
@@ -1445,10 +1487,19 @@ export class SceneManager {
       console.log('🔄 Starting FBX model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
+      // Convert File object to URL if needed
+      let url = source;
+      let objectUrl = null;
+      if (source instanceof File) {
+        objectUrl = URL.createObjectURL(source);
+        url = objectUrl;
+        console.log('📎 Created object URL for File:', url);
+      }
+      
       const startTime = Date.now();
       
       this.fbxLoader.load(
-        source,
+        url,
         (fbx) => {
           const loadTime = Date.now() - startTime;
           console.log(`✅ FBX loaded successfully in ${loadTime}ms`);
@@ -1539,6 +1590,11 @@ export class SceneManager {
             console.warn('⚠️ No geometries found in FBX model!');
           }
           
+          // Clean up object URL after successful load
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL');
+          }
           resolve(fbx);
         },
         (progress) => {
@@ -1547,6 +1603,11 @@ export class SceneManager {
           this.emit('modelLoadingProgress', { progress: percentComplete });
         },
         (error) => {
+          // Clean up object URL on error
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            console.log('🧹 Cleaned up object URL after error');
+          }
           const loadTime = Date.now() - startTime;
           console.error(`❌ FBX loading failed after ${loadTime}ms:`, {
             message: error.message,
@@ -1563,13 +1624,22 @@ export class SceneManager {
    * Load VRM model
    */
   async loadVRM(source) {
+    // Convert File object to URL if needed (declare outside try for cleanup in catch)
+    let url = source;
+    let objectUrl = null;
+    if (source instanceof File) {
+      objectUrl = URL.createObjectURL(source);
+      url = objectUrl;
+      console.log('📎 Created object URL for File:', url);
+    }
+    
     try {
       console.log('🔄 Starting VRM model loading...');
       console.log('📁 Source:', source instanceof File ? `File: ${source.name} (${source.size} bytes, ${source.type})` : `URL: ${source}`);
       
       const startTime = Date.now();
       
-      const vrm = await this.vrmLoader.loadVRM(source, {
+      const vrm = await this.vrmLoader.loadVRM(url, {
         normalize: true,
         addDefaultMaterials: true,
         processBlendShapes: true,
@@ -1578,6 +1648,12 @@ export class SceneManager {
       
       const loadTime = Date.now() - startTime;
       console.log(`✅ VRM loaded successfully in ${loadTime}ms`);
+      
+      // Clean up object URL after successful load
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        console.log('🧹 Cleaned up object URL');
+      }
       
       // Store the VRM object for blend shape access
       this.currentVRM = vrm;
@@ -1694,6 +1770,11 @@ export class SceneManager {
       scene.userData.vrm = vrm;
       return scene;
     } catch (error) {
+      // Clean up object URL on error
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        console.log('🧹 Cleaned up object URL after error');
+      }
       const loadTime = Date.now() - startTime;
       console.error(`❌ VRM loading failed after ${loadTime}ms:`, {
         message: error.message,
@@ -2502,19 +2583,53 @@ export class SceneManager {
       const modelForward = new THREE.Vector3();
       targetModel.getWorldDirection(modelForward);
       
-      // getWorldDirection returns the direction of the negative Z axis.
-      // We want models to face toward -Z (toward the camera positioned on +Z).
-      if (modelForward.z > 0) {
-        console.log('🔄 Model forward vector points away from camera, rotating 180 degrees');
+      // getWorldDirection returns the direction of the negative Z axis in world space
+      // Camera is typically at +Z looking toward origin (at 0,0,0)
+      // We want models to face toward -Z (toward the camera)
+      // If modelForward.z > 0, model is facing away (toward +Z) - needs rotation
+      // If modelForward.z < 0, model is facing toward camera (toward -Z) - correct
+      
+      console.log('🔍 Orientation check - model forward direction:', modelForward);
+      console.log('🔍 Model rotation before check:', targetModel.rotation);
+      
+      if (modelForward.z > 0.1) { // Use small threshold to avoid floating point issues
+        console.log('🔄 Model forward vector points away from camera (z > 0), rotating 180 degrees');
         targetModel.rotation.y += Math.PI;
         targetModel.updateMatrixWorld(true);
-        console.log('🔄 Model rotation after correction:', targetModel.rotation);
+        
+        // Verify after rotation
+        const newForward = new THREE.Vector3();
+        targetModel.getWorldDirection(newForward);
+        console.log('🔄 After rotation - forward:', newForward, 'rotation:', targetModel.rotation);
+        
+        if (newForward.z > 0.1) {
+          console.warn('⚠️ Model still facing wrong direction after rotation, applying additional 180° rotation');
+          targetModel.rotation.y += Math.PI;
+          targetModel.updateMatrixWorld(true);
+        } else {
+          console.log('✅ Model now facing camera correctly');
+        }
+      } else if (modelForward.z < -0.1) {
+        console.log('✅ Model orientation already faces the camera (z < 0)');
       } else {
-        console.log('✅ Model orientation already faces the camera');
+        // modelForward.z is close to 0, model might be facing sideways
+        console.log('⚠️ Model forward vector is close to zero (sideways?), checking X component');
+        if (Math.abs(modelForward.x) > Math.abs(modelForward.z)) {
+          // Model is facing more in X direction than Z
+          if (modelForward.x > 0) {
+            console.log('🔄 Model facing +X, rotating -90 degrees');
+            targetModel.rotation.y -= Math.PI / 2;
+          } else {
+            console.log('🔄 Model facing -X, rotating +90 degrees');
+            targetModel.rotation.y += Math.PI / 2;
+          }
+          targetModel.updateMatrixWorld(true);
+        }
       }
     } catch (error) {
       console.warn('⚠️ Failed to evaluate model orientation, applying fallback rotation:', error);
       targetModel.rotation.y += Math.PI;
+      targetModel.updateMatrixWorld(true);
     }
   }
 
@@ -4130,20 +4245,42 @@ export class SceneManager {
         if (!child.userData.originalMaterial) {
           // Store original material (support single or multi-material)
           if (Array.isArray(child.material)) {
-            child.userData.originalMaterial = child.material.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+            child.userData.originalMaterial = child.material.map((m) => (m && typeof m.clone === 'function' ? m.clone() : m));
+            // For array materials, store color from first material if available
+            const firstMaterial = child.material[0];
+            if (firstMaterial && firstMaterial.color) {
+              if (typeof firstMaterial.color.clone === 'function') {
+                child.userData.originalColor = firstMaterial.color.clone();
+              } else {
+                child.userData.originalColor = new THREE.Color(firstMaterial.color);
+              }
+            }
           } else {
-            child.userData.originalMaterial = typeof child.material?.clone === 'function' ? child.material.clone() : child.material;
+            child.userData.originalMaterial = child.material && typeof child.material.clone === 'function' ? child.material.clone() : child.material;
+            // Store color if material has a color property
+            if (child.material && child.material.color) {
+              if (typeof child.material.color.clone === 'function') {
+                child.userData.originalColor = child.material.color.clone();
+              } else {
+                // Fallback: create a new Color from the existing one
+                child.userData.originalColor = new THREE.Color(child.material.color);
+              }
+            }
           }
-          child.userData.originalColor = child.material.color.clone();
           
           // Enhanced material preservation for all material types
-          console.log(`🎨 Storing material for: ${child.name} (${child.material.type})`);
+          const materialType = Array.isArray(child.material) 
+            ? `Array[${child.material.length}]` 
+            : (child.material?.type || 'unknown');
+          console.log(`🎨 Storing material for: ${child.name} (${materialType})`);
           
-          // Store material properties
-          child.userData.originalMaterialType = child.material.type;
-          child.userData.originalOpacity = child.material.opacity;
-          child.userData.originalTransparent = child.material.transparent;
-          child.userData.originalSide = child.material.side;
+          // Store material properties (only for single material, not arrays)
+          if (!Array.isArray(child.material) && child.material) {
+            child.userData.originalMaterialType = child.material.type;
+            child.userData.originalOpacity = child.material.opacity;
+            child.userData.originalTransparent = child.material.transparent;
+            child.userData.originalSide = child.material.side;
+          }
           
           // Store textures if they exist
           if (child.material.map) {
@@ -4855,9 +4992,10 @@ export class SceneManager {
     }
 
     // Create AR button using Three.js ARButton utility
+    // Require bounded-floor for proper physical floor alignment
     const arButton = ARButton.createButton(this.renderer, {
-      requiredFeatures: ['local-floor'],
-      optionalFeatures: ['bounded-floor', 'local', 'viewer']
+      requiredFeatures: ['bounded-floor'],
+      optionalFeatures: ['local-floor', 'local', 'viewer']
     });
 
     // Customize button with emoji icon - use MutationObserver to persist changes
@@ -5039,9 +5177,10 @@ export class SceneManager {
       let referenceSpace = null;
       let referenceSpaceType = null;
       
-      // Both AR and VR should use floor-aligned spaces for proper floor anchoring
-      // 'bounded-floor' is preferred as it uses Android XR boundary settings for floor level
-      const refSpaceTypes = ['bounded-floor', 'local-floor', 'local', 'viewer'];
+      // Both AR and VR MUST use bounded-floor for proper physical floor alignment
+      // 'bounded-floor' uses Android XR's boundary floor level settings (aligns Y=0 to physical floor)
+      // Try bounded-floor first, fall back to local-floor only if absolutely necessary
+      const refSpaceTypes = ['bounded-floor', 'local-floor'];
 
       for (const refSpaceType of refSpaceTypes) {
         try {
@@ -5107,7 +5246,21 @@ export class SceneManager {
           break; // Success, exit loop
         } catch (refSpaceError) {
           console.warn(`⚠️ ${refSpaceType} reference space failed:`, refSpaceError.message);
+          // If bounded-floor fails, warn that floor alignment may be incorrect
+          if (refSpaceType === 'bounded-floor') {
+            console.error('❌ CRITICAL: bounded-floor is not available! Floor alignment will be incorrect.');
+            console.error('❌ Models may appear below or above the physical floor.');
+          }
         }
+      }
+      
+      // Verify we got a floor-aligned reference space
+      if (!referenceSpace) {
+        throw new Error(`Failed to get any reference space for ${xrKind}. Cannot proceed.`);
+      }
+      
+      if (referenceSpaceType !== 'bounded-floor') {
+        console.error(`❌ WARNING: Using ${referenceSpaceType} instead of bounded-floor. Floor alignment may be incorrect!`);
       }
       
       // Log input sources on session start to help debug which buttons are exposed for long-press recenter.
@@ -5298,24 +5451,33 @@ export class SceneManager {
             console.log('✅ Created VR scene wrapper');
           }
           
-          // Calculate floor alignment from model bounding box
-          // When using 'bounded-floor', Y=0 is the physical floor level from Android XR boundaries settings
-          // The wrapper position is in world space (reference space coordinates)
+          // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
+          // Models should be positioned so their bottom is at Y=0 (physical floor)
+          // Calculate offset needed to align model bottom to Y=0
           let floorAlignmentY = 0;
           if (this.currentModel) {
+            // Calculate bounding box in world space (after model positioning)
             const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
             if (!boundingBox.isEmpty()) {
-              const modelBottomY = boundingBox.min.y;
-              floorAlignmentY = -modelBottomY; // Align model bottom to floor (Y=0)
-              console.log(`📐 Model bottom Y: ${modelBottomY}, floor alignment Y: ${floorAlignmentY}`);
-              console.log(`📐 Floor plane anchored to Android XR physical floor level (Y=0)`);
+              const modelBottomY = boundingBox.min.y; // Bottom of model in world space
+              // If model bottom is not at Y=0, we need to offset the wrapper
+              // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
+              floorAlignmentY = -modelBottomY;
+              console.log(`📐 VR Model positioning:`, {
+                modelBottomY: modelBottomY,
+                floorAlignmentY: floorAlignmentY,
+                modelPosition: this.currentModel.position,
+                wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
+              });
+              console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+            } else {
+              console.warn('⚠️ VR: Model bounding box is empty, using default positioning');
             }
           }
           
           // Set wrapper position in world space (reference space coordinates)
-          // This position is fixed in world space and won't move with the camera
-          // Y=0 in the reference space corresponds to the physical floor level set in Android XR boundaries
-          // XR requirement: X must stay at 0 (centered) for both AR and VR modes.
+          // Y=0 in bounded-floor reference space = physical floor level from Android XR boundaries
+          // XR requirement: X must stay at 0 (centered) for both AR and VR modes
           this.vrSceneWrapper.position.set(0, floorAlignmentY, -0.5);
           this.vrSceneWrapper.matrixAutoUpdate = true; // Ensure matrix updates
           
@@ -5433,21 +5595,33 @@ export class SceneManager {
               console.log(`📦 Wrapped ${this.vrSceneWrapper.children.length} objects for floor anchoring`);
             }
             
-            // Calculate floor alignment
+            // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
+            // Models should be positioned so their bottom is at Y=0 (physical floor)
+            // Calculate offset needed to align model bottom to Y=0
             let floorAlignmentY = 0;
             if (this.currentModel) {
+              // Calculate bounding box in world space (after model positioning)
               const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
               if (!boundingBox.isEmpty()) {
-                const modelBottomY = boundingBox.min.y;
+                const modelBottomY = boundingBox.min.y; // Bottom of model in world space
+                // If model bottom is not at Y=0, we need to offset the wrapper
+                // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
                 floorAlignmentY = -modelBottomY;
-                console.log(`📐 Model bottom Y: ${modelBottomY}, floor alignment Y: ${floorAlignmentY}`);
+                console.log(`📐 AR Model positioning:`, {
+                  modelBottomY: modelBottomY,
+                  floorAlignmentY: floorAlignmentY,
+                  modelPosition: this.currentModel.position,
+                  wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
+                });
+                console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+              } else {
+                console.warn('⚠️ AR: Model bounding box is empty, using default positioning');
               }
             }
             
-            // Align to floor plane at Y=0 in the chosen reference space.
-            // Do NOT force an arbitrary +0.5m offset when the model is already aligned (floorAlignmentY === 0),
-            // otherwise AR/VR will feel misaligned across assets.
-            // XR requirement: X must stay at 0 (centered) for both AR and VR modes.
+            // Set wrapper position in world space (reference space coordinates)
+            // Y=0 in bounded-floor reference space = physical floor level from Android XR boundaries
+            // XR requirement: X must stay at 0 (centered) for both AR and VR modes
             this.vrSceneWrapper.position.set(0, floorAlignmentY, -0.5);
             this.vrSceneWrapper.matrixAutoUpdate = true;
             this.vrSceneWrapper.userData.isAnchored = true;
@@ -5680,8 +5854,8 @@ export class SceneManager {
     let vrButton;
     try {
       vrButton = VRButton.createButton(this.renderer, {
-        requiredFeatures: [], // Don't require any features - let the device decide what's available
-        optionalFeatures: ['bounded-floor', 'local-floor', 'local', 'viewer']
+        requiredFeatures: ['bounded-floor'], // Require bounded-floor for proper physical floor alignment
+        optionalFeatures: ['local-floor', 'local', 'viewer']
       });
       console.log('✅ VRButton.createButton succeeded');
     } catch (error) {

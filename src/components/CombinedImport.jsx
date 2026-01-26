@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { VRMLoader } from '../library/vrmLoader';
 
@@ -7,7 +7,6 @@ const CombinedImport = ({ onFileLoad }) => {
   const [validationResult, setValidationResult] = useState(null);
   const [vrmMetadata, setVrmMetadata] = useState(null);
   const [loader] = useState(() => new VRMLoader());
-  const fileInputRef = useRef(null);
 
   const handleVRMFile = async (file) => {
     try {
@@ -91,10 +90,6 @@ const CombinedImport = ({ onFileLoad }) => {
     },
     multiple: false
   });
-
-  const handleClick = () => {
-    fileInputRef.current?.click();
-  };
 
   return (
     <div className="combined-import">

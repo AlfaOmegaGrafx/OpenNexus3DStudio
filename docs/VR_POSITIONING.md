@@ -1,30 +1,13 @@
-# VR Positioning Configuration
+# VR Positioning Configuration (Consolidated)
 
-## Default VR Scene Offset
+This document has been **consolidated** into:
 
-**Current VR Starting Position: `X = 0, Y = calculated from bounding box, Z = -0.5`**
+- `docs/XR_MODE_FLOOR_ANCHORING_AND_BACKGROUNDS.md`
 
-This document records the VR scene offset position configuration. The Y position is automatically calculated from the model's bounding box to anchor the model's bottom to the physical floor (Y=0).
-
-### Implementation Details
-
-- **Location**: `src/library/sceneManager.js` - `enableVR()` method
-- **Property**: `vrSceneOffset.position.set(0, calculatedY, -0.5)` where `calculatedY = -modelBottomY`
-- **Effect**: 
-  - **Z = -0.5**: Moves all scene content back by 0.5 units from the camera's starting position in VR mode
-  - **Y = calculated from bounding box**: Anchors the model's bottom to Y=0 (physical floor level) when using floor-aligned reference spaces
-  - The model's bounding box is calculated and the bottom Y coordinate is used to align the model with the floor
-
-### Coordinate System Notes
-
-In Three.js/WebXR:
-- **Negative Z** = moves scene back (away from camera)
-- **Positive Z** = moves scene forward (toward camera)
-- **Positive Y** = moves scene up (raises model)
-- **Negative Y** = moves scene down (lowers model)
-- The camera is at origin (0, 0, 0) and looks down the negative Z axis
-- XR controls the camera position automatically, so we offset the scene content instead
-- When using floor-aligned reference spaces (bounded-floor, local-floor), Y=0 is the physical floor level
+That document is the single source of truth for current XR positioning:
+- **X = 0**
+- **Z = -0.5**
+- **Y = computed from model bounding box** for floor anchoring (Y=0)
 
 ### Why This Offset Exists
 

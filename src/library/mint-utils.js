@@ -1,4 +1,4 @@
-import { BigNumber, ethers } from "ethers"
+import { ethers } from "ethers"
 import { getVRMBlobData } from "./download-utils"
 import { CharacterContract, EternalProxyContract, webaverseGenesisAddress } from "../components/Contract"
 import { SolanaManager } from "./solanaManager"
@@ -40,7 +40,7 @@ async function getContract(address) {
   ];
 
   const key = await import.meta.env.ALCHEMY_API_KEY;
-  const defaultProvider = new ethers.providers.AlchemyProvider('mainnet', key);
+  const defaultProvider = new ethers.AlchemyProvider('mainnet', key);
 
   //const defaultProvider = new ethers.providers.AlchemyProvider('mainnet', key);
   // Use Ethereum mainnet provider
@@ -66,10 +66,10 @@ async function getContract(address) {
 async function getTokenPrice(){
   if (tokenPrice != null)
     return tokenPrice
-  const defaultProvider = new ethers.providers.StaticJsonRpcProvider('https://polygon-rpc.com/')
+  const defaultProvider = new ethers.JsonRpcProvider('https://polygon-rpc.com/')
   const contract = new ethers.Contract(CharacterContract.address, CharacterContract.abi, defaultProvider)
   const tp = await contract.tokenPrice()
-  tokenPrice = BigNumber.from(tp).mul(1);
+  tokenPrice = tp; // In ethers v6, values are already BigInt, no need for BigNumber
   return tokenPrice
 }
 
@@ -521,9 +521,8 @@ export async function mintAsset(avatar, screenshot, model, name, needCheckOT){
 
         let price = await getTokenPrice()
 
-        const signer = new ethers.providers.Web3Provider(
-          window.ethereum,
-        ).getSigner()
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
         const contract = new ethers.Contract(CharacterContract.address, CharacterContract.abi, signer)
         try {
           const options = {
@@ -547,9 +546,9 @@ export async function mintAsset(avatar, screenshot, model, name, needCheckOT){
 const checkOT = async (address) => {
     if(address) {
       const address = '0x6e58309CD851A5B124E3A56768a42d12f3B6D104'
-      const ethersigner = ethers.getDefaultProvider("mainnet", {
-        alchemy: import.meta.env.VITE_ALCHEMY_API_KEY,
-      })
+      const ethersigner = new ethers.JsonRpcProvider(
+        `https://eth-mainnet.g.alchemy.com/v2/${import.meta.env.VITE_ALCHEMY_API_KEY}`
+      )
       const contract = new ethers.Contract(EternalProxyContract.address, EternalProxyContract.abi, ethersigner);
       const webaBalance = await contract.beneficiaryBalanceOf(address, webaverseGenesisAddress, 1);
       if(parseInt(webaBalance) > 0) return true;

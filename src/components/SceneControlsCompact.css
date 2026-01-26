@@ -238,3 +238,53 @@
     font-size: 0.7rem;
   }
 }
+
+/* XR Controls Styling */
+.xr-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative; /* Make container relative for button positioning */
+}
+
+.xr-controls .control-label {
+  font-size: 0.8rem;
+  color: #b0b0b0;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+/* Override Three.js VRButton/ARButton absolute positioning */
+.xr-controls button#VRButton,
+.xr-controls button#ARButton {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  width: auto !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 4px 8px !important;
+  margin: 0 2px !important;
+  font-size: 1.2rem !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.xr-controls button#VRButton:hover,
+.xr-controls button#ARButton:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1) !important;
+}
+
+.xr-controls button#VRButton:active,
+.xr-controls button#ARButton:active {
+  transform: scale(0.95) !important;
+}

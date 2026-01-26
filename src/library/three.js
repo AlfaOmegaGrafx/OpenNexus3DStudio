@@ -32,6 +32,10 @@ export { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js';
 export { PeppersGhostEffect } from 'three/examples/jsm/effects/PeppersGhostEffect.js';
 export { ParallaxBarrierEffect } from 'three/examples/jsm/effects/ParallaxBarrierEffect.js';
 
+// WebXR
+export { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+export { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
+
 // Export the default THREE namespace for convenience
 import * as THREE from 'three';
 export default THREE;
