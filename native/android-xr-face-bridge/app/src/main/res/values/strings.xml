@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CS XR Face</string>
+    <string name="file_picker_title">Open file (choose Files / My Files for folders)</string>
+    <string name="menu_web_back">Back</string>
+    <string name="menu_web_forward">Forward</string>
+    <string name="menu_reload_page">Reload page</string>
+    <string name="menu_open_xr_browser">Open in Chrome for WebXR (+ face)</string>
+    <string name="face_bridge_channel_name">Face bridge</string>
+    <string name="face_bridge_channel_desc">Relays headset face tracking to Character Studio in Chrome WebXR</string>
+    <string name="face_bridge_notification_title">Face bridge active</string>
+    <string name="face_bridge_notification_text">Keep this app open while using Chrome WebXR for avatar expressions</string>
+    <string name="face_bridge_notification_live">Relaying face tracking to Chrome</string>
+    <string name="face_bridge_notification_stale">Face relay stalled — reopen this app briefly</string>
+    <string name="face_bridge_notification_chrome">Chrome WebXR — keep PiP window visible for face relay</string>
+    <string name="toast_face_bridge_chrome">Chrome WebXR opened. Leave the small CS XR Face window (picture-in-picture) on screen while in Chrome. Run npm run dev on your PC.</string>
+    <string name="toast_pip_unavailable">PiP is unavailable or failed on this device. For face tracking to work with Chrome, keep this app visible as a panel next to Chrome in the Home Space.</string>
+    <string name="choose_browser">Choose browser</string>
+    <string name="toast_webxr_webview">AR/VR does not work inside this WebView. Tap ⋮ → “Open in Chrome for WebXR” for immersive mode, or “Reload page” after dev server updates.</string>
+    <string name="toast_microphone_denied">Microphone permission denied — lip sync and getUserMedia audio will not work until you allow it in system Settings.</string>
+    <!-- character_studio_url is injected by app/build.gradle.kts (local.properties or default LAN IP). -->
+</resources>

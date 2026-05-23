@@ -3,13 +3,32 @@
  * Similar to CharacterManager in CharacterStudio, but focused on 3D AIGC workflows
  */
 import * as THREE from './three.js';
-import { GLTFLoader, OBJLoader, FBXLoader, OrbitControls, RGBELoader, DRACOLoader, VRButton, ARButton } from './three.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 import { GLBExporter } from './glbExporter.js';
 import { VRMLoader } from './vrmLoader.js';
 import { VRMExporter } from './VRMExporter.js';
+import { LipSync } from './lipsync.js';
 import { VRMExpressionPresetName } from '@pixiv/three-vrm';
+import {
+  applyExpressionWeightRecordToVRMS,
+  applyXRFrameExpressionsToVRMS,
+  maybeProbeXRFrame,
+  XR_EXPRESSION_TRACKING_FEATURE
+} from './xrExpressionTrackingDriver.js';
+import {
+  getLastNativeFaceSource,
+  getNativeFaceWeightsIfFresh,
+  getNativeFaceWeightsMaxAgeMs,
+} from './nativeFaceBridge.js';
 import { sharedHDRManager } from './sharedHDRManager.js';
-import { createSoftwareRenderer, isSoftwareRenderingSupported } from './softwareRenderer.js';
+import { createDepthVisualizationMaterial, createViewNormalMaterial, createUVMaterial } from './diagnosticMaterials.js';
 
 export class SceneManager {
   constructor() {
@@ -66,6 +85,10 @@ export class SceneManager {
     // VRM Loader and Exporter
     this.vrmLoader = new VRMLoader();
     this.vrmExporter = new VRMExporter();
+
+    /** Mic-driven lip sync for the loaded studio VRM (see {@link _attachSceneLipSyncMicrophone}). */
+    this.sceneLipSync = null;
+    this._sceneLipSyncStream = null;
     
     // XR-related properties
     this.vrSceneWrapper = null; // Wrapper group for VR/AR scene offset
@@ -108,6 +131,71 @@ export class SceneManager {
     this.xrLastRecenterCheckLog = 0; // Timestamp of last recenter check log (throttle to 2/second)
     this.xrRecenterCheckFirstLog = false; // Flag to log first call to maybeHandleXRRecenter
     this.xrRecenterCooldownLogged = false; // Flag to prevent spam during cooldown
+
+    /** @type {(() => unknown[]) | null} Returns VRM instances to drive via WebXR Expression Tracking */
+    this.xrExpressionVRMProvider = null;
+    this.xrExpressionFeatureLogged = false;
+    /** Log once per immersive session: enabledFeatures vs XRFrame.expressions (for ?remoteLog=1 / DevTools) */
+    this._xrExprFirstFrameDiagLogged = false;
+
+    /** Throttle for _maybeLogNativeFaceRemoteDiag (?remoteLog=1 → Vite remote-log file) */
+    this._nativeFaceRemoteDiagAt = 0;
+  }
+
+  /**
+   * When ?remoteLog=1, emit a throttled console line so the dev server can append it to logs/remote-log.txt.
+   * @param {unknown[]} vrms
+   * @param {Record<string, number>|null|undefined} nativeRec
+   */
+  _maybeLogNativeFaceRemoteDiag(vrms, nativeRec) {
+    if (typeof window === 'undefined' || typeof performance === 'undefined') return;
+    let enabled = false;
+    try {
+      enabled = new URLSearchParams(window.location.search).get('remoteLog') === '1';
+    } catch {
+      return;
+    }
+    if (!enabled) return;
+
+    const t = performance.now();
+    if (t - this._nativeFaceRemoteDiagAt < 4000) return;
+    this._nativeFaceRemoteDiagAt = t;
+
+    const list = Array.isArray(vrms) ? vrms.filter(Boolean) : [];
+    const nk = nativeRec && typeof nativeRec === 'object' ? Object.keys(nativeRec).length : 0;
+    const exprN = list.filter((v) => v?.expressionManager).length;
+    const presenting = !!(this.renderer?.xr?.isPresenting);
+    let relay = 'off';
+    try {
+      const fn = window.__CS_NATIVE_FACE_RELAY_STATUS;
+      if (typeof fn === 'function') {
+        const st = fn();
+        const relayStaleMs = presenting ? 30_000 : 5000;
+        const pushAge =
+          st?.lastPushAgeMs != null && st.lastPushAgeMs < relayStaleMs
+            ? `${st.lastPushAgeMs}ms`
+            : 'stale';
+        relay = `${st?.mode || '?'}/${pushAge}`;
+      } else if (new URLSearchParams(window.location.search).get('nativeFaceRelay') === '1') {
+        relay = 'enabled-not-running';
+      }
+    } catch {
+      /* ignore */
+    }
+    const faceSrc = getLastNativeFaceSource();
+    console.info(
+      '[CS-NATIVE-FACE-DIAG]',
+      `nativeKeys=${nk} faceSrc=${faceSrc} relay=${relay} vrms=${list.length} exprMgr=${exprN} curVRM=${!!this.currentVRM} xrPresenting=${presenting}`,
+    );
+  }
+
+  /**
+   * Registers a callback returning VRM(s) that should mirror the wearer via WebXR
+   * "expression-tracking" (draft) when enabled on the XR session (e.g. Android XR).
+   * @param {(() => unknown[]) | null} fn - e.g. same list as webcam avatar provider
+   */
+  setXRExpressionVRMProvider(fn) {
+    this.xrExpressionVRMProvider = typeof fn === 'function' ? fn : null;
   }
 
   /**
@@ -744,6 +832,8 @@ export class SceneManager {
    */
   async initialize(container, options = {}) {
     try {
+      this.sceneHostElement = container;
+
       const {
         width = container.clientWidth,
         height = container.clientHeight,
@@ -939,6 +1029,8 @@ export class SceneManager {
       // Setup resize handler
       this.setupResizeHandler();
 
+      this.setupWebViewSurvivalHooks();
+
       this.isInitialized = true;
       console.log('✅ SceneManager: Scene initialized successfully');
       console.log('✅ SceneManager: Scene details:', {
@@ -951,7 +1043,20 @@ export class SceneManager {
       });
       
       this.emit('initialized', { scene: this.scene, camera: this.camera, renderer: this.renderer });
-      
+
+      // WebView / mobile: layout may report 0×0 on first paint; refit on the next frames after mount.
+      if (typeof window !== 'undefined') {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            try {
+              this.forceRendererRefit();
+            } catch (_) {
+              /* ignore */
+            }
+          });
+        });
+      }
+
       return { scene: this.scene, camera: this.camera, renderer: this.renderer, controls: this.controls };
     } catch (error) {
       console.error('❌ SceneManager: Failed to initialize scene:', error);
@@ -1168,6 +1273,48 @@ export class SceneManager {
   }
 
   /**
+   * Stop mic capture and tear down {@link sceneLipSync} (safe to call when idle).
+   */
+  async _disposeSceneLipSync() {
+    if (this._sceneLipSyncStream) {
+      this._sceneLipSyncStream.getTracks().forEach((t) => t.stop());
+      this._sceneLipSyncStream = null;
+    }
+    if (this.sceneLipSync) {
+      try {
+        await this.sceneLipSync.destroy();
+      } catch (_) {
+        /* noop */
+      }
+      this.sceneLipSync = null;
+    }
+  }
+
+  /**
+   * Request microphone access and drive the current VRM mouth visemes from audio (FFT path in {@link LipSync}).
+   */
+  async _attachSceneLipSyncMicrophone() {
+    if (!this.currentVRM?.expressionManager) return;
+    await this._disposeSceneLipSync();
+    this.sceneLipSync = new LipSync(this.currentVRM);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        console.warn('[SceneManager] getUserMedia not available; lip sync disabled.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+        video: false,
+      });
+      this._sceneLipSyncStream = stream;
+      this.sceneLipSync.start(stream);
+    } catch (e) {
+      console.warn('[SceneManager] Microphone unavailable for lip sync:', e?.message || e);
+      await this._disposeSceneLipSync();
+    }
+  }
+
+  /**
    * Load a 3D model
    * @param {File|string} source - File object or URL
    * @param {Object} options - Loading options
@@ -1205,6 +1352,7 @@ export class SceneManager {
 
       // Remove existing model
       if (this.currentModel) {
+        await this._disposeSceneLipSync();
         this.scene.remove(this.currentModel);
         this.currentModel = null;
         this.currentVRM = null; // Clear VRM reference
@@ -1227,6 +1375,8 @@ export class SceneManager {
           console.log('🔄 VRM model rotated to face forward in scene manager');
           console.log('🔄 Scene manager rotation after fix:', this.currentModel.rotation);
         }
+
+        void this._attachSceneLipSyncMicrophone();
         
         // Force VRM material restoration after processing
         this.forceVRMMaterialRestoration();
@@ -1903,17 +2053,11 @@ export class SceneManager {
    */
   forceVRMMaterialRestoration() {
     if (!this.currentModel) return;
-    
-    console.log('🔧 Force VRM material restoration...');
-    
+
     this.currentModel.traverse((child) => {
       if (child.isMesh && child.material) {
-        console.log(`🔍 Force processing VRM mesh: ${child.name}`);
-        
         // Force material recreation for VRM materials
         if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
-          console.log(`🎨 Force VRM material restoration for: ${child.name}`);
-          
           // Force texture binding
           if (child.material.map) {
             child.material.map.needsUpdate = true;
@@ -1923,7 +2067,6 @@ export class SceneManager {
             child.material.map.magFilter = THREE.LinearFilter;
             child.material.map.wrapS = THREE.RepeatWrapping;
             child.material.map.wrapT = THREE.RepeatWrapping;
-            console.log(`📷 Force texture binding for: ${child.name}`);
           }
           
           // Force all texture maps
@@ -1969,12 +2112,9 @@ export class SceneManager {
             oldMaterial.dispose();
           }
           
-          console.log(`✅ Force VRM material restoration completed for: ${child.name}`);
         }
       }
     });
-    
-    console.log('✅ Force VRM material restoration completed');
   }
 
   /**
@@ -2019,9 +2159,7 @@ export class SceneManager {
    */
   forceRendererUpdate() {
     if (!this.renderer) return;
-    
-    console.log('🔧 Force renderer update...');
-    
+
     // Force renderer to update
     this.renderer.info.autoReset = false;
     this.renderer.info.reset();
@@ -2040,8 +2178,6 @@ export class SceneManager {
     
     // Force render
     this.renderer.render(this.scene, this.camera);
-    
-    console.log('✅ Force renderer update completed');
   }
 
   /**
@@ -2081,13 +2217,9 @@ export class SceneManager {
    */
   forceVRMTextureBinding() {
     if (!this.currentModel) return;
-    
-    console.log('🔧 Force VRM texture binding...');
-    
+
     this.currentModel.traverse((child) => {
       if (child.isMesh && child.material) {
-        console.log(`🔍 Force binding textures for: ${child.name}`);
-        
         // Force all texture maps to be properly bound
         const textureMaps = [
           'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'
@@ -2096,8 +2228,7 @@ export class SceneManager {
         textureMaps.forEach(mapType => {
           if (child.material[mapType]) {
             const texture = child.material[mapType];
-            console.log(`📷 Force binding ${mapType} for: ${child.name}`);
-            
+
             // Force texture properties
             texture.needsUpdate = true;
             texture.flipY = false;
@@ -2124,12 +2255,8 @@ export class SceneManager {
         if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
           child.geometry.attributes.uv.needsUpdate = true;
         }
-        
-        console.log(`✅ Force texture binding completed for: ${child.name}`);
       }
     });
-    
-    console.log('✅ Force VRM texture binding completed');
   }
 
   /**
@@ -4372,6 +4499,97 @@ export class SceneManager {
   }
 
   /**
+   * Dispose diagnostic depth/normal/UV materials and restore mesh material from stored original.
+   * @param {THREE.Mesh} child
+   */
+  exitDiagnosticViewOnMesh(child) {
+    if (!child?.isMesh) return;
+    if (child.userData.uvGridTexture) {
+      try {
+        child.userData.uvGridTexture.dispose();
+      } catch (_) {
+        /* ignore */
+      }
+      delete child.userData.uvGridTexture;
+    }
+    if (child.userData.diagnosticMaterial) {
+      const dm = child.userData.diagnosticMaterial;
+      const list = Array.isArray(dm) ? [...new Set(dm)] : [dm];
+      for (const m of list) {
+        try {
+          m.dispose();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      delete child.userData.diagnosticMaterial;
+    }
+    if (child.userData.originalMaterial) {
+      const orig = child.userData.originalMaterial;
+      if (Array.isArray(orig)) {
+        child.material = orig.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+      } else if (typeof orig?.clone === 'function') {
+        child.material = orig.clone();
+      } else {
+        child.material = orig || child.material;
+      }
+    }
+  }
+
+  /**
+   * @param {THREE.Mesh} child
+   */
+  ensureMeshVertexNormals(child) {
+    const geo = child.geometry;
+    if (!geo) return;
+    try {
+      if (!geo.attributes.normal) {
+        geo.computeVertexNormals();
+        return;
+      }
+      const n = geo.attributes.normal.array;
+      let valid = false;
+      for (let i = 0; i < n.length; i += 3) {
+        if (n[i] !== 0 || n[i + 1] !== 0 || n[i + 2] !== 0) {
+          valid = true;
+          break;
+        }
+      }
+      if (!valid) geo.computeVertexNormals();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  /**
+   * @param {THREE.Mesh} child
+   * @param {'depth'|'normal'|'uv'} viewMode
+   */
+  applyDiagnosticViewToMesh(child, viewMode) {
+    this.exitDiagnosticViewOnMesh(child);
+    this.ensureMeshVertexNormals(child);
+    const skin = child.isSkinnedMesh === true;
+    const n = Array.isArray(child.material) ? child.material.length : 1;
+    if (viewMode === 'uv') {
+      const tex = this.createUVTexture();
+      child.userData.uvGridTexture = tex;
+      const sharedMat = createUVMaterial(tex, { skinning: skin });
+      child.material = n === 1 ? sharedMat : Array.from({ length: n }, () => sharedMat);
+      child.userData.diagnosticMaterial = sharedMat;
+      return;
+    }
+    if (viewMode === 'depth') {
+      const sharedMat = createDepthVisualizationMaterial({ skinning: skin });
+      child.material = n === 1 ? sharedMat : Array.from({ length: n }, () => sharedMat);
+      child.userData.diagnosticMaterial = sharedMat;
+      return;
+    }
+    const sharedMat = createViewNormalMaterial({ skinning: skin });
+    child.material = n === 1 ? sharedMat : Array.from({ length: n }, () => sharedMat);
+    child.userData.diagnosticMaterial = sharedMat;
+  }
+
+  /**
    * Update model materials based on render mode
    */
   updateRenderMode(mode) {
@@ -4380,141 +4598,193 @@ export class SceneManager {
     // Store original materials if not already stored
     this.storeOriginalMaterials();
 
+    if (mode !== 'skeleton') {
+      this.clearBoneVisualization();
+    }
+
+    const partColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
+    let partColorizeIndex = 0;
+
     this.currentModel.traverse((child) => {
-      if (child.isMesh) {
-        switch (mode) {
-          case 'solid':
-            // Restore original material if it exists (e.g., coming from UV mode)
-            if (child.userData.originalMaterial) {
-              const orig = child.userData.originalMaterial;
-              if (Array.isArray(orig)) {
-                child.material = orig.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
-              } else if (typeof orig?.clone === 'function') {
-                child.material = orig.clone();
-              } else {
-                // Fallback: use the stored object directly
-                child.material = orig || child.material;
+      if (!child.isMesh) return;
+
+      switch (mode) {
+        case 'solid':
+        case 'rendered': {
+          this.exitDiagnosticViewOnMesh(child);
+          if (child.userData.originalMaterial) {
+            const orig = child.userData.originalMaterial;
+            if (Array.isArray(orig)) {
+              child.material = orig.map((m) => (typeof m?.clone === 'function' ? m.clone() : m));
+            } else if (typeof orig?.clone === 'function') {
+              child.material = orig.clone();
+            } else {
+              child.material = orig || child.material;
+            }
+          }
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const m of mats) {
+            if (!m) continue;
+            m.wireframe = false;
+            m.transparent = false;
+            m.opacity = 1.0;
+            if (child.userData.originalColor && m.color) {
+              m.color.copy(child.userData.originalColor);
+            }
+            if (m.userData?.vrmMaterial || m.userData?.isVRMMaterial) {
+              this.ensureVRMMaterialProperties(m);
+              if (m.map) {
+                m.map.needsUpdate = true;
+                m.map.flipY = false;
+                m.map.generateMipmaps = true;
+                m.map.minFilter = THREE.LinearMipmapLinearFilter;
+                m.map.magFilter = THREE.LinearFilter;
+                m.map.wrapS = THREE.RepeatWrapping;
+                m.map.wrapT = THREE.RepeatWrapping;
               }
             }
-            child.material.wireframe = false;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            // Restore original color
-            if (child.userData.originalColor) {
-              child.material.color.copy(child.userData.originalColor);
+            m.needsUpdate = true;
+            if (m.map) {
+              m.map.needsUpdate = true;
+              m.map.flipY = false;
             }
-            
-            // Enhanced VRM material handling for solid mode
-            if (child.material.userData?.vrmMaterial || child.material.userData?.isVRMMaterial) {
-              console.log(`🎨 Processing VRM material for solid mode: ${child.name}`);
-              this.ensureVRMMaterialProperties(child.material);
-              
-              // Force aggressive texture binding for VRM materials
-              if (child.material.map) {
-                child.material.map.needsUpdate = true;
-                child.material.map.flipY = false;
-                child.material.map.generateMipmaps = true;
-                child.material.map.minFilter = THREE.LinearMipmapLinearFilter;
-                child.material.map.magFilter = THREE.LinearFilter;
-                child.material.map.wrapS = THREE.RepeatWrapping;
-                child.material.map.wrapT = THREE.RepeatWrapping;
-              }
-            }
-            
-            // Force material and texture updates for solid rendering
-            child.material.needsUpdate = true;
-            if (child.material.map) {
-              child.material.map.needsUpdate = true;
-              child.material.map.flipY = false;
-            }
-            if (child.geometry && child.geometry.attributes && child.geometry.attributes.uv) {
-              child.geometry.attributes.uv.needsUpdate = true;
-            }
-            
-            // Clear bone visualization
-            this.clearBoneVisualization();
-            
-            // Force VRM model to face forward
-            if (this.currentModel && this.currentVRM) {
-              this.currentModel.rotation.y = Math.PI;
-              console.log('🔄 VRM model orientation fixed for solid mode');
-            }
-            break;
-          case 'wireframe':
-            child.material.wireframe = true;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            // Keep original color for wireframe
-            if (child.userData.originalColor) {
-              child.material.color.copy(child.userData.originalColor);
-            }
-            // Clear bone visualization
-            this.clearBoneVisualization();
-            break;
-          case 'skeleton':
-            try {
-              console.log('Setting skeleton mode for mesh:', child.name);
-              child.material.wireframe = true;
-              child.material.transparent = true;
-              child.material.opacity = 0.1; // More transparent to see bones better
-              child.material.color.setHex(0x666666); // Gray wireframe
-            } catch (error) {
-              console.error('Error setting skeleton mode for mesh:', child.name, error);
-            }
-            break;
-          case 'partColorize':
-            const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
-            const colorIndex = Math.floor(Math.random() * colors.length);
-            child.material.color.setHex(colors[colorIndex]);
-            child.material.wireframe = false;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            break;
-          case 'normal':
-            // Normal map visualization
-            child.material.wireframe = false;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            if (child.material.normalMap) {
-              child.material.map = child.material.normalMap;
-              child.material.color.setHex(0x808080);
-            }
-            break;
-          case 'uv':
-            // UV map visualization
-            child.material.wireframe = false;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            child.material.color.setHex(0xffffff);
-            // Create UV visualization material
-            const uvMaterial = new THREE.MeshBasicMaterial({
-              map: this.createUVTexture(),
-              side: THREE.DoubleSide
-            });
-            // Store the original material before replacing
-            if (!child.userData.originalMaterial) {
-              child.userData.originalMaterial = child.material.clone();
-            }
-            child.material = uvMaterial;
-            break;
-          case 'depth':
-            // Depth visualization
-            child.material.wireframe = false;
-            child.material.transparent = false;
-            child.material.opacity = 1.0;
-            child.material.color.setHex(0xffffff);
-            break;
+          }
+          if (child.geometry?.attributes?.uv) {
+            child.geometry.attributes.uv.needsUpdate = true;
+          }
+          if (this.currentModel && this.currentVRM) {
+            this.currentModel.rotation.y = Math.PI;
+          }
+          break;
         }
+        case 'wireframe': {
+          this.exitDiagnosticViewOnMesh(child);
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const m of mats) {
+            if (!m) continue;
+            m.wireframe = true;
+            m.transparent = false;
+            m.opacity = 1.0;
+            if (child.userData.originalColor && m.color) m.color.copy(child.userData.originalColor);
+          }
+          break;
+        }
+        case 'skeleton': {
+          this.exitDiagnosticViewOnMesh(child);
+          try {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            for (const m of mats) {
+              if (!m) continue;
+              m.wireframe = true;
+              m.transparent = true;
+              m.opacity = 0.1;
+              m.color.setHex(0x666666);
+            }
+          } catch (error) {
+            console.error('Error setting skeleton mode for mesh:', child.name, error);
+          }
+          break;
+        }
+        case 'partColorize': {
+          this.exitDiagnosticViewOnMesh(child);
+          const ci = partColorizeIndex % partColors.length;
+          partColorizeIndex++;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const m of mats) {
+            if (!m) continue;
+            m.color.setHex(partColors[ci]);
+            m.wireframe = false;
+            m.transparent = false;
+            m.opacity = 1.0;
+          }
+          break;
+        }
+        case 'normal':
+          this.applyDiagnosticViewToMesh(child, 'normal');
+          break;
+        case 'uv':
+          this.applyDiagnosticViewToMesh(child, 'uv');
+          break;
+        case 'depth':
+          this.applyDiagnosticViewToMesh(child, 'depth');
+          break;
+        default:
+          break;
       }
     });
 
-    // Create bone visualization for skeleton mode (after mesh processing)
     if (mode === 'skeleton') {
       console.log('Creating bone visualization for skeleton mode');
-      console.log('Current model:', this.currentModel);
-      console.log('Current VRM:', this.currentVRM);
-      console.log('Scene:', this.scene);
       this.createBoneVisualization();
+    }
+  }
+
+  /**
+   * Match canvas + camera to the host element. WebView often reports 0×0 briefly; avoid that or WebGL stays blank.
+   */
+  forceRendererRefit() {
+    if (!this.renderer || !this.camera) return;
+    const canvas = this.renderer.domElement;
+    const el = canvas?.parentElement || this.sceneHostElement;
+    if (!el) return;
+
+    let width = 0;
+    let height = 0;
+    if (typeof el.getBoundingClientRect === 'function') {
+      const r = el.getBoundingClientRect();
+      width = Math.round(r.width);
+      height = Math.round(r.height);
+    }
+    if (width < 2) width = el.clientWidth || 0;
+    if (height < 2) height = el.clientHeight || 0;
+    if (width < 2) width = typeof window !== 'undefined' ? window.innerWidth || 2 : 2;
+    if (height < 2) height = typeof window !== 'undefined' ? window.innerHeight || 2 : 2;
+    width = Math.max(2, width);
+    height = Math.max(2, height);
+
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(width, height, false);
+    try {
+      this.renderer.setViewport(0, 0, width, height);
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      if (this.scene && typeof this.renderer.compile === 'function') {
+        this.renderer.compile(this.scene, this.camera);
+      }
+    } catch (e) {
+      console.warn('[SceneManager] renderer.compile after refit:', e?.message || e);
+    }
+  }
+
+  /**
+   * After WebGL context restore (common on Android WebView), reset GL state and refit the drawable.
+   */
+  reinitializeScene() {
+    if (!this.renderer || !this.scene || !this.camera) {
+      console.warn('[SceneManager] reinitializeScene skipped — missing renderer/scene/camera');
+      return;
+    }
+    console.warn('[SceneManager] WebGL context restored — refitting renderer');
+    try {
+      if (typeof this.renderer.resetState === 'function') {
+        this.renderer.resetState();
+      }
+    } catch (e) {
+      console.warn('[SceneManager] renderer.resetState failed:', e?.message || e);
+    }
+    this.forceRendererRefit();
+    if (!this.isRendering) {
+      this.startRenderLoop();
+    }
+    try {
+      this.emit('webglContextRestored', {});
+    } catch (_) {
+      /* ignore */
     }
   }
 
@@ -4549,10 +4819,24 @@ export class SceneManager {
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
     
-    // Create UV grid pattern
-    ctx.fillStyle = '#000000';
+    // UV gradient: U → red channel, V → green (readability over flat grid)
+    const g = ctx.createLinearGradient(0, 0, 512, 512);
+    g.addColorStop(0, '#200008');
+    g.addColorStop(0.5, '#082008');
+    g.addColorStop(1, '#080820');
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, 512, 512);
-    
+    const gu = ctx.createLinearGradient(0, 0, 512, 0);
+    gu.addColorStop(0, '#000000');
+    gu.addColorStop(1, '#ff3366');
+    ctx.fillStyle = gu;
+    ctx.fillRect(0, 0, 512, 32);
+    const gv = ctx.createLinearGradient(0, 0, 0, 512);
+    gv.addColorStop(0, '#000000');
+    gv.addColorStop(1, '#33ff66');
+    ctx.fillStyle = gv;
+    ctx.fillRect(0, 0, 32, 512);
+
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1;
     
@@ -4749,19 +5033,43 @@ export class SceneManager {
    * Setup resize handler
    */
   setupResizeHandler() {
-    const handleResize = () => {
-      if (!this.renderer || !this.camera) return;
-      
-      const width = this.renderer.domElement.parentElement.clientWidth;
-      const height = this.renderer.domElement.parentElement.clientHeight;
-      
-      this.camera.aspect = width / height;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(width, height);
+    this._windowResizeHandler = () => {
+      this.forceRendererRefit();
     };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this._windowResizeHandler);
+    }
+  }
 
-    window.addEventListener('resize', handleResize);
-    this.eventListeners.set('resize', handleResize);
+  /**
+   * Visibility / BFCache / visualViewport — Android WebView often omits `resize` when the GL surface recovers.
+   */
+  setupWebViewSurvivalHooks() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    this._onVisibilityForRefit = () => {
+      if (document.visibilityState === 'visible') {
+        requestAnimationFrame(() => this.forceRendererRefit());
+      }
+    };
+    document.addEventListener('visibilitychange', this._onVisibilityForRefit);
+
+    this._onPageshowForRefit = () => {
+      requestAnimationFrame(() => this.forceRendererRefit());
+    };
+    window.addEventListener('pageshow', this._onPageshowForRefit);
+
+    if (window.visualViewport) {
+      this._onVisualViewportResize = () => {
+        requestAnimationFrame(() => this.forceRendererRefit());
+      };
+      window.visualViewport.addEventListener('resize', this._onVisualViewportResize);
+    }
+
+    this._webViewResumeBridge = () => {
+      requestAnimationFrame(() => this.forceRendererRefit());
+    };
+    window.__characterStudioWebViewResume = this._webViewResumeBridge;
   }
 
   /**
@@ -4901,6 +5209,8 @@ export class SceneManager {
    * Clear current model
    */
   clearModel() {
+    void this._disposeSceneLipSync();
+    this.currentVRM = null;
     if (this.currentModel) {
       this.scene.remove(this.currentModel);
       this.currentModel = null;
@@ -4939,7 +5249,22 @@ export class SceneManager {
       if (this.controls) {
         this.controls.update();
       }
-      
+
+      // Native APK / WebView: Jetpack XR face → nativeFaceBridge (no WebXR session).
+      const vrmsFlat =
+        typeof this.xrExpressionVRMProvider === 'function'
+          ? this.xrExpressionVRMProvider().filter(Boolean)
+          : this.currentVRM
+            ? [this.currentVRM]
+            : [];
+      const nativeRecFlat = getNativeFaceWeightsIfFresh();
+      if (vrmsFlat.length) {
+        if (nativeRecFlat && Object.keys(nativeRecFlat).length > 0) {
+          applyExpressionWeightRecordToVRMS(vrmsFlat, nativeRecFlat);
+        }
+      }
+      this._maybeLogNativeFaceRemoteDiag(vrmsFlat, nativeRecFlat);
+
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }
@@ -4995,7 +5320,7 @@ export class SceneManager {
     // Require bounded-floor for proper physical floor alignment
     const arButton = ARButton.createButton(this.renderer, {
       requiredFeatures: ['bounded-floor'],
-      optionalFeatures: ['local-floor', 'local', 'viewer']
+      optionalFeatures: ['local-floor', 'local', 'viewer', XR_EXPRESSION_TRACKING_FEATURE]
     });
 
     // Customize button with emoji icon - use MutationObserver to persist changes
@@ -5667,6 +5992,73 @@ export class SceneManager {
             // Fallback recenter support (long-press on controller/headset inputs)
             this.maybeHandleXRRecenter(time, frame);
 
+            // WebXR Expression Tracking → VRM (Android XR / draft "expression-tracking" feature)
+            const xrTf = /** @type {XRFrame|null|undefined} */ (frame ?? this.renderer.xr?.getFrame?.());
+            if (xrTf && this.renderer.xr?.isPresenting) {
+              /** @type {XRSession|null|undefined} */
+              const xrSess =
+                xrTf.session || session || this.xrSession;
+
+              if (!this._xrExprFirstFrameDiagLogged) {
+                this._xrExprFirstFrameDiagLogged = true;
+                let featList = [];
+                try {
+                  if (
+                    xrSess?.enabledFeatures &&
+                    typeof xrSess.enabledFeatures[Symbol.iterator] === 'function'
+                  ) {
+                    featList = [...xrSess.enabledFeatures];
+                  }
+                } catch (_) {
+                  featList = [];
+                }
+                /** @type {any} */
+                const fr = xrTf;
+                console.info('[XR][expression] First-frame diagnostics', {
+                  enabledFeatures: featList,
+                  expressionTrackingGranted: featList.includes(XR_EXPRESSION_TRACKING_FEATURE),
+                  frameHasExpressionsProperty: fr && 'expressions' in fr,
+                  expressionsNonNull: !!(fr && fr.expressions),
+                  hint:
+                    !featList.includes(XR_EXPRESSION_TRACKING_FEATURE)
+                      ? 'UA did not grant optional feature "expression-tracking" — no extra prompt is normal; face may be bundled in WebXR permission or not shipped in this Chrome build.'
+                      : !fr?.expressions
+                        ? 'Feature listed but frame.expressions is null — browser may not expose draft WebXR Expression Tracking yet.'
+                        : 'expression data present; VRM should receive weights if model has mouth/blink shapes.'
+                });
+              }
+
+              maybeProbeXRFrame(xrTf, xrSess ?? null);
+              if (
+                xrSess?.enabledFeatures?.includes?.(XR_EXPRESSION_TRACKING_FEATURE) &&
+                !this.xrExpressionFeatureLogged
+              ) {
+                this.xrExpressionFeatureLogged = true;
+                console.log(
+                  '😐 WebXR Expression Tracking feature active — mapping XR expressions to VRM mouth/blink'
+                );
+              }
+              const vrms =
+                typeof this.xrExpressionVRMProvider === 'function'
+                  ? this.xrExpressionVRMProvider().filter(Boolean)
+                  : this.currentVRM
+                    ? [this.currentVRM]
+                    : [];
+              let nativeRecXr = null;
+              if (vrms.length) {
+                nativeRecXr = getNativeFaceWeightsIfFresh(
+                  getNativeFaceWeightsMaxAgeMs(true),
+                  true,
+                );
+                if (nativeRecXr && Object.keys(nativeRecXr).length > 0) {
+                  applyExpressionWeightRecordToVRMS(vrms, nativeRecXr);
+                } else {
+                  applyXRFrameExpressionsToVRMS(vrms, xrTf);
+                }
+              }
+              this._maybeLogNativeFaceRemoteDiag(vrms, nativeRecXr);
+            }
+
             // Update controls if not in XR (shouldn't happen, but safety check)
             if (this.controls && !this.renderer.xr.isPresenting) {
               this.controls.update();
@@ -5800,7 +6192,9 @@ export class SceneManager {
       session.addEventListener('end', () => {
          const endMode = isAR ? 'ar' : isVR ? 'vr' : 'xr';
          console.log(`${endMode === 'ar' ? '📱' : '🥽'} ${endMode.toUpperCase()} session ended`);
-         
+         this.xrExpressionFeatureLogged = false;
+         this._xrExprFirstFrameDiagLogged = false;
+
          // Use setTimeout to ensure cleanup happens after session fully ends
          setTimeout(() => {
            // Clear XR animation loop
@@ -5936,7 +6330,13 @@ export class SceneManager {
           console.log('🔄 Requesting VR session with compatible features...');
           const session = await navigator.xr.requestSession('immersive-vr', {
             requiredFeatures: [], // Don't require any features
-            optionalFeatures: ['bounded-floor', 'local-floor', 'local', 'viewer'] // But allow these if available
+            optionalFeatures: [
+              'bounded-floor',
+              'local-floor',
+              'local',
+              'viewer',
+              XR_EXPRESSION_TRACKING_FEATURE
+            ] // Allow floor + draft expression-tracking when UA supports it
           });
           
           console.log('✅ VR session requested successfully');
@@ -6275,7 +6675,36 @@ export class SceneManager {
     
     // Stop render loop
     this.stopRenderLoop();
+
+    if (typeof window !== 'undefined') {
+      if (this._windowResizeHandler) {
+        window.removeEventListener('resize', this._windowResizeHandler);
+        this._windowResizeHandler = null;
+      }
+      if (this._onVisibilityForRefit && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', this._onVisibilityForRefit);
+        this._onVisibilityForRefit = null;
+      }
+      if (this._onPageshowForRefit) {
+        window.removeEventListener('pageshow', this._onPageshowForRefit);
+        this._onPageshowForRefit = null;
+      }
+      if (this._onVisualViewportResize && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', this._onVisualViewportResize);
+        this._onVisualViewportResize = null;
+      }
+      if (this._webViewResumeBridge && window.__characterStudioWebViewResume === this._webViewResumeBridge) {
+        try {
+          delete window.__characterStudioWebViewResume;
+        } catch (_) {
+          window.__characterStudioWebViewResume = undefined;
+        }
+        this._webViewResumeBridge = null;
+      }
+    }
+    this.sceneHostElement = null;
     
+    void this._disposeSceneLipSync();
     // Clear current model
     this.clearModel();
     

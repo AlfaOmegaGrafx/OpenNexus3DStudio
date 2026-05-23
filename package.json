@@ -7,8 +7,6 @@
     "dev": "vite --host",
     "build": "vite build",
     "serve": "vite preview",
-    "mock-api": "node mock-api-server.js",
-    "dev-with-api": "concurrently \"npm run dev\" \"npm run mock-api\"",
     "dist-mac": "electron-builder --mac",
     "dist-win": "electron-builder --win",
     "dist-linux": "electron-builder --linux",
@@ -16,6 +14,8 @@
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest run --coverage",
     "lint": "npm run lint:js && npm run lint:prettier",
@@ -26,6 +26,7 @@
     "update-roadmap": "node scripts/update-roadmap-date.js"
   },
   "dependencies": {
+    "@mediapipe/holistic": "^0.5.1675471629",
     "@pixiv/three-vrm": "^3.4.4",
     "@solana/web3.js": "^1.98.4",
     "@thirdweb-dev/react": "^4.0.99",
@@ -45,6 +46,7 @@
     "gsap": "^3.14.2",
     "html2canvas": "^1.4.1",
     "i18next": "^25.7.4",
+    "kalidokit": "^1.1.5",
     "ktx2-encoder": "^0.5.1",
     "multer": "^2.0.2",
     "react": "^19.2.3",
@@ -64,6 +66,7 @@
     "zustand": "^3.7.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
