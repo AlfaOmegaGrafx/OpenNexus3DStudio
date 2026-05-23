@@ -49,8 +49,9 @@ const SceneControlsCompact = ({
     console.log(`🎨 Render mode changed to: ${mode}`);
     if (onRenderModeChange) {
       onRenderModeChange(mode);
+    } else {
+      updateRenderMode(mode);
     }
-    updateRenderMode(mode);
   };
 
   const handleSkeletonClick = () => {

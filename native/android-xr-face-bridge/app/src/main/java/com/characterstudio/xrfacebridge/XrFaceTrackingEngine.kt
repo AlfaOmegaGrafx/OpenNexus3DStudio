@@ -101,8 +101,17 @@ object XrFaceTrackingEngine {
     private fun shouldForceSessionRecycle(jobActive: Boolean): Boolean {
         if (!jobActive) return isStale()
         if (!isStale()) return false
-        if (!isCollectorStuck()) return false
-        return true
+
+        // If the collector is truly stuck (no ticks from face.state), force recycle.
+        if (isCollectorStuck()) return true
+
+        // If we are getting ticks (so not stuck) but they've been NOT_TRACKING or zeroed 
+        // for a long time (2x the stale threshold), force a recycle to try to recover sensors.
+        if (lastPostAgeMs() > FaceHandoffState.effectiveStaleMs() * 2) {
+            return true
+        }
+
+        return false
     }
 
     fun isCollecting(): Boolean = faceCollectJob?.isActive == true

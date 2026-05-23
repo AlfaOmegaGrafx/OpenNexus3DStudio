@@ -163,3 +163,17 @@
   height: 80%;
 }
 
+.optionButtonsActive {
+  opacity: 1;
+  outline: 1px solid rgba(8, 234, 160, 0.6);
+  border-radius: 4px;
+}
+
+.webcamLabel {
+  font-size: 10px;
+  color: white;
+  text-shadow: 1px 1px 1px black;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+

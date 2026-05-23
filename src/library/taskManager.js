@@ -1,13 +1,110 @@
 /**
  * TaskManager - Manages AI generation tasks and workflows
  * Similar to the task management in CharacterStudio but focused on 3DAIGC workflows
+ *
+ * HTTP targets 3DAIGC-API (AlfaOmegaGrafx/3DAIGC-API: mesh_generation.py, system.py).
+ * There is no api.md in this repo; backend should publish OpenAPI or a consumer contract doc.
  */
 import axios from 'axios';
+import { logger } from './logger.js';
+import { performanceMonitor } from './performanceMonitor.js';
+import { rollbackManager } from './rollbackManager.js';
+import avatarSdkService from '../services/avatarSdkService.js';
+
+export function ensureAbsoluteUrl(url) {
+  let s = (url || '').trim();
+  if (!s) return '';
+  // Same-origin path (e.g. Vite dev proxy) — required when the page is HTTPS and the real API is HTTP-only.
+  if (s.startsWith('/')) {
+    const path = s.replace(/\/$/, '') || '/';
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${path === '/' ? '' : path}`;
+    }
+    return path;
+  }
+  s = s.replace(/\/$/, '');
+  // Fix malformed scheme (e.g. "http/host" -> "http://host") so we never double-prepend
+  const normalized = /^https?:\/[^/]/.test(s) ? s.replace(/^(https?):\//, '$1://') : s;
+  return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
+}
+
+/**
+ * Downscale raster images so max(width,height) <= maxSide (3DAIGC-API commonly caps at 2048).
+ * No-op in non-browser or if decode fails. Output JPEG for predictable size/type.
+ * @param {File} imageFile
+ * @param {number} maxSide
+ * @returns {Promise<File>}
+ */
+export async function resizeImageFor3daigc(imageFile, maxSide = 2048) {
+  if (!imageFile || !imageFile.type?.startsWith('image/')) return imageFile;
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
+    return imageFile;
+  }
+  if (!maxSide || maxSide < 64) return imageFile;
+
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(imageFile);
+  } catch {
+    return imageFile;
+  }
+
+  try {
+    const { width, height } = bitmap;
+    if (width <= maxSide && height <= maxSide) {
+      return imageFile;
+    }
+    const scale = maxSide / Math.max(width, height);
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return imageFile;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+        'image/jpeg',
+        0.92
+      );
+    });
+    const baseName = (imageFile.name || 'image').replace(/\.[^.]+$/, '');
+    const out = new File([blob], `${baseName}_resized.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now()
+    });
+    logger.info('Image resized for API limits', {
+      from: `${width}x${height}`,
+      to: `${w}x${h}`,
+      maxSide
+    });
+    return out;
+  } catch (e) {
+    logger.warn('Image resize failed; using original file', { message: e?.message });
+    return imageFile;
+  } finally {
+    try {
+      bitmap.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** Optional Bearer token when 3DAIGC-API has security.api_key_required (see verify_api_key in backend). */
+export function get3daigcAuthHeaders() {
+  const token = (import.meta.env.VITE_3DAIGC_API_KEY || '').trim();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
 
 export class TaskManager {
   constructor(apiEndpoint = null) {
-    // Use environment variable if available, otherwise default to 127.0.0.1:7842
-    this.apiEndpoint = apiEndpoint || import.meta.env.VITE_API_ENDPOINT || 'http://127.0.0.1:7842';
+    this.apiEndpoint = ensureAbsoluteUrl(apiEndpoint ?? import.meta.env.VITE_API_ENDPOINT ?? '');
     this.tasks = new Map();
     this.isConnected = false;
     this.eventListeners = new Map();
@@ -15,37 +112,97 @@ export class TaskManager {
     // Supported task types
     this.supportedTypes = [
       'text-to-3d',
-      'image-to-3d', 
+      'image-to-3d',
       'mesh-painting',
+      'mesh-painting-text',
       'mesh-segmentation',
       'part-completion',
-      'auto-rigging'
+      'auto-rigging',
+      'mesh-retopology',
+      'mesh-uv-unwrapping',
+      'mesh-editing-text',
+      'mesh-editing-image',
+      'avatar-from-photo'
     ];
   }
 
   /**
-   * Check API connection
+   * Check API connection with improved error handling
    */
   async checkConnection() {
+    if (!this.apiEndpoint || !this.apiEndpoint.trim()) {
+      this.isConnected = false;
+      this.emit('connectionStatusChanged', { connected: false, endpoint: this.apiEndpoint });
+      return false;
+    }
     try {
       const startTime = Date.now();
-      
-      const response = await axios.get(`${this.apiEndpoint}/health`, { 
-        timeout: 5000,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+      let response;
+      const base = (this.apiEndpoint || '').replace(/\/$/, '');
+      const healthCandidates = [
+        `${base}/health`,
+        `${base}/api/v1/system/health`
+      ];
+      try {
+        let lastHealthErr = null;
+        for (const healthUrl of healthCandidates) {
+          try {
+            response = await axios.get(healthUrl, {
+              timeout: 5000,
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                ...get3daigcAuthHeaders()
+              },
+              validateStatus: (status) => status >= 200 && status < 500
+            });
+            if (response.status === 200) break;
+            lastHealthErr = new Error(`Health ${healthUrl} returned ${response.status}`);
+          } catch (e) {
+            lastHealthErr = e;
+          }
         }
-      });
+        if (!response || response.status !== 200) {
+          throw lastHealthErr || new Error('Health check failed');
+        }
+      } catch (error) {
+        // If health endpoint fails, try root endpoint as fallback
+        if (
+          error.code === 'ERR_NETWORK' ||
+          error.code === 'ECONNABORTED' ||
+          error.code === 'ECONNREFUSED' ||
+          error.code === 'ERR_CONNECTION_REFUSED'
+        ) {
+          try {
+            response = await axios.get(`${this.apiEndpoint}/`, { 
+              timeout: 3000,
+              validateStatus: () => true // Accept any status
+            });
+          } catch (fallbackError) {
+            throw error; // Throw original error if fallback also fails
+          }
+        } else {
+          throw error;
+        }
+      }
       
       const responseTime = Date.now() - startTime;
       const wasConnected = this.isConnected;
       this.isConnected = response.status === 200;
       
-      // Only log when connection status changes
+      // Log connection status changes
       if (wasConnected !== this.isConnected) {
         if (this.isConnected) {
           console.log(`✅ API connected to ${this.apiEndpoint} (${responseTime}ms)`);
+          if (response.data) {
+            console.log(`   Status: ${response.data.status || 'OK'}`);
+            if (response.data.services) {
+              const availableServices = Object.keys(response.data.services).filter(
+                key => response.data.services[key] === 'available'
+              );
+              console.log(`   Available services: ${availableServices.join(', ')}`);
+            }
+          }
         } else {
           console.warn(`⚠️ API disconnected from ${this.apiEndpoint}`);
         }
@@ -64,29 +221,39 @@ export class TaskManager {
       const wasConnected = this.isConnected;
       this.isConnected = false;
       
-      // Only log errors when connection status changes or on first failure
+      // Provide detailed error information
+      let errorDetails = {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        timeout: error.code === 'ECONNABORTED',
+        networkError: error.code === 'ERR_NETWORK',
+        connectionRefused: error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED'
+      };
+      
+      // Log errors with structured logging (never throw so app keeps working)
       if (wasConnected || !this.lastErrorTime || Date.now() - this.lastErrorTime > 30000) {
-        const errorMsg = error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
-          ? `API unavailable at ${this.apiEndpoint}`
-          : `API connection error: ${error.message}`;
-        
-        if (wasConnected) {
-          console.warn(`⚠️ ${errorMsg}`);
-        } else {
-          // Only log periodically when already disconnected
-          console.debug(`🔌 ${errorMsg}`);
+        try {
+          logger.error(
+            'API connection failed',
+            error,
+            {
+              endpoint: this.apiEndpoint,
+              wasConnected,
+              errorDetails,
+              recovery: errorDetails.connectionRefused ? 'Set VITE_API_ENDPOINT to your API server URL (e.g. DGX Sparks)' : 'Check server accessibility'
+            }
+          );
+        } catch (logErr) {
+          console.warn('API connection failed (log suppressed):', error?.message || error);
         }
         this.lastErrorTime = Date.now();
       }
       
       this.emit('connectionStatusChanged', { 
         connected: false, 
-        error: {
-          message: error.message,
-          code: error.code,
-          status: error.response?.status,
-          timeout: error.code === 'ECONNABORTED'
-        },
+        error: errorDetails,
         endpoint: this.apiEndpoint
       });
       return false;
@@ -98,8 +265,13 @@ export class TaskManager {
    * @param {string} endpoint - New API endpoint
    */
   setApiEndpoint(endpoint) {
-    this.apiEndpoint = endpoint;
-    this.emit('apiEndpointChanged', { endpoint });
+    this.apiEndpoint = ensureAbsoluteUrl(endpoint);
+    this.emit('apiEndpointChanged', { endpoint: this.apiEndpoint });
+  }
+
+  /** Current API base URL (same-origin proxy path or absolute http(s) URL). */
+  getApiEndpoint() {
+    return this.apiEndpoint || '';
   }
 
   /**
@@ -147,10 +319,50 @@ export class TaskManager {
   }
 
   /**
+   * Retry function with exponential backoff
+   * @param {Function} fn - Function to retry
+   * @param {number} maxRetries - Maximum number of retries (default: 3)
+   * @param {number} initialDelay - Initial delay in ms (default: 1000)
+   * @param {Function} shouldRetry - Function to determine if error should be retried (default: retry on network errors)
+   */
+  async retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000, shouldRetry = null) {
+    const defaultShouldRetry = (error) => {
+      // Retry on network errors, timeouts, and 5xx server errors
+      return error.code === 'ERR_NETWORK' || 
+             error.code === 'ECONNABORTED' || 
+             error.code === 'ECONNREFUSED' ||
+             error.code === 'ERR_CONNECTION_REFUSED' ||
+             (error.response && error.response.status >= 500);
+    };
+    
+    const retryCheck = shouldRetry || defaultShouldRetry;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (attempt === maxRetries || !retryCheck(error)) {
+          throw error;
+        }
+        
+        const delay = initialDelay * Math.pow(2, attempt);
+        logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`, {
+          error: error.message,
+          code: error.code,
+          status: error.response?.status
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  /**
    * Start a task
    * @param {string} taskId - Task ID
+   * @param {Object} modelData - Optional model data for model-based tasks
    */
-  async startTask(taskId) {
+  async startTask(taskId, modelData = null) {
     const task = this.tasks.get(taskId);
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
@@ -160,28 +372,79 @@ export class TaskManager {
       throw new Error(`Task cannot be started. Current status: ${task.status}`);
     }
 
+    // Create snapshot before task execution for rollback
+    const snapshotKey = `task_${taskId}`;
+    rollbackManager.createSnapshot(snapshotKey, {
+      task: { ...task },
+      tasks: Array.from(this.tasks.entries())
+    });
+
     try {
       this.updateTaskStatus(taskId, 'running', 0);
       this.emit('taskStarted', { task });
 
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        const currentTask = this.tasks.get(taskId);
-        if (currentTask && currentTask.status === 'running') {
-          const newProgress = Math.min(95, currentTask.progress + Math.random() * 20);
-          this.updateTaskStatus(taskId, 'running', newProgress);
-        }
-      }, 500);
+      const result = await this.executeTask(task, modelData);
 
-      const result = await this.executeTask(task);
-      
-      clearInterval(progressInterval);
+      // 3DAIGC-API mesh-generation returns MeshGenerationResponse { job_id, status, message } and
+      // completed job payloads use result.mesh_url (see system.py get_job_status). Await polling so
+      // callers (e.g. TaskContext) see a single completed/failed lifecycle.
+      if (result && result.job_id) {
+        console.log('Job queued, polling for job_id:', result.job_id);
+        this.tasks.get(taskId).job_id = result.job_id;
+
+        const finalResult = await this.pollJobStatus(result.job_id, taskId);
+        console.log('Job polling completed:', finalResult);
+
+        if (finalResult && finalResult.statusPollingUnavailable) {
+          this.updateTaskStatus(taskId, 'running', 10, finalResult, null);
+          this.emit('taskUpdated', { task: this.tasks.get(taskId) });
+        } else {
+          this.updateTaskStatus(taskId, 'completed', 100, finalResult);
+          this.emit('taskCompleted', { task: this.tasks.get(taskId), result: finalResult });
+          const modelUrl =
+            finalResult.modelUrl ||
+            finalResult.downloadUrl ||
+            finalResult.mesh_url ||
+            finalResult.result?.mesh_url;
+          if (modelUrl) {
+            console.log('Auto-loading generated model:', modelUrl);
+            window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId, result: { modelUrl } } }));
+          }
+        }
+        return finalResult;
+      }
+
+      // Direct result (no async job)
       this.updateTaskStatus(taskId, 'completed', 100, result);
-      this.emit('taskCompleted', { task, result });
-      
+      this.emit('taskCompleted', { task: this.tasks.get(taskId), result });
+      const directUrl = result?.modelUrl || result?.downloadUrl || result?.mesh_url;
+      if (directUrl) {
+        window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId, result: { modelUrl: directUrl } } }));
+      }
       return result;
     } catch (error) {
-      this.updateTaskStatus(taskId, 'failed', task.progress, null, error.message);
+      logger.error('Task execution failed', error, {
+        taskId,
+        taskType: task.type,
+        taskName: task.name,
+        progress: task.progress
+      });
+      
+      // Attempt rollback (optional - don't fail if rollback fails)
+      try {
+        const rollbackState = rollbackManager.rollback(`task_${taskId}`);
+        logger.info('Task rolled back', { taskId, rollbackState });
+      } catch (rollbackError) {
+        // Rollback is optional - log but don't fail the error handling
+        logger.warn('Rollback failed (this is non-critical)', rollbackError, { taskId });
+      }
+      
+      // Extract user-friendly error message
+      const errorMessage = error.message || 
+                          (error.originalError?.message) || 
+                          'Unknown error occurred';
+      
+      this.updateTaskStatus(taskId, 'failed', task.progress, null, errorMessage);
       this.emit('taskFailed', { task, error });
       throw error;
     }
@@ -190,8 +453,9 @@ export class TaskManager {
   /**
    * Execute a task based on its type
    * @param {Object} task - Task object
+   * @param {Object} modelData - Optional model data for model-based tasks
    */
-  async executeTask(task) {
+  async executeTask(task, modelData = null) {
     const { type, prompt, imageFile, options } = task;
 
     switch (type) {
@@ -200,112 +464,572 @@ export class TaskManager {
       case 'image-to-3d':
         return await this.executeImageTo3D(prompt, imageFile, options);
       case 'mesh-painting':
-        return await this.executeMeshPainting(prompt, imageFile, options);
+        return await this.executeMeshPainting(prompt, imageFile, options, modelData);
+      case 'mesh-painting-text':
+        return await this.executeTextMeshPainting(prompt, options, modelData);
       case 'mesh-segmentation':
-        return await this.executeMeshSegmentation(options);
+        return await this.executeMeshSegmentation(options, modelData);
       case 'part-completion':
-        return await this.executePartCompletion(prompt, options);
+        return await this.executePartCompletion(prompt, options, modelData);
+      case 'mesh-retopology':
+        return await this.executeMeshRetopology(options, modelData);
+      case 'mesh-uv-unwrapping':
+        return await this.executeMeshUVUnwrapping(options, modelData);
+      case 'mesh-editing-text':
+        return await this.executeMeshEditingText(prompt, options, modelData);
+      case 'mesh-editing-image':
+        return await this.executeMeshEditingImage(prompt, imageFile, options, modelData);
       case 'auto-rigging':
-        return await this.executeAutoRigging(options);
+        return await this.executeAutoRigging(options, modelData);
+      case 'avatar-from-photo':
+        return await this.executeAvatarFromPhoto(prompt, imageFile, options);
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
   }
 
   /**
-   * Execute text-to-3D generation
+   * Execute text-to-3D generation (production API only)
    */
   async executeTextTo3D(prompt, options) {
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`;
     const requestData = {
       text_prompt: prompt,
-      texture_prompt: options.texture_prompt || prompt,
-      texture_resolution: options.texture_resolution || 1024,
-      output_format: options.output_format || 'glb',
-      model_preference: options.model_preference || 'trellis_text_to_textured_mesh'
+      texture_prompt: options?.texture_prompt ?? prompt,
+      texture_resolution: options?.texture_resolution ?? 1024,
+      output_format: options?.output_format ?? 'glb',
+      model_preference: options?.model_preference ?? 'trellis_text_to_textured_mesh'
     };
-
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`, requestData, {
-      headers: { 'Content-Type': 'application/json' },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        this.emit('taskProgress', { progress });
-      }
-    });
-
-    return response.data;
-  }
-
-  /**
-   * Execute image-to-3D generation
-   */
-  async executeImageTo3D(prompt, imageFile, options) {
+    const startTime = Date.now();
     try {
-      // For now, redirect to text-to-3D since image models aren't loaded
-      console.warn('Image-to-3D models are not currently loaded. Using text-to-3D instead.');
-      
-      // Use the image filename as the text prompt
-      const imagePrompt = imageFile ? `image of ${imageFile.name.replace(/\.[^/.]+$/, "")}` : prompt;
-      
-      return await this.executeTextTo3D(imagePrompt, options);
+      const response = await axios.post(endpoint, requestData, {
+        headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+        timeout: 300000,
+        onUploadProgress: (e) => {
+          if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) });
+        }
+      });
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, response.status);
+      return response.data;
     } catch (error) {
-      console.error('Error in executeImageTo3D:', error);
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, error.response?.status ?? 0, error);
+      logger.error('Text-to-3D task failed', error, { prompt, endpoint });
       throw error;
     }
   }
 
   /**
-   * Execute mesh painting
+   * Convert File to base64 string
+   * @param {File} file - File object to convert
+   * @returns {Promise<string>} Base64 string (without data URL prefix)
    */
-  async executeMeshPainting(prompt, imageFile, options) {
+  async fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Remove data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** @param {Blob} blob */
+  async blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * Upload image to 3DAIGC-API file store (preferred path for image-to-textured-mesh).
+   * @returns {Promise<string|null>} file_id or null if upload is unavailable
+   */
+  async uploadImageFileForApi(imageFile) {
+    const uploadUrl = `${this.apiEndpoint}/api/v1/file-upload/image`;
     const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (imageFile) {
-      formData.append('image', imageFile);
+    formData.append('file', imageFile);
+    try {
+      const response = await axios.post(uploadUrl, formData, {
+        headers: { ...get3daigcAuthHeaders() },
+        timeout: 120000,
+        onUploadProgress: (e) => {
+          if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 50) / e.total) });
+        }
+      });
+      const id = response.data?.file_id;
+      return typeof id === 'string' && id.length > 0 ? id : null;
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 404 || status === 405) {
+        logger.info('Image file upload endpoint not available; falling back to image_base64', { uploadUrl, status });
+        return null;
+      }
+      throw err;
     }
-    formData.append('options', JSON.stringify(options));
-
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-
-    return response.data;
   }
 
   /**
-   * Execute mesh segmentation
+   * Execute image-to-3D generation (input is downscaled to max side before upload when in browser).
    */
-  async executeMeshSegmentation(options) {
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-segmentation/segment-mesh`, {
-      options
-    });
+  async executeImageTo3D(prompt, imageFile, options) {
+    if (!imageFile) {
+      return await this.executeTextTo3D(prompt || 'Convert image to 3D', options);
+    }
+    const maxSide =
+      Number(options?.max_image_side ?? import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
+    const preparedImage = await resizeImageFor3daigc(imageFile, maxSide);
 
-    return response.data;
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/image-to-textured-mesh`;
+
+    let imageFileId = null;
+    try {
+      imageFileId = await this.uploadImageFileForApi(preparedImage);
+    } catch (uploadErr) {
+      const st = uploadErr?.response?.status;
+      if (st === 400 || st === 413 || st === 422) {
+        logger.warn('Image file upload rejected; falling back to image_base64', {
+          status: st,
+          detail: uploadErr?.response?.data
+        });
+      } else {
+        throw uploadErr;
+      }
+    }
+
+    const basePayload = {
+      output_format: options?.output_format ?? 'glb',
+      model_preference: options?.model_preference ?? 'hunyuan3dv20_image_to_textured_mesh'
+    };
+    if (options?.texture_resolution != null) {
+      basePayload.texture_resolution = options.texture_resolution;
+    }
+
+    const payload = imageFileId
+      ? { ...basePayload, image_file_id: imageFileId }
+      : {
+          ...basePayload,
+          image_base64: await this.fileToBase64(preparedImage)
+        };
+
+    try {
+      const response = await axios.post(endpoint, payload, {
+        headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+        timeout: 300000,
+        onUploadProgress: () => this.emit('taskProgress', { progress: imageFileId ? 55 : 10 })
+      });
+      const data = response.data;
+      if (data?.job_id) {
+        return { job_id: data.job_id, status: 'queued', message: 'Job queued. Processing...', ...data };
+      }
+      return data;
+    } catch (error) {
+      if (error.response) {
+        const body = error.response.data;
+        let detail = body?.message ?? body?.error ?? body?.detail;
+        if (detail == null && body && typeof body === 'object') {
+          try {
+            detail = JSON.stringify(body);
+          } catch {
+            detail = error.message;
+          }
+        }
+        if (detail == null) detail = error.message;
+        const e = new Error(
+          `API request failed: ${error.response.status} ${error.response.statusText}. ${detail}. Endpoint: ${endpoint}`
+        );
+        e.originalError = error;
+        e.status = error.response.status;
+        throw e;
+      }
+      if (error.request) {
+        const e = new Error(`Network error: No response from server at ${endpoint}. Ensure the API server is running.`);
+        e.originalError = error;
+        throw e;
+      }
+      throw error;
+    }
   }
 
-  /**
-   * Execute part completion
-   */
-  async executePartCompletion(prompt, options) {
+  async executeMeshPainting(prompt, imageFile, options, modelData = null) {
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`;
     const formData = new FormData();
     formData.append('prompt', prompt);
-    formData.append('options', JSON.stringify(options));
-
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/mesh-generation/part-completion`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    if (imageFile) formData.append('image', imageFile);
+    if (modelData) formData.append('model', modelData, 'model.glb');
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
     });
-
     return response.data;
   }
 
   /**
-   * Execute auto rigging
+   * Text-driven mesh painting (3DAIGC-API / Open3DStudio-style); requires mesh GLB blob.
    */
-  async executeAutoRigging(options) {
-    const response = await axios.post(`${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`, {
-      options
+  async executeTextMeshPainting(prompt, options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Text mesh painting requires a mesh (load a model in the viewport first).');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/text-mesh-painting`;
+    const meshBase64 = await this.blobToBase64(modelData);
+    const requestData = {
+      text_prompt: prompt,
+      mesh_base64: meshBase64,
+      output_format: options?.output_format ?? 'glb',
+      model_preference: options?.model_preference ?? 'trellis_text_mesh_painting'
+    };
+    const response = await axios.post(endpoint, requestData, {
+      headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+      timeout: 300000
     });
-
     return response.data;
+  }
+
+  async executeMeshSegmentation(options, modelData = null) {
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-segmentation/segment-mesh`;
+    const config = { timeout: 300000 };
+    if (modelData) {
+      const formData = new FormData();
+      formData.append('model', modelData, 'model.glb');
+      if (options) formData.append('options', JSON.stringify(options));
+      const response = await axios.post(endpoint, formData, {
+        headers: { ...get3daigcAuthHeaders() },
+        ...config,
+        onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+      });
+      return response.data;
+    }
+    const response = await axios.post(endpoint, { options }, { headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() }, ...config });
+    return response.data;
+  }
+
+  async executePartCompletion(prompt, options, modelData = null) {
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/part-completion`;
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    if (modelData) formData.append('model', modelData, 'model.glb');
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    });
+    return response.data;
+  }
+
+  async executeMeshRetopology(options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Mesh retopology requires a mesh (load a model in the viewport first).');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-retopology/retopologize-mesh`;
+    const formData = new FormData();
+    formData.append('model', modelData, 'model.glb');
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    });
+    return response.data;
+  }
+
+  async executeMeshUVUnwrapping(options, modelData = null) {
+    if (!modelData) {
+      throw new Error('UV unwrapping requires a mesh (load a model in the viewport first).');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-uv-unwrapping/unwrap-mesh`;
+    const formData = new FormData();
+    formData.append('model', modelData, 'model.glb');
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    });
+    return response.data;
+  }
+
+  async executeMeshEditingText(prompt, options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Mesh editing (text) requires a mesh (load a model in the viewport first).');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-editing/text-mesh-editing`;
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('model', modelData, 'model.glb');
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    });
+    return response.data;
+  }
+
+  async executeMeshEditingImage(prompt, imageFile, options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Mesh editing (image) requires a mesh (load a model in the viewport first).');
+    }
+    if (!imageFile) {
+      throw new Error('Mesh editing (image) requires a reference image.');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-editing/image-mesh-editing`;
+    const formData = new FormData();
+    formData.append('prompt', prompt || 'Apply reference to mesh');
+    formData.append('model', modelData, 'model.glb');
+    formData.append('image', imageFile);
+    if (options) formData.append('options', JSON.stringify(options));
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    });
+    return response.data;
+  }
+
+  async executeAutoRigging(options, modelData = null) {
+    const endpoint = `${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`;
+    const config = { timeout: 300000 };
+    if (modelData) {
+      const formData = new FormData();
+      formData.append('model', modelData, 'model.glb');
+      if (options) formData.append('options', JSON.stringify(options));
+      const response = await axios.post(endpoint, formData, {
+        headers: { ...get3daigcAuthHeaders() },
+        ...config,
+        onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+      });
+      return response.data;
+    }
+    const response = await axios.post(endpoint, { options }, { headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() }, ...config });
+    return response.data;
+  }
+
+  async executeAvatarFromPhoto(prompt, imageFile, options = {}) {
+    if (!imageFile) {
+      throw new Error('AvatarSDK task requires an input photo.');
+    }
+
+    return avatarSdkService.generateAvatarFromPhoto({
+      imageFile,
+      name: options?.name || prompt || `Avatar ${new Date().toISOString()}`,
+      description: options?.description || '',
+      pipeline: options?.pipeline,
+      pipelineSubtype: options?.pipeline_subtype,
+      onProgress: ({ stage, status, progress }) => {
+        this.emit('taskProgress', { stage, status, progress });
+      }
+    });
+  }
+
+  /**
+   * Build list of job status URLs to try (env override + fallbacks).
+   * @param {string} jobId - Job ID from API
+   * @returns {string[]} URLs to try
+   */
+  _getJobStatusEndpoints(jobId) {
+    // Always use an absolute base URL so requests go to the API host, not the page origin.
+    const fromEnv = (import.meta.env.VITE_API_ENDPOINT || '').trim().replace(/\/$/, '');
+    const fromInstance = (this.apiEndpoint || '').trim().replace(/\/$/, '');
+    const base = ensureAbsoluteUrl(fromEnv || fromInstance);
+    if (!base) return [];
+    const customPath = import.meta.env.VITE_JOB_STATUS_PATH;
+    if (customPath && typeof customPath === 'string' && customPath.trim()) {
+      const path = customPath.trim().replace(/^\/|\/$/g, '');
+      const pathPart = [path, jobId].filter(Boolean).join('/').replace(/\/+/g, '/');
+      const pathPartStatus = [path, jobId, 'status'].filter(Boolean).join('/').replace(/\/+/g, '/');
+      return [`${base}/${pathPart}`, `${base}/${pathPartStatus}`];
+    }
+    // 3DAIGC-API / DGX Spark default: GET /api/v1/system/jobs/{job_id}
+    return [
+      `${base}/api/v1/system/jobs/${jobId}`,
+      `${base}/api/v1/jobs/${jobId}`,
+      `${base}/api/v1/job/${jobId}`,
+      `${base}/api/v1/status/${jobId}`,
+      `${base}/jobs/${jobId}`,
+      `${base}/job/${jobId}/status`
+    ];
+  }
+
+  /**
+   * Check job status from API
+   * @param {string} jobId - Job ID from API
+   * @returns {Promise<Object>} Job status response
+   */
+  async checkJobStatus(jobId) {
+    const possibleEndpoints = this._getJobStatusEndpoints(jobId);
+    let lastError = null;
+    for (let statusEndpoint of possibleEndpoints) {
+      if (!statusEndpoint) continue;
+      // Normalize malformed scheme (e.g. "http/host" -> "http://host") to avoid "http://http/host"
+      if (/^https?:\/[^/]/.test(statusEndpoint)) {
+        statusEndpoint = statusEndpoint.replace(/^(https?):\//, '$1://');
+      }
+      // Force absolute URL so the request always goes to the API host, not the page origin (fixes relative URL → localhost)
+      if (!/^https?:\/\//i.test(statusEndpoint)) {
+        statusEndpoint = `http://${statusEndpoint}`;
+      }
+      try {
+        const response = await axios.get(statusEndpoint, {
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            ...get3daigcAuthHeaders()
+          },
+          timeout: 10000
+        });
+        return response.data;
+      } catch (error) {
+        if (error.response?.status === 404) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (lastError) {
+      const err = new Error(`Job status endpoint not found. Tried: ${possibleEndpoints.join(', ')}`);
+      err.code = 'JOB_STATUS_404';
+      err.all404 = true;
+      throw err;
+    }
+    throw new Error('Unknown error checking job status');
+  }
+
+  /**
+   * Poll job status until completion
+   * @param {string} jobId - Job ID from API
+   * @param {string} taskId - Internal task ID
+   * @param {number} pollInterval - Polling interval in ms (default: 3000)
+   * @param {number} maxAttempts - Maximum polling attempts (default: 200 = 10 minutes)
+   * @returns {Promise<Object>} Final job result
+   */
+  async pollJobStatus(jobId, taskId, pollInterval = 3000, maxAttempts = 200) {
+    let attempts = 0;
+    let lastStatus = 'queued';
+    let lastProgress = 0;
+    let consecutive404 = 0;
+    const maxConsecutive404 = 3;
+
+    console.log(`Starting job polling for job_id: ${jobId}, task_id: ${taskId}`);
+    console.log(`Poll interval: ${pollInterval}ms, Max attempts: ${maxAttempts} (${(maxAttempts * pollInterval / 1000 / 60).toFixed(1)} minutes)`);
+
+    while (attempts < maxAttempts) {
+      try {
+        const jobStatus = await this.checkJobStatus(jobId);
+        consecutive404 = 0;
+
+        // Extract status from various possible fields
+        const status = jobStatus.status ||
+                      jobStatus.job_status ||
+                      jobStatus.state ||
+                      'unknown';
+
+        // Extract progress (0-100)
+        let progress = jobStatus.progress;
+        if (progress === undefined || progress === null) {
+          if (status === 'queued' || status === 'pending') {
+            progress = 5;
+          } else if (status === 'processing' || status === 'running') {
+            progress = Math.min(10 + (attempts / maxAttempts * 80), 90);
+          } else if (status === 'completed' || status === 'success' || status === 'succeeded') {
+            progress = 100;
+          } else {
+            progress = lastProgress || 10;
+          }
+        }
+
+        progress = Math.max(0, Math.min(100, Number(progress) || 0));
+
+        if (status !== lastStatus) {
+          console.log(`Job status: ${lastStatus} -> ${status}`);
+          lastStatus = status;
+        }
+        if (Math.abs(progress - lastProgress) >= 5 || attempts === 0) {
+          this.updateTaskStatus(taskId, 'running', progress);
+          this.emit('taskProgress', { taskId, progress, status });
+          lastProgress = progress;
+        }
+
+        if (status === 'completed' || status === 'success' || status === 'done' || status === 'succeeded') {
+          const r = jobStatus.result || {};
+          const modelUrl =
+            r.mesh_url ||
+            r.model_url ||
+            r.output_mesh_path ||
+            jobStatus.model_url ||
+            jobStatus.result_url ||
+            jobStatus.download_url ||
+            r.download_url;
+          const result = {
+            ...jobStatus,
+            job_id: jobId,
+            status: 'completed',
+            modelUrl,
+            downloadUrl: r.download_url || jobStatus.download_url || jobStatus.result_url || modelUrl,
+            fileUrl: r.file_url || jobStatus.file_url,
+            metadata: r.metadata || jobStatus.metadata || {}
+          };
+          this.updateTaskStatus(taskId, 'running', 100);
+          return result;
+        }
+        if (status === 'failed' || status === 'error' || status === 'failure') {
+          const errorMessage = jobStatus.error ||
+                              jobStatus.error_message ||
+                              jobStatus.message ||
+                              'Job failed';
+          throw new Error(errorMessage);
+        }
+        if (status !== 'processing' && status !== 'running' && status !== 'queued' && status !== 'pending') {
+          console.warn(`Unknown job status: ${status}, continuing to poll...`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+      } catch (error) {
+        if (error.message && (error.message.includes('failed') || error.message.includes('error') || error.message.includes('Job failed'))) {
+          throw error;
+        }
+
+        if (error.code === 'JOB_STATUS_404' || error.all404) {
+          consecutive404++;
+          if (consecutive404 >= maxConsecutive404) {
+            const msg = 'Job submitted; status endpoint not available. Set VITE_JOB_STATUS_PATH in .env if your API supports job status polling.';
+            console.warn(msg);
+            this.updateTaskStatus(taskId, 'running', 10, { job_id: jobId, statusPollingUnavailable: true, message: msg }, null);
+            return { job_id: jobId, status: 'submitted', statusPollingUnavailable: true, message: msg };
+          }
+          // Log once per 404 batch, not every attempt
+          if (consecutive404 === 1) {
+            console.warn('Job status endpoint returned 404; will retry a few times then treat as submitted.');
+          }
+        } else {
+          consecutive404 = 0;
+          console.warn(`Error polling job status (attempt ${attempts + 1}/${maxAttempts}):`, error.message);
+        }
+
+        if (attempts > 20 && (error.code === 'ERR_NETWORK' || error.response?.status >= 500)) {
+          throw new Error(`Network error while polling job status after ${attempts} attempts: ${error.message}`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval * (error.code === 'JOB_STATUS_404' || error.all404 ? 2 : 1.5)));
+        attempts++;
+      }
+    }
+
+    const timeoutMinutes = (maxAttempts * pollInterval / 1000 / 60).toFixed(1);
+    throw new Error(`Job polling timeout: Maximum attempts (${maxAttempts}) reached after ${timeoutMinutes} minutes. Job may still be processing on the server.`);
   }
 
   /**

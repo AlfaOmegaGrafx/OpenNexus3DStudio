@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   saveFileDialog: () => ipcRenderer.invoke('save-file-dialog'),
+  rememberImportDirectory: (dir) => ipcRenderer.invoke('remember-import-directory', dir),
   
   // Menu event listeners
   onMenuNewProject: (callback) => ipcRenderer.on('menu-new-project', callback),

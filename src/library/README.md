@@ -28,6 +28,7 @@ This directory contains various utility scripts for the Character Studio applica
 - **`load-utils.js`**: Provides utility functions for loading assets.
 - **`loadMixamoAnimation.js`**: Loads animations from Mixamo.
 - **`lookatManager.js`**: Manages character head and eye look-at behavior.
+- **`webcamAvatarDriver.js`**: Webcam-based face tracking for avatar control (Kalidokit + MediaPipe). Disabled automatically when WebXR is active. See [Webcam Avatar Control](../../docs/WEBCAM_AVATAR_CONTROL.md).
 - **`loraDataGenerator.js`**: Generates LoRA data.
 - **`manifestDataManager.js`**: Manages data from manifest files.
 - **`manifestRestrictions.js`**: Handles restrictions defined in manifest files.

@@ -70,11 +70,11 @@ When the browser does not grant **`expression-tracking`**, use the **CS XR Face*
 | Step | Component |
 |------|-----------|
 | 1 | `npm run dev` on PC — enables `POST /__native_face_ingest` and `GET /__native_face_sse` |
-| 2 | APK Jetpack face → HTTP POST to ingest (~30 Hz) |
+| 2 | APK **Jetpack** and/or **OpenXR** (`XR_ANDROID_face_tracking`) → HTTP POST to ingest (~30 Hz); OpenXR uses **PBuffer GLES** so ingest can continue during Chrome **Full Space** when `FaceKeeperActivity` is host |
 | 3 | Chrome opens `?nativeFaceRelay=1` → [`nativeFaceRelay.js`](../src/library/nativeFaceRelay.js) EventSource → `nativeFaceBridge` |
-| 4 | XR frame loop uses native weights (same as WebView) |
+| 4 | XR frame loop uses native weights (same as WebView); web cache **30s** while `xrPresenting`, APK handoff stale **10s** |
 
-See [`native/android-xr-face-bridge/README.md`](../native/android-xr-face-bridge/README.md).
+See [`native/android-xr-face-bridge/README.md`](../native/android-xr-face-bridge/README.md) and [`ANDROID_STUDIO_AI_BRIEF.md`](./ANDROID_STUDIO_AI_BRIEF.md).
 
 ## Payload contract (native → web)
 

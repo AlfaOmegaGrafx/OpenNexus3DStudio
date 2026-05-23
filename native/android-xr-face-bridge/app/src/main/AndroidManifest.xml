@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FACE_TRACKING" />
     <!-- WebView getUserMedia({ audio }) — lip sync / Web Audio input -->
@@ -54,6 +55,6 @@
         <service
             android:name=".FaceBridgeForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync|camera" />
+            android:foregroundServiceType="dataSync|camera|microphone" />
     </application>
 </manifest>

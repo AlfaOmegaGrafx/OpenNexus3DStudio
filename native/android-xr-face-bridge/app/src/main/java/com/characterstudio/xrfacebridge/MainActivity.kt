@@ -150,9 +150,16 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         FaceHandoffState.init(this)
-        if (FaceHandoffState.isChromeHandoff()) {
-            pausingForChrome = true
+        val freshLauncherStart =
+            savedInstanceState == null &&
+                intent?.action == Intent.ACTION_MAIN &&
+                intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+        if (freshLauncherStart) {
+            clearChromeHandoff()
+        } else if (FaceHandoffState.canRestoreHandoffSession(isInPictureInPictureMode, pausingForChrome)) {
             FaceKeeper.acquire(this, "activity-restore-handoff")
+        } else if (!isInPictureInPictureMode && !pausingForChrome) {
+            clearChromeHandoff()
         }
 
         FaceHttpRelay.configure(getString(R.string.character_studio_url), BuildConfig.DEBUG)
@@ -704,7 +711,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (FaceHandoffState.isChromeHandoff()) {
+        if (FaceHandoffState.canRestoreHandoffSession(isInPictureInPictureMode, pausingForChrome)) {
             if (!FaceKeeper.isActive()) {
                 FaceKeeper.acquire(this, "activity-resume-handoff")
             }

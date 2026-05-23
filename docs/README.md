@@ -2,6 +2,10 @@
 
 This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
+**Related (repo root):** [Monetization roadmap](../MONETIZATION_ROADMAP.md) — **§11** personalized AI; **[moeChat](https://github.com/moeru-ai/chat)** default companion ([demo](https://chat.moeru.ai/)); optional **[AIRI](https://github.com/AlfaOmegaGrafx/airi)** (v3.2.7+).
+
+**Android XR face (Chrome WebXR relay):** [OPENXR_FACE_TRACKING_ANDROID_XR.md](./OPENXR_FACE_TRACKING_ANDROID_XR.md) · [ANDROID_STUDIO_AI_BRIEF.md](./ANDROID_STUDIO_AI_BRIEF.md) · [`native/android-xr-face-bridge/README.md`](../native/android-xr-face-bridge/README.md)
+
 ### Installation
 
 ```

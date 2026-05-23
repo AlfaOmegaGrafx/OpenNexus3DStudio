@@ -1,5 +1,5 @@
-import * as THREE from "./three.js"
-import { GLTFLoader } from "./three.js"
+import * as THREE from "./three.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { AnimationManager } from "./animationManager"
 import { ScreenshotManager } from "./screenshotManager";
 import { BlinkManager } from "./blinkManager";
@@ -1399,6 +1399,27 @@ export class CharacterManager {
     }
 
     /**
+     * Request microphone and attach FFT lip sync to {@link lipSync} (manifest lipSyncTraits).
+     * @private
+     */
+    async _startLipSyncMicrophoneForAvatar() {
+      if (!this.lipSync) return;
+      try {
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+          console.warn('[CharacterManager] getUserMedia not available; lip sync inactive.');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: false,
+        });
+        this.lipSync.start(stream);
+      } catch (e) {
+        console.warn('[CharacterManager] Microphone not available for lip sync:', e?.message || e);
+      }
+    }
+
+    /**
      * Sets up the VRM model basic setup.
      * @private
      * @param {Object} m - VRM model
@@ -1435,8 +1456,14 @@ export class CharacterManager {
        */
       //this._unregisterMorphTargetsFromManifest(vrm, collectionID);
       
-      if (this.manifestDataManager.isLipsyncTrait(traitID, collectionID))
+      if (this.manifestDataManager.isLipsyncTrait(traitID, collectionID)) {
+        if (this.lipSync) {
+          void this.lipSync.destroy();
+          this.lipSync = null;
+        }
         this.lipSync = new LipSync(vrm);
+        void this._startLipSyncMicrophoneForAvatar();
+      }
 
 
       this._modelBaseSetup(vrm, collectionID, item, traitID, textures, colors);

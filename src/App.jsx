@@ -19,6 +19,7 @@ import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
 import SceneControlsCompact from './components/SceneControlsCompact';
 import * as THREE from './library/three.js';
+import { ensureAbsoluteUrl } from './library/taskManager';
 
 // Import CharacterStudio pages (simplified versions)
 import AppearanceSimple from './pages/AppearanceSimple';
@@ -29,13 +30,25 @@ import ToolsSimple from './pages/ToolsSimple';
 import BottomDisplayMenu from './components/BottomDisplayMenu';
 import './App.css';
 
+/** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
+function filePathToFileUrl(fp) {
+  if (!fp || typeof fp !== 'string') return fp;
+  const t = fp.trim();
+  if (/^(https?:|file:)/i.test(t)) return t;
+  const posix = t.replace(/\\/g, '/');
+  return posix.startsWith('/') ? `file://${posix}` : `file:///${posix}`;
+}
+
 function AppContent() {
   const [isElectron, setIsElectron] = useState(false);
-  const [apiEndpoint, setApiEndpoint] = useState('http://127.0.0.1:7842');
+  const [apiEndpoint, setApiEndpoint] = useState(() =>
+    ensureAbsoluteUrl(import.meta.env.VITE_API_ENDPOINT ?? ''),
+  );
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(true); // CharacterStudio sidebar collapse state - default to collapsed
+  const combinedImportRef = useRef(null);
   
   // Debug class changes
   useEffect(() => {
@@ -94,7 +107,10 @@ function AppContent() {
     rendered: false,
     wireframe: false,
     skeleton: false,
-    partColorize: false
+    partColorize: false,
+    depth: false,
+    normal: false,
+    uv: false
   });
   
   const { 
@@ -137,7 +153,7 @@ function AppContent() {
       if (result && result.modelUrl) {
         // Load the generated model into the viewport
         const modelUrl = result.modelUrl.startsWith('/') ? 
-          `http://127.0.0.1:7842${result.modelUrl}` : 
+          `${apiEndpoint}${result.modelUrl}` : 
           result.modelUrl;
         
         console.log('App: Loading model from URL:', modelUrl);
@@ -152,12 +168,15 @@ function AppContent() {
     return () => {
       window.removeEventListener('taskCompleted', handleTaskCompleted);
     };
-  }, [loadModel]);
+  }, [loadModel, apiEndpoint]);
 
   // Handle render mode changes with state tracking
   const handleRenderModeChange = useCallback((mode) => {
     console.log('Render mode change requested:', mode);
-    
+    if (mode !== 'skeleton') {
+      setSkeletonActive(false);
+    }
+
     // Update render mode states - toggle the selected mode
     setRenderModeStates(prev => {
       const newStates = { ...prev };
@@ -180,15 +199,20 @@ function AppContent() {
     });
   }, [updateRenderMode]);
 
-  // Sync API endpoint with TaskContext
+  // Sync API endpoint with TaskContext and re-check health (3DAIGC-API /health or /api/v1/system/health)
   useEffect(() => {
     setTaskApiEndpoint(apiEndpoint);
-  }, [apiEndpoint, setTaskApiEndpoint]);
+    void forceConnectionCheck();
+  }, [apiEndpoint, setTaskApiEndpoint, forceConnectionCheck]);
 
-  // Check API connection
+  // Check API connection (non-blocking: never throw so page always works)
   useEffect(() => {
     const checkApiConnection = async () => {
-      await checkConnection();
+      try {
+        await checkConnection();
+      } catch (err) {
+        console.warn('App: API check failed (non-blocking):', err?.message || err);
+      }
     };
 
     checkApiConnection();
@@ -200,6 +224,12 @@ function AppContent() {
   const handleFileLoad = useCallback(async (file) => {
     try {
       await loadModel(file);
+      if (typeof file?.path === 'string' && file.path.length > 0 && window.electronAPI?.rememberImportDirectory) {
+        const i = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
+        if (i > 0) {
+          await window.electronAPI.rememberImportDirectory(file.path.slice(0, i));
+        }
+      }
     } catch (error) {
       console.error('Error loading file:', error);
       
@@ -213,19 +243,51 @@ function AppContent() {
   }, [loadModel]);
 
   // Handle AI generation tasks
-  const handleAITask = useCallback(async (taskType, prompt, imageFile = null) => {
-    console.log('App: handleAITask called with:', { taskType, prompt, imageFile });
+  const handleAITask = useCallback(async (taskType, prompt, imageFile = null, options = {}) => {
+    console.log('App: handleAITask called with:', { taskType, prompt, imageFile, options });
+    
+    // Check if task requires a model
+    const requiresModel = [
+      'mesh-segmentation',
+      'auto-rigging',
+      'mesh-painting',
+      'mesh-painting-text',
+      'part-completion',
+      'mesh-retopology',
+      'mesh-uv-unwrapping',
+      'mesh-editing-text',
+      'mesh-editing-image'
+    ].includes(taskType);
+    let modelData = null;
+    
+    // Export current model to GLB if needed
+    if (requiresModel && currentModel && sceneManager) {
+      try {
+        console.log('App: Exporting current model to GLB for', taskType);
+        // Use getGLBBlobData from download-utils
+        const { getGLBBlobData } = await import('./library/download-utils.js');
+        modelData = await getGLBBlobData(currentModel, { optimized: true });
+        console.log('App: Model exported successfully, size:', modelData.size, 'bytes');
+      } catch (error) {
+        console.error('App: Failed to export model:', error);
+        alert(`Failed to export model for ${taskType}: ${error.message}`);
+        return;
+      }
+    }
+    
     try {
       const result = await createAndStartTask({
         type: taskType,
         prompt,
-        imageFile
-      });
+        imageFile,
+        options
+      }, modelData);
       console.log('App: createAndStartTask result:', result);
     } catch (error) {
       console.error(`Error in ${taskType}:`, error);
+      alert(`Error in ${taskType}: ${error.message}`);
     }
-  }, [createAndStartTask]);
+  }, [createAndStartTask, currentModel, sceneManager]);
 
   // Handle menu events from Electron
   useEffect(() => {
@@ -237,8 +299,13 @@ function AppContent() {
       const handleOpen = async () => {
         const result = await window.electronAPI.openFileDialog();
         if (!result.canceled && result.filePaths.length > 0) {
-          // Handle file opening logic here
-          console.log('Opening file:', result.filePaths[0]);
+          const fp = result.filePaths[0];
+          try {
+            await loadModel(filePathToFileUrl(fp));
+          } catch (err) {
+            console.error('Menu Open: failed to load', fp, err);
+            alert(`Failed to open file: ${err?.message || err}`);
+          }
         }
       };
 
@@ -257,7 +324,7 @@ function AppContent() {
         window.electronAPI.removeAllListeners('menu-save');
       };
     }
-  }, [isElectron, clearModel]);
+  }, [isElectron, clearModel, loadModel]);
 
   // Ensure main scene has sky background image from Character Studio
   useEffect(() => {
@@ -323,7 +390,35 @@ function AppContent() {
             <div className="header-controls-group">
               <button 
                 className="header-btn"
-                onClick={() => document.querySelector('input[type="file"]')?.click()}
+                onClick={() => {
+                  console.log('App: Import button clicked');
+                  console.log('App: combinedImportRef.current:', combinedImportRef.current);
+                  if (combinedImportRef.current) {
+                    try {
+                      combinedImportRef.current.openFileDialog();
+                      console.log('App: File dialog opened via ref');
+                    } catch (error) {
+                      console.error('App: Error opening file dialog:', error);
+                      // Fallback to direct DOM query if ref fails
+                      const dropzoneInput = document.querySelector('.combined-import input[type="file"]');
+                      if (dropzoneInput) {
+                        dropzoneInput.click();
+                        console.log('App: File dialog opened via fallback');
+                      } else {
+                        console.warn('App: Could not find file input to trigger');
+                      }
+                    }
+                  } else {
+                    console.warn('App: combinedImportRef.current is null, using fallback');
+                    // Fallback to direct DOM query if ref not available
+                    const dropzoneInput = document.querySelector('.combined-import input[type="file"]');
+                    if (dropzoneInput) {
+                      dropzoneInput.click();
+                    } else {
+                      console.warn('App: Could not find file input to trigger');
+                    }
+                  }
+                }}
                 title="Import File"
               >
                 📁 Import
@@ -382,10 +477,10 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Render Modes */}
+          {/* Render modes + diagnostic shading (header) */}
           <div className="header-section four-button-section">
             <div className="header-section-title">Render</div>
-            <div className="header-controls-group">
+            <div className="header-controls-group" style={{ flexWrap: 'wrap', rowGap: '0.25rem', maxWidth: '240px' }}>
               <button 
                 className={`header-btn ${renderModeStates.solid ? 'active' : ''}`}
                 onClick={() => handleRenderModeChange('solid')}
@@ -498,6 +593,27 @@ function AppContent() {
               >
                 🌈 Parts
               </button>
+              <button
+                className={`header-btn ${renderModeStates.depth ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('depth')}
+                title="Depth buffer visualization"
+              >
+                Depth
+              </button>
+              <button
+                className={`header-btn ${renderModeStates.normal ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('normal')}
+                title="View-space normals"
+              >
+                Normal
+              </button>
+              <button
+                className={`header-btn ${renderModeStates.uv ? 'active' : ''}`}
+                onClick={() => handleRenderModeChange('uv')}
+                title="UV layout debug"
+              >
+                UV
+              </button>
             </div>
           </div>
 
@@ -605,10 +721,7 @@ function AppContent() {
         <div className="scene-controls-container">
           <SceneControlsCompact
             sceneManager={sceneManager}
-            onRenderModeChange={(mode) => {
-              console.log(`🎨 Render mode changed to: ${mode}`);
-              updateRenderMode(mode);
-            }}
+            onRenderModeChange={handleRenderModeChange}
             onLightingChange={(lighting) => {
               console.log('💡 Lighting changed:', lighting);
             }}
@@ -650,7 +763,7 @@ function AppContent() {
       {/* Removed redundant viewport toggle - now controlled by sidebar */}
 
       <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!characterStudioSidebarCollapsed ? 'has-character-studio' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
-        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ position: 'relative' }}>
           {/* Hamburger Menu Button */}
           <button 
             className="hamburger-menu"
@@ -669,7 +782,14 @@ function AppContent() {
               <div className="collapsed-sidebar-icons">
                 <button 
                   className="sidebar-icon"
-                  onClick={() => document.querySelector('input[type="file"]')?.click()}
+                  type="button"
+                  onClick={() => {
+                    try {
+                      combinedImportRef.current?.openFileDialog();
+                    } catch (e) {
+                      console.error('Import from collapsed sidebar:', e);
+                    }
+                  }}
                   data-tooltip="Import Files"
                   title="Import Files"
                 >
@@ -733,10 +853,31 @@ function AppContent() {
               </div>
             )}
 
+          {/* Always mounted: ref must work when sidebar is collapsed (was unmounted before). */}
+          <div
+            className="combined-import-mount"
+            style={
+              sidebarCollapsed
+                ? {
+                    position: 'absolute',
+                    width: 1,
+                    height: 1,
+                    padding: 0,
+                    margin: -1,
+                    overflow: 'hidden',
+                    clipPath: 'inset(50%)',
+                    whiteSpace: 'nowrap',
+                    border: 0,
+                  }
+                : undefined
+            }
+          >
+            <CombinedImport ref={combinedImportRef} onFileLoad={handleFileLoad} />
+          </div>
+
           {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
             <>
-          <CombinedImport onFileLoad={handleFileLoad} />
           <BlendShapeController 
             sceneManager={sceneManager}
             currentModel={currentModel}
@@ -753,6 +894,12 @@ function AppContent() {
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
+          <APIStatus 
+            endpoint={apiEndpoint}
+            isConnected={isConnected}
+            onEndpointChange={setApiEndpoint}
+            onTestConnection={forceConnectionCheck}
+          />
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}
@@ -897,17 +1044,19 @@ function AppContent() {
 
 function App() {
   return (
-    <AudioProvider>
-      <SoundProvider>
-        <SceneProvider>
-          <TaskProvider>
-            <Core3DProvider>
-              <AppContent />
-            </Core3DProvider>
-          </TaskProvider>
-        </SceneProvider>
-      </SoundProvider>
-    </AudioProvider>
+    <ErrorBoundary showDetails={true}>
+      <AudioProvider>
+        <SoundProvider>
+          <SceneProvider>
+            <TaskProvider>
+              <Core3DProvider>
+                <AppContent />
+              </Core3DProvider>
+            </TaskProvider>
+          </SceneProvider>
+        </SoundProvider>
+      </AudioProvider>
+    </ErrorBoundary>
   );
 }
 

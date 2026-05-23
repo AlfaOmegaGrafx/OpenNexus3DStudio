@@ -48,5 +48,10 @@ Some more development screenshots featuring additional character classes, the AI
 
 ## Roadmap
 
-- AI features: Create/Load personality and talk to your VRM
+- AI features: Create/Load personality and talk to your VRM (**companion runtime**, parallel apps — **not** merged): **[moeChat](https://github.com/moeru-ai/chat)** ([demo](https://chat.moeru.ai/)) **default** for WebXR + VRM + voice + AI model settings; **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** for extended companion depth — export/handoff/shared config from Character Studio only
 - Connect wallet to load profiles or mint files
+- Support loading profiles and AI personality from user‑controlled personal data exports (e.g. local personal server / data connectors) while keeping credentials on the user’s device
+- Use an on‑prem or self‑hosted 3D AIGC backend (e.g. 3DAIGC‑API on DGX‑class hardware) as the primary inference engine, including optional profile/personality context for personalized text/image‑to‑3D and editing workflows
+- Integrate with external 3D launchpads (e.g. Solana/Arweave‑based VRM/GLB minting) so avatars and wearables minted there can be assembled from wallet‑owned assets inside Character Studio
+
+Product and revenue detail for the above (x402, tiers, NFT commissions, §11 personalized AI pathway): see [`MONETIZATION_ROADMAP.md`](../../MONETIZATION_ROADMAP.md) at the repository root.

@@ -1,6 +1,35 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const isDev = process.env.NODE_ENV === 'development';
+
+const LAST_IMPORT_DIR_FILE = () => path.join(app.getPath('userData'), 'last-import-directory.txt');
+
+function readStoredImportDir() {
+  try {
+    const p = fs.readFileSync(LAST_IMPORT_DIR_FILE(), 'utf8').trim();
+    if (p && fs.existsSync(p)) return p;
+  } catch (_) {
+    /* first run */
+  }
+  try {
+    return app.getPath('documents');
+  } catch (_) {
+    return undefined;
+  }
+}
+
+function writeStoredImportDir(dir) {
+  if (!dir || typeof dir !== 'string') return;
+  try {
+    fs.writeFileSync(LAST_IMPORT_DIR_FILE(), dir, 'utf8');
+  } catch (e) {
+    console.warn('[electron] Could not persist last import directory:', e?.message || e);
+  }
+}
+
+/** @type {string|undefined|null} null = not yet read from disk */
+let lastImportDirectory = null;
 
 let mainWindow;
 const HOME_URL = 'http://localhost:3000';
@@ -26,6 +55,22 @@ function createWindow() {
   // Load the app - always try localhost first, fallback to file build
   const fallbackFileUrl = `file://${path.join(__dirname, '../build/index.html')}`;
   mainWindow.loadURL(HOME_URL);
+
+  try {
+    const ses = session.defaultSession;
+    ses.setPermissionCheckHandler(
+      (_webContents, permission) => permission === 'media' || permission === 'microphone'
+    );
+    ses.setPermissionRequestHandler((_webContents, permission, callback) => {
+      if (permission === 'media' || permission === 'microphone') {
+        callback(true);
+      } else {
+        callback(false);
+      }
+    });
+  } catch (e) {
+    console.warn('[electron] Could not register media permission handler:', e?.message || e);
+  }
 
   // Fallback if localhost is not available
   const handleFailLoad = () => {
@@ -68,15 +113,39 @@ app.on('activate', () => {
 
 // IPC handlers for file operations
 ipcMain.handle('open-file-dialog', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  if (lastImportDirectory == null) {
+    lastImportDirectory = readStoredImportDir();
+  }
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showOpenDialog(win || undefined, {
     properties: ['openFile'],
+    defaultPath: lastImportDirectory || undefined,
     filters: [
-      { name: '3D Models', extensions: ['glb', 'gltf', 'obj', 'fbx', 'dae', 'stl'] },
+      { name: '3D Models', extensions: ['glb', 'gltf', 'obj', 'fbx', 'dae', 'stl', 'vrm'] },
       { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'tga'] },
       { name: 'All Files', extensions: ['*'] }
     ]
   });
+  if (!result.canceled && result.filePaths && result.filePaths[0]) {
+    lastImportDirectory = path.dirname(result.filePaths[0]);
+    writeStoredImportDir(lastImportDirectory);
+  }
   return result;
+});
+
+ipcMain.handle('remember-import-directory', (_evt, dir) => {
+  if (typeof dir !== 'string' || !dir.trim()) return { ok: false };
+  const normalized = dir.trim();
+  try {
+    if (fs.existsSync(normalized)) {
+      lastImportDirectory = normalized;
+      writeStoredImportDir(lastImportDirectory);
+      return { ok: true };
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return { ok: false };
 });
 
 ipcMain.handle('save-file-dialog', async () => {

@@ -1,17 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const APIStatus = ({ endpoint, isConnected, onEndpointChange }) => {
+const APIStatus = ({ endpoint, isConnected, onEndpointChange, onTestConnection }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [newEndpoint, setNewEndpoint] = useState(endpoint);
+  const [isTesting, setIsTesting] = useState(false);
+
+  useEffect(() => {
+    setNewEndpoint(endpoint);
+  }, [endpoint]);
 
   const handleSaveEndpoint = () => {
-    onEndpointChange(newEndpoint);
+    onEndpointChange(newEndpoint.trim());
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
     setNewEndpoint(endpoint);
     setIsEditing(false);
+  };
+
+  const handleTestConnection = async () => {
+    if (onTestConnection) {
+      setIsTesting(true);
+      try {
+        await onTestConnection();
+      } finally {
+        setIsTesting(false);
+      }
+    }
   };
 
   return (
@@ -22,6 +38,28 @@ const APIStatus = ({ endpoint, isConnected, onEndpointChange }) => {
         </div>
         
         <div className="status-info">
+          {typeof window !== 'undefined' &&
+            window.location?.protocol === 'https:' &&
+            typeof endpoint === 'string' &&
+            endpoint.startsWith('http:') && (
+            <div
+              style={{
+                marginBottom: '0.75rem',
+                padding: '0.5rem',
+                background: '#2c1810',
+                color: '#ffb86c',
+                borderRadius: '4px',
+                fontSize: '0.72rem',
+                lineHeight: 1.45,
+                border: '1px solid #664422'
+              }}
+            >
+              <strong>Mixed content:</strong> This page is HTTPS but the API URL is HTTP. The browser may block some
+              requests. Set <code style={{ background: '#1a1a1a', padding: '0.1rem 0.25rem' }}>VITE_API_ENDPOINT=/__dev_dgx_proxy</code> and{' '}
+              <code style={{ background: '#1a1a1a', padding: '0.1rem 0.25rem' }}>DEV_API_PROXY_TARGET</code> to your API
+              base (HTTP), then restart <code style={{ background: '#1a1a1a', padding: '0.1rem 0.25rem' }}>npm run dev</code>.
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-2">
             <div 
               className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}
@@ -60,12 +98,49 @@ const APIStatus = ({ endpoint, isConnected, onEndpointChange }) => {
               <p className="text-sm text-gray-400 mb-2">
                 Endpoint: {endpoint}
               </p>
-              <button 
-                onClick={() => setIsEditing(true)}
-                className="btn btn-secondary"
-              >
-                Change Endpoint
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleTestConnection}
+                  className="btn btn-primary"
+                  disabled={isTesting}
+                >
+                  {isTesting ? 'Testing...' : 'Test Connection'}
+                </button>
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="btn btn-secondary"
+                >
+                  Change Endpoint
+                </button>
+              </div>
+              {!isConnected && (
+                <div style={{ 
+                  marginTop: '0.75rem', 
+                  padding: '0.5rem', 
+                  background: '#fff3cd', 
+                  color: '#856404',
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  lineHeight: '1.4'
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                    💡 Troubleshooting:
+                  </div>
+                  <ul style={{ margin: '0.25rem 0', paddingLeft: '1.25rem' }}>
+                    <li>
+                      Local <strong>3DAIGC-API</strong> default:{' '}
+                      <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>http://127.0.0.1:8000</code>{' '}
+                      (or your machine/DGX host, e.g. <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>http://dgx-spark.local:7842</code>)
+                    </li>
+                    <li>
+                      HTTPS app + HTTP API: set <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>VITE_API_ENDPOINT=/__dev_dgx_proxy</code> and{' '}
+                      <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>DEV_API_PROXY_TARGET=http://127.0.0.1:8000</code> in <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>.env</code>, then restart <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>npm run dev</code>
+                    </li>
+                    <li>Ensure the API server is running; health is checked at <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>/health</code> or <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>/api/v1/system/health</code></li>
+                    <li>If the API requires a key, set <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>VITE_3DAIGC_API_KEY</code> in <code style={{ background: '#f8f9fa', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>.env</code></li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import * as THREE from "./three.js";
-import { OrbitControls } from "./three.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CharacterManager } from "./characterManager";
 
 export function sceneInitializer(canvasId) {

@@ -1,14 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { VRMLoader } from '../library/vrmLoader';
 
-const CombinedImport = ({ onFileLoad }) => {
+const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
   const [isLoading, setIsLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [vrmMetadata, setVrmMetadata] = useState(null);
   const [loader] = useState(() => new VRMLoader());
 
-  const handleVRMFile = async (file) => {
+  const handleVRMFile = useCallback(async (file) => {
     try {
       setIsLoading(true);
       setValidationResult(null);
@@ -56,29 +56,71 @@ const CombinedImport = ({ onFileLoad }) => {
     } finally {
       setIsLoading(false);
     }
+  }, [onFileLoad]);
+
+  const validateFile = (file) => {
+    const validExtensions = ['.glb', '.gltf', '.obj', '.fbx', '.vrm', '.jpg', '.jpeg', '.png', '.bmp', '.tga'];
+    const extension = '.' + file.name.split('.').pop().toLowerCase();
+    
+    if (!validExtensions.includes(extension)) {
+      return {
+        valid: false,
+        error: `Unsupported file format: ${extension}. Supported formats: ${validExtensions.join(', ')}`
+      };
+    }
+    
+    // Check file size (warn if > 100MB)
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxSize) {
+      return {
+        valid: true,
+        warning: `Large file detected (${(file.size / 1024 / 1024).toFixed(2)}MB). Loading may take a while.`
+      };
+    }
+    
+    return { valid: true };
   };
 
-  const handleFileSelect = async (file) => {
+  const handleFileSelect = useCallback(async (file) => {
     if (!file) return;
+
+    // Validate file
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      alert(`❌ ${validation.error}`);
+      return;
+    }
+    
+    if (validation.warning) {
+      console.warn(validation.warning);
+    }
 
     // Check if it's a VRM file
     if (file.name.toLowerCase().endsWith('.vrm')) {
       await handleVRMFile(file);
     } else {
       // Handle other file types
-      if (onFileLoad) {
-        onFileLoad(file);
+      setIsLoading(true);
+      try {
+        if (onFileLoad) {
+          await onFileLoad(file);
+        }
+      } catch (error) {
+        console.error('File load error:', error);
+        alert(`❌ Failed to load file: ${error.message}`);
+      } finally {
+        setIsLoading(false);
       }
     }
-  };
+  }, [onFileLoad, handleVRMFile]);
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
       handleFileSelect(acceptedFiles[0]);
     }
-  }, []);
+  }, [handleFileSelect]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
       'model/gltf-binary': ['.glb'],
@@ -88,14 +130,48 @@ const CombinedImport = ({ onFileLoad }) => {
       'model/vrm': ['.vrm'],
       'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.tga']
     },
-    multiple: false
+    multiple: false,
+    noClick: false,
+    noKeyboard: false,
+    /** Prefer hidden `<input type="file">` so programmatic `open()` works reliably (Electron + browsers). */
+    useFsAccessApi: false,
   });
+
+  // Expose open method via ref so parent can trigger file dialog
+  useImperativeHandle(ref, () => ({
+    openFileDialog: () => {
+      console.log('CombinedImport: openFileDialog called');
+      console.log('CombinedImport: open function available:', typeof open === 'function');
+      try {
+        if (typeof open === 'function') {
+          open();
+          console.log('CombinedImport: File dialog opened');
+        } else {
+          console.error('CombinedImport: open is not a function');
+        }
+      } catch (error) {
+        console.error('CombinedImport: Error opening file dialog:', error);
+      }
+    }
+  }), [open]);
+
+  // Debug: Log when ref is set
+  useEffect(() => {
+    if (ref && typeof ref === 'object' && 'current' in ref) {
+      console.log('CombinedImport: ref is available, current:', ref.current);
+    }
+  }, [ref]);
 
   return (
     <div className="combined-import">
       <div className="card">
         <div className="card-header">
           <h3 className="card-title">Import Files</h3>
+          {isLoading && (
+            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.25rem' }}>
+              ⏳ Loading...
+            </div>
+          )}
         </div>
         
         <div
@@ -211,6 +287,8 @@ const CombinedImport = ({ onFileLoad }) => {
       </div>
     </div>
   );
-};
+});
+
+CombinedImport.displayName = 'CombinedImport';
 
 export default CombinedImport;

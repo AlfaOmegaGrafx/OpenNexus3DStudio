@@ -91,6 +91,7 @@ object FaceHttpRelay {
                         }
                     } else {
                         successCount++
+                        FaceHandoffState.recordRelayPostSuccess()
                         if (!loggedFirstPost || successCount == 30) {
                             loggedFirstPost = true
                             Log.i(TAG, "Face ingest OK #$successCount → $url (dev relay for Chrome WebXR)")

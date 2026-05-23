@@ -56,10 +56,11 @@ object FaceTrackingCoordinator {
     }
 
     fun ensureFacePipeline(reason: String) {
-        // During Chrome WebXR, Jetpack relay is the path — avoid OpenXR session spam.
-        if (!FaceHandoffState.isChromeHandoff()) {
-            OpenXrFaceEngine.ensureFacePipeline(reason)
-        }
+        // Always try to keep the OpenXR headless engine alive as it handles background/Full Space best.
+        OpenXrFaceEngine.ensureFacePipeline(reason)
+
+        // Jetpack XR remains the primary path for WebView and Home Space, 
+        // and as a fallback/parallel path during Chrome handoff.
         if (!OpenXrFaceEngine.isCollecting() || FaceHandoffState.isChromeHandoff()) {
             XrFaceTrackingEngine.ensureFacePipeline(reason)
         }

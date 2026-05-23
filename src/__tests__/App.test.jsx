@@ -26,7 +26,9 @@ vi.mock('../context/TaskContext', () => ({
     tasks: [],
     isLoading: false,
     checkConnection: vi.fn(),
+    forceConnectionCheck: vi.fn(),
     setApiEndpoint: vi.fn(),
+    getApiEndpoint: () => '',
     createAndStartTask: vi.fn(),
     removeTask: vi.fn(),
     clearCompletedTasks: vi.fn()

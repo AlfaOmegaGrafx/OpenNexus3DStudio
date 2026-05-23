@@ -134,6 +134,29 @@ After configuration, test the integration by asking Cursor to:
 2. Check that your ThirdWeb account has the necessary permissions
 3. Ensure your project is active in the ThirdWeb dashboard
 
+## Playwright MCP (browser automation)
+
+Playwright MCP lets Cursor drive a browser (navigate, click, snapshot) for e2e checks and live testing.
+
+### Setup
+
+1. **Chrome extension (bridge)**  
+   Install the **Playwright MCP Bridge** extension in Chrome:
+   - Chrome Web Store: search for "Playwright MCP Bridge", or
+   - Extension ID: `jakfalbnbhgkpmoaakfflhflbfpkailf`
+
+2. **MCP server**  
+   Configure Playwright MCP once in **Settings → Tools → MCP** (global). Do not add it to the workspace `.cursor/mcp.json` or it will appear twice.
+
+3. **Extension token**  
+   Set the token in the environment where Cursor (the MCP client) runs so the Playwright MCP server can connect to the extension:
+   - **Variable**: `PLAYWRIGHT_MCP_EXTENSION_TOKEN`
+   - **Value**: The token shown in the Playwright MCP Bridge extension UI (copy from the extension).
+   - **Where to set**: In Cursor, if your Playwright MCP server config supports env vars, add it there. Otherwise set it in your system/user environment or in a `.env` file that Cursor loads (do not commit the real token).
+
+4. **Connect**  
+   Open a browser tab via the Playwright MCP Bridge extension and ensure the token in the extension matches the one in your environment. Once connected, you can ask Cursor to e.g. "Open localhost:3000 and check the Cam button."
+
 ### Additional Resources
 
 - [ThirdWeb AI Documentation](https://portal.thirdweb.com/ai/mcp)

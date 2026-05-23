@@ -395,15 +395,15 @@ function updateAvatar(bodyData, faceData) {
 ## 🔮 Future Enhancements
 
 ### Planned Features
-1. **Face Tracking Integration**: Direct mapping from `XR_ANDROID_face_tracking` to VRM blend shapes
+1. **Face Tracking Integration**: Web path in [`xrExpressionTrackingDriver.js`](../src/library/xrExpressionTrackingDriver.js); native OpenXR path documented in **[OPENXR_FACE_TRACKING_ANDROID_XR.md](./OPENXR_FACE_TRACKING_ANDROID_XR.md)** and scaffold **[`native/android-xr-face-bridge/README.md`](../native/android-xr-face-bridge/README.md)**
 2. **Body Tracking Integration**: Real-time skeletal animation from IMU sensors
 3. **Advanced Post-Processing**: More effects (motion blur, depth of field, etc.)
 4. **Audio Visualization**: Real-time audio analysis for lip-sync
 5. **Performance Monitoring**: FPS tracking and optimization suggestions
 
 ### Android XR Integration
-- Native Android XR app using OpenXR
-- Face tracking data streaming to web app
+- Native Android XR app using OpenXR (`XR_ANDROID_face_tracking`) — see [OPENXR_FACE_TRACKING_ANDROID_XR.md](./OPENXR_FACE_TRACKING_ANDROID_XR.md)
+- Face tracking data streaming to web app via `window.__characterStudioNativeFace` ([`nativeFaceBridge.js`](../src/library/nativeFaceBridge.js))
 - Complete avatar animation (body + face + eye)
 
 ---
@@ -432,7 +432,7 @@ function updateAvatar(bodyData, faceData) {
 - [ ] Test WebGPU on various browsers
 - [x] Test WebXR on Android XR devices (Samsung Galaxy XR)
 - [ ] Test post-processing performance
-- [ ] Integrate face tracking data
+- [x] Integrate face tracking data (web: `expression-tracking`; native: `nativeFaceBridge` + [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_XR.md))
 - [ ] Integrate body tracking data
 
 ---

@@ -25,6 +25,11 @@ class FaceKeeperActivity : AppCompatActivity() {
             finish()
             return
         }
+        if (!FaceHandoffState.isChromeHandoff()) {
+            Log.w(TAG, "onCreate without chrome handoff — finishing keeper")
+            finish()
+            return
+        }
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -45,8 +50,13 @@ class FaceKeeperActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!FaceHandoffState.isChromeHandoff()) {
+            Log.w(TAG, "onResume without chrome handoff — finishing keeper")
+            finish()
+            return
+        }
         FaceKeeper.markResumed()
-        FaceHandoffState.setChromeHandoff(true)
+        FaceTrackingCoordinator.setActivity(this)
         FaceTrackingCoordinator.setSessionHost(this)
         FaceTrackingCoordinator.ensureFacePipeline("keeper-onResume")
         XrFaceTrackingEngine.tryReconfigureFaceSession("keeper-onResume")

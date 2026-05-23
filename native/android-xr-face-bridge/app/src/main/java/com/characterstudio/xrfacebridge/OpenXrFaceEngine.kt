@@ -127,10 +127,6 @@ object OpenXrFaceEngine {
 
     fun ensureFacePipeline(reason: String) {
         if (!running || !nativeLoaded) return
-        if (!surfaceReady) {
-            Log.d(TAG, "ensureFacePipeline($reason): GLES surface not ready — deferring")
-            return
-        }
         val activity = activityRef?.get()
         if (activity == null) {
             Log.d(TAG, "ensureFacePipeline($reason): no activity for OpenXR — deferring")
@@ -144,7 +140,7 @@ object OpenXrFaceEngine {
 
     /** Run on the caller thread (main) so OpenXR can claim GLES before Jetpack XR session. */
     fun ensureFacePipelineSync(reason: String): Boolean {
-        if (!running || !nativeLoaded || !surfaceReady) return false
+        if (!running || !nativeLoaded) return false
         val activity = activityRef?.get() ?: return false
         if (nativeRunning && lastPostAgeMs() <= FaceHandoffState.effectiveStaleMs()) return true
         tryStartNative(activity, reason)
@@ -152,7 +148,7 @@ object OpenXrFaceEngine {
     }
 
     private fun tryStartNative(activity: AppCompatActivity, reason: String) {
-        if (!running || !surfaceReady) return
+        if (!running) return
         val failAge = System.currentTimeMillis() - lastNativeFailMs.get()
         if (!nativeRunning && failAge in 0 until 15_000L) {
             Log.d(TAG, "OpenXR backoff (${failAge}ms since last fail, reason=$reason)")

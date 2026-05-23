@@ -345,8 +345,15 @@ export function initRemoteLogClient(options = {}) {
     }
   }
 
-  // Emit a startup marker
-  enqueue('info', ['RemoteLog enabled', { sessionId }])
+  // Emit a startup marker (queued for POST + visible locally without waiting for flush)
+  original.info(
+    '[RemoteLog] Forwarding console to',
+    endpointPath,
+    '| sessionId:',
+    sessionId,
+    '| On XR headset open https://<PC-LAN-IP>:PORT/?remoteLog=1 (localhost on-device only loops back to the headset).',
+  )
+  enqueue('info', ['RemoteLog enabled', { sessionId, endpointPath, pageUrl }])
 
   return { enabled: true, sessionId, flush }
 }

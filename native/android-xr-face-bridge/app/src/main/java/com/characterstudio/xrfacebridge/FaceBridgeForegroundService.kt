@@ -43,11 +43,13 @@ class FaceBridgeForegroundService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-                )
+                var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                // FOREGROUND_SERVICE_TYPE_MICROPHONE requires API 34+ (Android 14).
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                startForeground(NOTIFICATION_ID, buildNotification(), types)
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification())
             }

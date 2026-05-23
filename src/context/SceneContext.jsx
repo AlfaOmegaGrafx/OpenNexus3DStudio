@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useRef, useEffect, useState, useCallback } from 'react';
 import { SceneManager } from '../library/sceneManager';
 import { CharacterManager } from '../library/characterManager';
+import { WebcamAvatarDriver } from '../library/webcamAvatarDriver';
 
 export const SceneContext = createContext();
 
@@ -20,6 +21,9 @@ export const SceneProvider = ({ children }) => {
   const [currentModel, setCurrentModel] = React.useState(null);
   const [renderMode, setRenderMode] = React.useState('solid');
   const [isLoading, setIsLoading] = React.useState(false);
+  const [webcamAvatarActive, setWebcamAvatarActive] = useState(false);
+  const webcamDriverRef = useRef(null);
+  const [lookAtSetupDone, setLookAtSetupDone] = useState(false);
 
   // Initialize scene manager and character manager
   useEffect(() => {
@@ -82,6 +86,18 @@ export const SceneProvider = ({ children }) => {
       };
     }
   }, [isInitialized]);
+
+  // Set up look-at mouse (and animation manager) so BottomDisplayMenu has lookAtManager
+  useEffect(() => {
+    if (!isInitialized || lookAtSetupDone) return;
+    const sm = sceneManagerRef.current;
+    const cm = characterManagerRef.current;
+    if (!sm?.renderer?.domElement || !sm?.camera || !cm || cm.lookAtManager) return;
+    const canvas = sm.renderer.domElement;
+    if (!canvas.id) canvas.id = 'scene-canvas';
+    cm.addLookAtMouse(80, canvas.id, sm.camera, true);
+    setLookAtSetupDone(true);
+  }, [isInitialized, lookAtSetupDone]);
 
   // Initialize scene when container is ready
   const initializeScene = async (container, options = {}) => {
@@ -266,9 +282,62 @@ export const SceneProvider = ({ children }) => {
     return null;
   };
 
-  // Cleanup
+  // Webcam Avatar Control (Kalidokit + MediaPipe). Does not run when WebXR is presenting.
+  // Same resolver drives WebXR Expression Tracking (mouth/blink) when the UA enables it.
+  const getVRMsForWebcam = useCallback(() => {
+    const sm = sceneManagerRef.current;
+    // Viewport VRM (file import / scene) must win over trait avatar slots — otherwise native /
+    // WebXR expression drive updates a CharacterManager VRM that is not the visible model.
+    if (sm?.currentVRM) {
+      return [sm.currentVRM];
+    }
+    const cm = characterManagerRef.current;
+    if (cm?.avatar && typeof cm.avatar === 'object') {
+      const vrms = Object.values(cm.avatar).map((a) => a?.vrm).filter(Boolean);
+      if (vrms.length) return vrms;
+    }
+    return [];
+  }, []);
+
+  useEffect(() => {
+    const sm = sceneManagerRef.current;
+    if (!sm || !isInitialized) return;
+    sm.setXRExpressionVRMProvider(getVRMsForWebcam);
+    return () => sm.setXRExpressionVRMProvider(null);
+  }, [isInitialized, getVRMsForWebcam]);
+
+  const startWebcamControl = async () => {
+    if (webcamDriverRef.current?.active) return true;
+    if (!webcamDriverRef.current) {
+      const sm = sceneManagerRef.current;
+      if (!sm?.renderer) return false;
+      webcamDriverRef.current = new WebcamAvatarDriver({
+        getVRMs: getVRMsForWebcam,
+        getRenderer: () => sceneManagerRef.current?.renderer ?? null,
+        onStateChange: setWebcamAvatarActive
+      });
+    }
+    const ok = await webcamDriverRef.current.start();
+    if (!ok) setWebcamAvatarActive(false);
+    return ok;
+  };
+
+  const stopWebcamControl = () => {
+    if (webcamDriverRef.current) {
+      webcamDriverRef.current.stop();
+      setWebcamAvatarActive(false);
+    }
+  };
+
+  const isWebcamControlActive = () => webcamDriverRef.current?.active ?? false;
+
+  // Cleanup: stop webcam driver before disposing scene
   useEffect(() => {
     return () => {
+      if (webcamDriverRef.current) {
+        webcamDriverRef.current.stop();
+        webcamDriverRef.current = null;
+      }
       if (sceneManagerRef.current) {
         sceneManagerRef.current.dispose();
       }
@@ -311,11 +380,19 @@ export const SceneProvider = ({ children }) => {
     // XR Controls
     enableAR,
     enableVR,
-    
-    // Refs
+
+    // Webcam Avatar Control (disabled automatically when WebXR is active)
+    webcamAvatarActive,
+    startWebcamControl,
+    stopWebcamControl,
+    isWebcamControlActive,
+
+    // Refs (and derived for BottomDisplayMenu)
     containerRef,
     sceneManager: sceneManagerRef.current,
-    characterManager: characterManagerRef.current
+    characterManager: characterManagerRef.current,
+    lookAtManager: characterManagerRef.current?.lookAtManager ?? null,
+    animationManager: characterManagerRef.current?.animationManager ?? null
   };
 
   return (

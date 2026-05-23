@@ -116,7 +116,13 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
 - Runtime request for **`android.permission.FACE_TRACKING`** (required before `xrCreateFaceTrackerANDROID` once OpenXR is wired).
 - **`android.permission.RECORD_AUDIO`** and **`android.permission.CAMERA`** in the manifest + **`WebChromeClient.onPermissionRequest`** so the page can use **`getUserMedia`** (lip sync, webcam) inside the WebView.
 - Background: `FaceBridgeForegroundService` + `FaceTrackingCoordinator` (Jetpack + OpenXR) watchdog → HTTP relay while Chrome WebXR runs.
-- **Chrome handoff:** `FaceKeeperActivity` + PiP before Chrome (~450ms delay); `FaceHandoffState` persists across process restarts and widens stale thresholds (30s APK / 12s web during `xrPresenting`). The foreground service restarts FaceKeeper when handoff is active but no session host. `XrFaceTrackingEngine` does not cancel a live collector when relay is quiet but ticks are fresh; session recycle is debounced (15s). Logcat: `CS-FaceKeeper`, `CS-FaceBridgeSvc`, `CS-JetpackFace` (`face.state not TRACKING` during AR). Keep the PiP panel visible in Home Space during AR.
+- **Chrome handoff (Full Space):** `FaceKeeperActivity` + PiP before Chrome (~450ms delay); `FaceHandoffState` persists across process restarts only if relay posted within **60s** (`recordRelayPostSuccess` on ingest OK). **Cold launcher open** clears handoff and releases keeper (no second black/blank task). **May 2026** Android Studio pass:
+  - **OpenXR headless (Phase 1b):** PBuffer EGL session can start **without** a `TextureView` surface; `FaceKeeperActivity.onResume` registers the OpenXR activity host.
+  - **Coordinator:** OpenXR is preferred for background/immersive; Jetpack remains fallback and runs in parallel during handoff when OpenXR is not posting.
+  - **Stale thresholds:** APK handoff relay stale = **10s** (`CHROME_HANDOFF_STALE_MS`); web cache during `xrPresenting` = **30s** (`nativeFaceBridge.js` / `sceneManager.js`) so Chrome does not flash to zero face while the APK recovers.
+  - **Watchdog:** Recycle when relay is quiet **2×** handoff stale (~20s) even if `face.state` still ticks; collector “stuck” uses **20s** during handoff. Session full recycle debounced **15s**.
+  - **FG service (Android 14+):** `dataSync|camera|microphone` types + `FOREGROUND_SERVICE_MICROPHONE` (microphone type only on API 34+).
+- Logcat: `CS-FaceKeeper`, `CS-FaceBridgeSvc`, `CS-JetpackFace`, `CS-OpenXrFace` (`face.state not TRACKING` during AR). Keep the PiP panel visible in Home Space during AR.
 
 ## Prerequisites (OpenXR — next steps)
 
@@ -137,7 +143,7 @@ Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR he
 
 **Logcat:** `CS-OpenXrNative` / `CS-OpenXrFace` — look for `OpenXR instance ok at apiVersion 1.0.34`, then `OpenXR session created with GLES binding` / `OpenXR face tracker ready`. Galaxy runtime rejects **1.1.x** (`Max supported version is 1.0`). Requires Khronos loader in APK (`prefab = true` + `openxr_loader_for_android` + `uses-native-library libopenxr.google.so`).
 
-**Phase 1b:** hidden `TextureView` (1×1 buffer; `SurfaceView` behind `WebView` often never gets a surface on Galaxy XR) + `xrGetOpenGLESGraphicsRequirementsKHR` + PBuffer EGL for `XrGraphicsBindingOpenGLESAndroidKHR` (`openxr_gfx_egl.cpp`). Remote log shows `faceSrc=jetpack|openxr` when relay is live.
+**Phase 1b:** PBuffer EGL for `XrGraphicsBindingOpenGLESAndroidKHR` (`openxr_gfx_egl.cpp`, `openxr_face_engine.cpp`) — session can start **headless** when no window surface exists (e.g. Chrome immersive, `MainActivity` backgrounded). Optional hidden `TextureView` (1×1) still supported when a surface is available. Remote log payload field `source` / diag `faceSrc=jetpack|openxr` when relay is live.
 
 ## Phase 2 — WebView transport
 

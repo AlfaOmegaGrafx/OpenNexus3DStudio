@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TaskManager } from '../library/taskManager';
+import { TaskManager, ensureAbsoluteUrl } from '../library/taskManager';
 
 // Mock axios
 vi.mock('axios', () => ({
@@ -9,11 +9,19 @@ vi.mock('axios', () => ({
   }
 }));
 
+describe('ensureAbsoluteUrl', () => {
+  it('resolves path-only base against window.location.origin', () => {
+    vi.stubGlobal('window', { location: { origin: 'https://10.0.0.32:3000' } })
+    expect(ensureAbsoluteUrl('/__dev_dgx_proxy')).toBe('https://10.0.0.32:3000/__dev_dgx_proxy')
+    vi.unstubAllGlobals()
+  })
+})
+
 describe('TaskManager', () => {
   let taskManager;
 
   beforeEach(() => {
-    taskManager = new TaskManager('http://127.0.0.1:7842');
+    taskManager = new TaskManager('http://api.example.com');
   });
 
   afterEach(() => {
@@ -24,7 +32,7 @@ describe('TaskManager', () => {
 
   describe('initialization', () => {
     it('should initialize with default values', () => {
-      expect(taskManager.apiEndpoint).toBe('http://127.0.0.1:7842');
+      expect(taskManager.apiEndpoint).toBe('http://api.example.com');
       expect(taskManager.tasks.size).toBe(0);
       expect(taskManager.isConnected).toBe(false);
       expect(taskManager.supportedTypes).toContain('text-to-3d');
