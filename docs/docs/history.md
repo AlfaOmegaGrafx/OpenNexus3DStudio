@@ -48,6 +48,7 @@ Some more development screenshots featuring additional character classes, the AI
 
 ## Roadmap
 
+- **Immersive XR (in repo)**: Main app **WebXR** via `SceneManager` (VR/AR, floor anchoring); **IWSDK lab** at `/xr` for locomotion/grab experiments ([`docs/IWSDK_INTEGRATION.md`](../IWSDK_INTEGRATION.md)); **Galaxy XR** + optional [**CS XR Face** APK](../../native/android-xr-face-bridge/README.md) for blend-shape relay when Chrome lacks expression-tracking ([`docs/OPENXR_FACE_TRACKING_ANDROID_XR.md`](../OPENXR_FACE_TRACKING_ANDROID_XR.md))
 - AI features: Create/Load personality and talk to your VRM (**companion runtime**, parallel apps — **not** merged): **[moeChat](https://github.com/moeru-ai/chat)** ([demo](https://chat.moeru.ai/)) **default** for WebXR + VRM + voice + AI model settings; **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** for extended companion depth — export/handoff/shared config from Character Studio only
 - Connect wallet to load profiles or mint files
 - Support loading profiles and AI personality from user‑controlled personal data exports (e.g. local personal server / data connectors) while keeping credentials on the user’s device

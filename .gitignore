@@ -293,9 +293,8 @@ SCENE_CONTROLS_BACKUP.md
 # MCP Configuration (contains sensitive keys)
 .cursor/mcp.json
 
-# LOCKED FILES - DO NOT DELETE (Keep Local Only - Never Push to Git)
-MONETIZATION_ROADMAP.md
-MONETIZATION_ROADMAP_BACKUP.md
+# Monetization roadmap
+# (Tracked in git; update dates when modifying.)
 # protect-monetization-roadmap.js - PROTECTION SCRIPT - DO NOT DELETE
 
 # Privacy: local diagnostics, uploads, and secrets (never commit)

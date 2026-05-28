@@ -42,11 +42,14 @@ The available models are up to the API backend, refer to [3DAIGC-API](https://gi
 - All locally deployed, it's scalable and easy to add a feature/model both at the frontend and backend
 
 ### OpenNexus3DStudio Features
-- **WebXR Support**: Full VR/AR experiences with floor anchoring
+- **WebXR Support**: Full VR/AR experiences with floor anchoring (main app via `SceneManager`)
   - VR mode with virtual sky backgrounds
   - AR mode with pass-through transparency
-  - Android XR compatibility (Samsung Galaxy XR)
+  - **Samsung Galaxy XR** (Chrome WebXR) as primary on-device XR target
   - Floor-aligned reference spaces for proper positioning
+  - **WebXR expression tracking** when the browser exposes `expression-tracking` (VRM blink / mouth)
+  - **Native face relay** when it does not — companion APK + dev-server ingest (see [OpenXR face tracking](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md))
+- **IWSDK immersive lab** (`/xr`): Meta [Immersive Web SDK](https://iwsdk.dev/) route for locomotion, grab, and spatial interaction experiments — separate from main VRM authoring; validated on **Galaxy XR** at `https://<your-PC-LAN-IP>:3000/xr` ([integration guide](docs/IWSDK_INTEGRATION.md))
 - **WebGPU Rendering**: Automatic WebGPU detection with WebGL fallback
 - **Advanced Post-Processing**: SSAO (Screen Space Ambient Occlusion), Bloom effects, FXAA anti-aliasing
 - **Spatial Audio**: PositionalAudio support for immersive audio experiences
@@ -92,9 +95,13 @@ npm install
 ### Development
 
 ```bash
-# Web development mode 
+# Web development (Vite, port 3000 — use this for Galaxy XR headset testing)
 npm run dev
-# Open [http://localhost:3000](http://localhost:3000)
+# https://localhost:3000  (main app)
+# https://<your-PC-LAN-IP>:3000/xr  (IWSDK immersive lab on headset)
+
+# Optional: IWSDK PC emulator stack (localhost smoke tests only — not a substitute for headset)
+npm run dev:iwsdk
 
 # Desktop development mode
 npm run electron-dev
@@ -129,12 +136,18 @@ WebXR (VR/AR) requires HTTPS to work. For local development:
    ```
 
 3. **Access via HTTPS**:
-   - `https://localhost:3000` (for local testing)
-   - `https://YOUR_IP:3000` (for XR device access, e.g. Galaxy XR)
+   - `https://localhost:3000` — main Character Studio (PC)
+   | URL | Use on Galaxy XR |
+   |-----|------------------|
+   | `https://YOUR_IP:3000/` | **Main app** — VRM authoring, SceneManager AR/VR, **native face relay** |
+   | `https://YOUR_IP:3000/?remoteLog=1&nativeFaceRelay=1` | Same + remote logs + face relay HUD (dev) |
+   | `https://YOUR_IP:3000/xr` | **IWSDK lab only** — grab/locomotion demo cube; **no VRM face relay** |
 
    Run `npm run dev` in **one terminal only** so the server uses port 3000. If the port is in use, the dev server will exit instead of using 3001, 3002, etc.
 
-**XR not working on Galaxy XR?** Use **https** (not http). The dev server serves HTTPS when certs exist in `certs/`. Add your machine's IP to the cert (e.g. `mkcert localhost 127.0.0.1 10.0.0.32`) so the headset trusts it. See [docs/HTTPS_SETUP.md](docs/HTTPS_SETUP.md).
+**Galaxy XR tips:** Use **https** (not http). Add your PC LAN IP to the cert (e.g. `mkcert localhost 127.0.0.1 10.0.0.32`). On `/xr`, do a **full page reload** before Enter VR (hot reload can drop the XR session). Headset console output is forwarded to `logs/remote-log.txt` in dev (`?remoteLog=1` or APK “Open in Chrome” adds it). See [HTTPS setup](docs/HTTPS_SETUP.md) and [IWSDK integration](docs/IWSDK_INTEGRATION.md).
+
+**Face tracking on Galaxy XR:** Use the **main app** (`/`), not `/xr`. If Chrome does not grant WebXR expression APIs, install the [**CS XR Face** APK](native/android-xr-face-bridge/README.md), run `npm run dev`, open **⋮ → Open in Chrome for WebXR (+ face)** — [OpenXR / Android XR face docs](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md). APK currently uses **Jetpack XR only** (`OPENXR_ENABLED=false`); OpenXR face is preserved for a future runtime.
 
 ### Building
 
@@ -316,7 +329,7 @@ npm run dist-linux  # Linux
 This README reflects the current project structure and aligns with the documented roadmaps:
 
 - **[History & Roadmap](docs/docs/history.md)**: Connect wallet to load profiles or mint files; AI personality for VRM; optional profiles/personality from user‑controlled personal data exports; integration with external 3D launchpads for minting avatars and wearables; **[moeChat](https://github.com/moeru-ai/chat)** ([demo](https://chat.moeru.ai/)) as **default** companion runtime for “talk to your VRM” (WebXR); **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** — export/handoff only, not merged into this repo
-- **[Monetization Roadmap](MONETIZATION_ROADMAP.md)**: Revenue streams (x402, SaaS tiers, NFT marketplace) including **§11** personalized AI (DataConnect → Character Studio → 3DAIGC-API), **3d-anvil** launchpad economics, **moeChat-first** companion handoff + optional **AIRI** (v **3.2.7**)
+- **[Monetization Roadmap](MONETIZATION_ROADMAP.md)**: Revenue streams (x402, SaaS tiers, NFT marketplace) including **§11** personalized AI (DataConnect → Character Studio → 3DAIGC-API), **3d-anvil** launchpad economics, **moeChat-first** companion handoff + optional **AIRI**; **v3.2.8** documents **IWSDK `/xr` lab** and **Android XR native face relay**
 - **[Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)**: Programmatic avatar/wearables from connected wallet (RMRK EVM, Thirdweb); soulbound base body + equippable wearables
 - **[Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)**: Ready Player Me migration opportunity (avatar API, GLB export, SDKs)
 
@@ -332,6 +345,10 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - Task management and progress tracking
 
 ### OpenNexus3DStudio Documentation
+- [IWSDK Integration](docs/IWSDK_INTEGRATION.md) - Meta Immersive Web SDK (`/xr` route, Galaxy XR testing, optional PC emulator)
+- [OpenXR Face Tracking (Android XR)](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md) - Native face relay when Chrome lacks expression-tracking
+- [Android XR Face Bridge APK](native/android-xr-face-bridge/README.md) - Companion app build and Chrome handoff
+- [Webcam / Avatar Control](docs/WEBCAM_AVATAR_CONTROL.md) - Desktop webcam + XR expression paths
 - [WebXR Floor Anchoring & Backgrounds](docs/XR_MODE_FLOOR_ANCHORING_AND_BACKGROUNDS.md) - XR implementation details
 - [HTTPS Setup Guide](docs/HTTPS_SETUP.md) - WebXR development setup
 - [Three.js WebGPU & WebXR Migration](docs/THREEJS_WEBGPU_WEBXR_MIGRATION.md) - Technical migration guide
@@ -351,7 +368,7 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [Modder Documentation](docs/docs/Modders/getting-started.md) - Guide for custom assets and manifests (base body = layer 0, soulbound)
 - [Developer Documentation](docs/docs/Developers/overview.md) - API and architecture documentation
 - [History & Roadmap](docs/docs/history.md) - Project history and roadmap (wallet load profiles, mint files, AI personality)
-- [Monetization Roadmap](MONETIZATION_ROADMAP.md) - Spacetime revenue model (**§11**, x402, 3d-anvil, **moeChat-first** companion + optional **AIRI** v3.2.7+)
+- [Monetization Roadmap](MONETIZATION_ROADMAP.md) - Spacetime revenue model (**§11**, x402, 3d-anvil, IWSDK lab, native face bridge, **moeChat-first** companion + optional **AIRI** v3.2.8+)
 
 ## 📄 License
 

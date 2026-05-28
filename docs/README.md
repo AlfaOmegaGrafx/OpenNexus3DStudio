@@ -2,9 +2,11 @@
 
 This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
-**Related (repo root):** [Monetization roadmap](../MONETIZATION_ROADMAP.md) — **§11** personalized AI; **[moeChat](https://github.com/moeru-ai/chat)** default companion ([demo](https://chat.moeru.ai/)); optional **[AIRI](https://github.com/AlfaOmegaGrafx/airi)** (v3.2.7+).
+**Related (repo root):** [Monetization roadmap](../MONETIZATION_ROADMAP.md) — **§11** personalized AI; **[moeChat](https://github.com/moeru-ai/chat)** default companion ([demo](https://chat.moeru.ai/)); optional **[AIRI](https://github.com/AlfaOmegaGrafx/airi)** (v3.2.8+, May 27, 2026 — IWSDK `/xr` lab + native face relay).
 
 **Android XR face (Chrome WebXR relay):** [OPENXR_FACE_TRACKING_ANDROID_XR.md](./OPENXR_FACE_TRACKING_ANDROID_XR.md) · [ANDROID_STUDIO_AI_BRIEF.md](./ANDROID_STUDIO_AI_BRIEF.md) · [`native/android-xr-face-bridge/README.md`](../native/android-xr-face-bridge/README.md)
+
+**IWSDK immersive lab (`/xr`):** [IWSDK_INTEGRATION.md](./IWSDK_INTEGRATION.md) — Meta Immersive Web SDK; Galaxy XR primary, optional PC emulator for smoke tests.
 
 ### Installation
 
