@@ -34,7 +34,7 @@
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "electron": "^32.0.0",
-    "ethers": "^6.15.0",
+    "ethers": "^5.8.0",
     "events": "^3.3.0",
     "express": "^5.1.0",
     "gsap": "^3.11.3",
