@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
@@ -27,8 +27,89 @@ import {
   getNativeFaceWeightsIfFresh,
   getNativeFaceWeightsMaxAgeMs,
 } from './nativeFaceBridge.js';
+import {
+  resumeNativeFacePlaybackScheduling,
+  tickNativeFacePlaybackOnXrFrame,
+} from './nativeFacePlayback.js';
+import {
+  unlockFaceRecordingAudioPlayback,
+  resetFaceRecordingAudioXrUnlock,
+} from './nativeFaceRecordingAudio.js';
 import { sharedHDRManager } from './sharedHDRManager.js';
+import { inferModelFileExtensionFromSource } from './taskModelUrl.js';
+import { get3daigcAuthHeaders } from './taskManager.js';
+import {
+  disposeSplatMesh,
+  disposeSparkRenderer,
+  ensureSparkRenderer,
+  isGaussianSplatExtension,
+  loadSplatMesh,
+} from './sparkSplatManager.js';
+import {
+  clearWorld as clearWorldLayers,
+  computeXrFloorAlignmentY,
+  ensureSceneRoots,
+  loadWorldEnvironmentSplat,
+  loadWorldPackage as loadWorldPackageIntoScene,
+} from './worldSceneLoader.js';
+import { createSceneManagerXrInteraction } from './sceneManagerXrInteraction.js';
+import { ensureXrLocomotionRig } from './sceneManagerXrLocomotion.js';
 import { createDepthVisualizationMaterial, createViewNormalMaterial, createUVMaterial } from './diagnosticMaterials.js';
+import {
+  collectModelBones,
+  collectRigBonesFromGltf,
+  countModelBones,
+  findPrimarySkinnedMesh,
+  getBoneDisplayWorldPosition,
+  getBoneWorldBounds,
+  getMeshLayoutBounds,
+  getViewportLayoutBounds,
+  getPrimarySkeletonBones,
+  logRigAlignmentDiagnostics,
+  mergeModelBones,
+  modelHasSkinnedMesh,
+  normalizeRiggedModelTransforms,
+  rebindSkinnedMeshes,
+} from './rigBoneUtils.js';
+import { validateAigcRigContract } from './aigcRigContract.js';
+import {
+  isBlenderExportedGltf,
+  isDgxApiExportedGltf,
+  isPreservedOrientationGltf,
+  isViewportExportedGltf,
+  shouldPreserveExportedOrientation,
+} from './modelOrientationUtils.js';
+import { createViewportRenderer } from './rendererBootstrap.js';
+
+const SKY_BACKGROUND_URL = '/assets/backgrounds/background4.jpg';
+/** Horizon tone of background4.jpg — shown only until the JPG decode finishes */
+const SKY_FALLBACK_COLOR = 0x8eb6d4;
+
+let skyBackgroundTexturePromise = null;
+
+/** @returns {Promise<THREE.Texture>} */
+export function loadSkyBackgroundTexture() {
+  if (!skyBackgroundTexturePromise) {
+    skyBackgroundTexturePromise = new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load(
+        SKY_BACKGROUND_URL,
+        (texture) => {
+          texture.mapping = THREE.EquirectangularReflectionMapping;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.flipY = false;
+          texture.needsUpdate = true;
+          resolve(texture);
+        },
+        undefined,
+        (err) => {
+          skyBackgroundTexturePromise = null;
+          reject(err);
+        },
+      );
+    });
+  }
+  return skyBackgroundTexturePromise;
+}
 
 export class SceneManager {
   constructor() {
@@ -37,8 +118,21 @@ export class SceneManager {
     this.renderer = null;
     this.controls = null;
     this.currentModel = null;
+    this.currentSplat = null;
+    this.playerRoot = null;
+    this.worldRoot = null;
+    this.propsRoot = null;
+    this.worldEnvironmentSplat = null;
+    this.worldColliderMesh = null;
+    this.worldPropMeshes = [];
+    this.activeWorldId = null;
+    this.activeWorldManifest = null;
+    this.sparkRenderer = null;
     this.renderMode = 'solid';
+    this.rendererType = 'webgl';
+    this.webgpuSupport = null;
     this.isInitialized = false;
+    this._initGeneration = 0;
     this.selectedBoneName = null;
     this.animationId = null;
     this.isRendering = false;
@@ -64,6 +158,7 @@ export class SceneManager {
     
     // Loaders
     this.gltfLoader = new GLTFLoader();
+    this.gltfLoader.setRequestHeader(get3daigcAuthHeaders());
     
     // Configure DRACOLoader for compressed GLTF/GLB models
     this.dracoLoader = new DRACOLoader();
@@ -78,6 +173,9 @@ export class SceneManager {
     
     // Event listeners
     this.eventListeners = new Map();
+
+    /** Bumped on each viewport load so superseded async loads are discarded. */
+    this._viewportLoadGeneration = 0;
     
     // GLB Exporter
     this.glbExporter = new GLBExporter();
@@ -92,6 +190,8 @@ export class SceneManager {
     
     // XR-related properties
     this.vrSceneWrapper = null; // Wrapper group for VR/AR scene offset
+    this.xrLocomotionRig = null; // Locomotion translation inside vrSceneWrapper (Phase 5)
+    this.xrInteraction = null; // Input + grab + locomotion subsystem (Phases 3–5)
     this.xrReferenceSpace = null; // WebXR reference space
     this.xrBaseReferenceSpace = null; // Reference space from session.requestReferenceSpace(...)
     this.xrRenderReferenceSpace = null; // Reference space actually used for rendering (may be offset for recenter)
@@ -132,8 +232,26 @@ export class SceneManager {
     this.xrRecenterCheckFirstLog = false; // Flag to log first call to maybeHandleXRRecenter
     this.xrRecenterCooldownLogged = false; // Flag to prevent spam during cooldown
 
+    // XR exit: Menu / B / system on rising edge (IWSDK-style); grip long-press still recenters.
+    this._xrExitPrevPressed = new Map(); // Map<padKey, Map<buttonIndex, boolean>>
+    this._xrExitInFlight = false;
+    this._xrExitCooldownUntil = 0;
+    this._xrNoWebXrInputSources = false;
+    // In-app Menu/B exit is opt-in — Galaxy XR maps many buttons to index 5; default off restores pre-feature behavior.
+    this.xrMenuExitEnabled = false; // ?xrMenuExit=1
+    this.xrGazeExitEnabled = false; // ?xrGazeExit=1 — off by default (accidental gaze looked like "kicked out")
+    this.vrExitHud = null;
+    this._xrGazeExitDwellStart = 0;
+    this._xrGazeExitHintLogged = false;
+    this._xrGazeExitVec = new THREE.Vector3();
+    this._xrGazeExitCamDir = new THREE.Vector3();
+
     /** @type {(() => unknown[]) | null} Returns VRM instances to drive via WebXR Expression Tracking */
     this.xrExpressionVRMProvider = null;
+    /** @type {(() => import('three').Object3D[]) | null} */
+    this.viewportRenderRootsProvider = null;
+    /** @type {(() => void) | null} Re-applies webcam Holistic pose/hands each frame (after animation). */
+    this._webcamBodyFrameHook = null;
     this.xrExpressionFeatureLogged = false;
     /** Log once per immersive session: enabledFeatures vs XRFrame.expressions (for ?remoteLog=1 / DevTools) */
     this._xrExprFirstFrameDiagLogged = false;
@@ -196,6 +314,33 @@ export class SceneManager {
    */
   setXRExpressionVRMProvider(fn) {
     this.xrExpressionVRMProvider = typeof fn === 'function' ? fn : null;
+  }
+
+  /** Trait avatar meshes + file import (for skeleton / render modes). */
+  setViewportRenderRootsProvider(fn) {
+    this.viewportRenderRootsProvider = typeof fn === 'function' ? fn : null;
+  }
+
+  _getViewportRenderRoots() {
+    if (typeof this.viewportRenderRootsProvider === 'function') {
+      const roots = this.viewportRenderRootsProvider();
+      if (Array.isArray(roots) && roots.length > 0) {
+        return roots.filter(Boolean);
+      }
+    }
+    const vrm = this._resolveExpressionVRM();
+    if (this.currentModel) {
+      return [this.currentModel];
+    }
+    if (vrm?.scene) {
+      return [vrm.scene];
+    }
+    return [];
+  }
+
+  /** Register per-frame webcam body rig callback (pose + hands); cleared when Cam stops. */
+  setWebcamBodyFrameHook(fn) {
+    this._webcamBodyFrameHook = typeof fn === 'function' ? fn : null;
   }
 
   /**
@@ -524,23 +669,296 @@ export class SceneManager {
     // Heuristic: if there's only one button (common for headset touchpad), allow it.
     if (count === 1) return [0];
 
-    // Prefer "menu/home" style buttons on many controllers (often 2 or 3),
-    // but avoid index 0 (trigger/select) by default.
+    // Grip long-press only — Menu / B / face buttons exit on press (see isXRSessionExitButton).
     const candidates = [];
-    // For headset input sources / touchpad-style profiles, allow index 0 as a long-press gesture.
-    if (isHeadsetInput || looksLikeTouchpad) candidates.push(0);
-    // Some controllers expose a system/menu-like button at index 1.
-    if (count > 1) candidates.push(1);
-    if (count > 3) candidates.push(3);
-    if (count > 2) candidates.push(2);
-    if (count > 4) candidates.push(4);
-    if (count > 5) candidates.push(5);
+    if (isHeadsetInput || looksLikeTouchpad) {
+      if (count >= 1) candidates.push(0);
+    } else if (count > 1) {
+      candidates.push(1);
+    }
 
-    // If nothing matched, fall back to last button (often system/menu-ish).
-    if (candidates.length === 0 && count > 1) candidates.push(count - 1);
-
-    // Deduplicate
     return Array.from(new Set(candidates)).filter((i) => i >= 0 && i < count);
+  }
+
+  _getActiveXRSession() {
+    try {
+      return this.renderer?.xr?.getSession?.() || this.xrSession || null;
+    } catch {
+      return this.xrSession || null;
+    }
+  }
+
+  /** Galaxy XR / some runtimes expose inputSources without Array.prototype.map */
+  _getXRInputSources(session = null) {
+    const sess = session || this._getActiveXRSession() || this.xrSession;
+    if (!sess?.inputSources) return [];
+    try {
+      return Array.from(sess.inputSources);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Galaxy XR hand tracking: pinch/select is button 4 on a 5-button gamepad — not Menu/B. */
+  _isXRHandTrackingInputSource(inputSource) {
+    if (!inputSource) return false;
+    const profiles = Array.isArray(inputSource.profiles) ? inputSource.profiles : [];
+    const p = profiles.join(' ').toLowerCase();
+    return (
+      p.includes('generic-hand') ||
+      p.includes('hand-select') ||
+      p.includes('generic-fixed-hand') ||
+      p.includes('hand-tracking')
+    );
+  }
+
+  /** Headset touchpad / system only — never hand-tracking profiles. */
+  _isXRHeadsetSystemInputSource(inputSource) {
+    if (!inputSource) return false;
+    if (this._isXRHandTrackingInputSource(inputSource)) return false;
+    if (inputSource.handedness === 'none') return true;
+    const profiles = Array.isArray(inputSource.profiles) ? inputSource.profiles : [];
+    const profilesStr = profiles.join(' ').toLowerCase();
+    return (
+      profilesStr.includes('touchpad') ||
+      profilesStr.includes('cardboard') ||
+      profilesStr.includes('daydream') ||
+      profilesStr.includes('gear') ||
+      profilesStr.includes('oculus-go')
+    );
+  }
+
+  /**
+   * Physical Menu / B (Quest-style indices 5–7). Not hand pinch (index 4 on 5-btn pads).
+   */
+  isXRSessionExitButton(inputSource, buttonIndex, button, buttonCount) {
+    if (!button) return false;
+    // Ignore touched/ghost axes — Galaxy XR reports touched on buttons 4–5 without a firm press.
+    const active = !!(
+      button.pressed ||
+      (typeof button.value === 'number' && button.value > 0.85)
+    );
+    if (!active) return false;
+
+    if (inputSource && this._isXRHandTrackingInputSource(inputSource)) {
+      return false;
+    }
+
+    const handedness = inputSource?.handedness;
+    const isHeadsetInput = handedness === 'none';
+
+    const isQuestMenuOrB =
+      buttonIndex === 5 ||
+      buttonIndex === 6 ||
+      buttonIndex === 7 ||
+      (buttonCount >= 8 && buttonIndex === buttonCount - 1);
+
+    if (!inputSource) {
+      if (buttonIndex === 0 || buttonIndex === 1) return false;
+      if (this._xrNoWebXrInputSources) {
+        return buttonIndex === 5 || buttonIndex === 6 || buttonIndex === 7;
+      }
+      return isQuestMenuOrB;
+    }
+
+    if (handedness === 'left' || handedness === 'right') {
+      if (buttonIndex === 0 || buttonIndex === 1) return false;
+      return isQuestMenuOrB;
+    }
+    if (isHeadsetInput || this._isXRHeadsetSystemInputSource(inputSource)) return true;
+    return false;
+  }
+
+  isXRSystemExitInputSource(inputSource) {
+    return this._isXRHeadsetSystemInputSource(inputSource);
+  }
+
+  _xrExitPadKey(gamepad, inputSource) {
+    const idx = typeof gamepad?.index === 'number' ? gamepad.index : 'na';
+    const hand = inputSource?.handedness ?? 'nav';
+    return `${idx}:${hand}`;
+  }
+
+  _pollGamepadForExitPress(gamepad, inputSource, time) {
+    if (!gamepad?.buttons?.length) return false;
+    const padKey = this._xrExitPadKey(gamepad, inputSource);
+    let prevMap = this._xrExitPrevPressed.get(padKey);
+    if (!prevMap) {
+      prevMap = new Map();
+      this._xrExitPrevPressed.set(padKey, prevMap);
+    }
+
+    for (let i = 0; i < gamepad.buttons.length; i += 1) {
+      const btn = gamepad.buttons[i];
+      const active = !!(
+        btn.pressed ||
+        (typeof btn.value === 'number' && btn.value > 0.85)
+      );
+      const wasActive = prevMap.get(i) || false;
+      prevMap.set(i, active);
+      if (active && !wasActive) {
+        const isExit = this.isXRSessionExitButton(
+          inputSource,
+          i,
+          btn,
+          gamepad.buttons.length,
+        );
+        if (this.xrDebugInputs) {
+          console.info('[XR] Gamepad button down:', {
+            buttonIndex: i,
+            gamepadIndex: gamepad.index,
+            handedness: inputSource?.handedness,
+            countsAsExit: isExit,
+            noWebXrInputSources: this._xrNoWebXrInputSources,
+          });
+        }
+        if (!isExit) continue;
+        this.requestXRSessionExit('gamepad-press', {
+          handedness: inputSource?.handedness,
+          buttonIndex: i,
+          gamepadIndex: gamepad.index,
+          profiles: inputSource?.profiles,
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  requestXRSessionExit(reason, meta = {}) {
+    const session = this._getActiveXRSession();
+    if (!session || this._xrExitInFlight) return;
+    const now =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+    if (now < (this._xrExitCooldownUntil || 0)) return;
+
+    this._xrExitInFlight = true;
+    this._xrExitCooldownUntil = now + 800;
+    console.info('[XR] Ending session:', reason, meta);
+    Promise.resolve(session.end())
+      .catch((e) => {
+        console.warn('[XR] session.end() failed:', e?.message || e);
+      })
+      .finally(() => {
+        this._xrExitInFlight = false;
+      });
+  }
+
+  _logNavigatorGamepadsDiagnostic(time) {
+    if (!this.xrDebugInputs || time - (this._xrNavGamepadDiagAt || 0) < 1000) return;
+    this._xrNavGamepadDiagAt = time;
+    const pads =
+      typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function'
+        ? navigator.getGamepads()
+        : [];
+    const summary = [];
+    for (let i = 0; i < pads.length; i += 1) {
+      const gp = pads[i];
+      if (!gp) continue;
+      const pressed = [];
+      if (gp.buttons?.length) {
+        for (let b = 0; b < gp.buttons.length; b += 1) {
+          const btn = gp.buttons[b];
+          if (btn?.pressed || btn?.touched || (btn?.value ?? 0) > 0.1) {
+            pressed.push({ i: b, v: btn.value, p: !!btn.pressed, t: !!btn.touched });
+          }
+        }
+      }
+      summary.push({
+        slot: i,
+        connected: !!gp.connected,
+        id: gp.id || '',
+        buttons: gp.buttons?.length || 0,
+        pressed,
+      });
+    }
+    console.log('🔍 XR navigator.getGamepads() (1/sec):', summary);
+  }
+
+  /**
+   * Head-locked exit panel when controllers are not exposed via WebXR (common on Galaxy XR).
+   * Look at the red panel lower-right and hold gaze ~2s to exit.
+   */
+  createVRExitHud() {
+    this.removeVRExitHud();
+    if (!this.xrGazeExitEnabled || !this.camera) return;
+
+    const geo = new THREE.PlaneGeometry(0.24, 0.09);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x8b2020,
+      transparent: true,
+      opacity: 0.88,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'VRExitHud';
+    mesh.position.set(0.32, -0.2, -0.5);
+    mesh.renderOrder = 10000;
+    this.camera.add(mesh);
+    this.vrExitHud = mesh;
+    this._xrGazeExitDwellStart = 0;
+    this._xrGazeExitHintLogged = false;
+    console.info('[XR] Exit HUD: look at the red panel (lower-right) for 2s to leave VR');
+  }
+
+  removeVRExitHud() {
+    if (this.vrExitHud && this.camera) {
+      this.camera.remove(this.vrExitHud);
+      this.vrExitHud.geometry?.dispose();
+      this.vrExitHud.material?.dispose();
+    }
+    this.vrExitHud = null;
+    this._xrGazeExitDwellStart = 0;
+    this._xrGazeExitHintLogged = false;
+  }
+
+  maybeHandleXRGazeExit(time) {
+    if (!this.vrExitHud || !this.camera) return;
+
+    this.camera.getWorldDirection(this._xrGazeExitCamDir);
+    this.vrExitHud.getWorldPosition(this._xrGazeExitVec);
+    this._xrGazeExitVec.sub(this.camera.position).normalize();
+    const dot = this._xrGazeExitCamDir.dot(this._xrGazeExitVec);
+    const GAZE_THRESHOLD = 0.9;
+    const DWELL_MS = 2000;
+
+    if (dot >= GAZE_THRESHOLD) {
+      if (!this._xrGazeExitDwellStart) {
+        this._xrGazeExitDwellStart = time;
+        if (!this._xrGazeExitHintLogged) {
+          this._xrGazeExitHintLogged = true;
+          console.info('[XR] Gaze on Exit panel — hold 2s to leave VR');
+        }
+      } else if (time - this._xrGazeExitDwellStart >= DWELL_MS) {
+        this.requestXRSessionExit('gaze-dwell-exit', { dot: Number(dot.toFixed(3)) });
+      }
+    } else {
+      this._xrGazeExitDwellStart = 0;
+    }
+  }
+
+  /** Exit on Menu / B press (rising edge); opt-in via ?xrMenuExit=1 only. */
+  maybeHandleXRControllerExit(time) {
+    if (!this.xrMenuExitEnabled || !this._getActiveXRSession()) return;
+
+    this._logNavigatorGamepadsDiagnostic(time);
+
+    const session = this._getActiveXRSession();
+    const sources = this._getXRInputSources(session);
+    for (const src of sources) {
+      if (src?.gamepad && this._pollGamepadForExitPress(src.gamepad, src, time)) return;
+    }
+
+    const pads =
+      typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function'
+        ? navigator.getGamepads()
+        : [];
+    for (const gp of pads) {
+      if (gp?.connected && this._pollGamepadForExitPress(gp, null, time)) return;
+    }
   }
 
   /**
@@ -572,7 +990,7 @@ export class SceneManager {
     }
 
     const holdMs = 900; // long-press threshold
-    const sources = this.xrSession.inputSources || [];
+    const sources = this._getXRInputSources(this.xrSession);
     
     // Log when function is called (throttled to avoid spam, but always log when there's activity)
     const shouldLogCheck = time - this.xrLastRecenterCheckLog >= 500; // Log every 500ms max
@@ -601,6 +1019,7 @@ export class SceneManager {
     // Low-noise diagnostic logging (throttled to once per second, dev-gated)
     if (this.xrDebugInputs && time - this.xrLastDiagnosticLog >= 1000) {
       this.xrLastDiagnosticLog = time;
+      this._logNavigatorGamepadsDiagnostic(time);
       const diagnostic = sources.map((src, idx) => {
         const gp = src?.gamepad;
         const buttonStates = gp?.buttons ? Array.from(gp.buttons).map((btn, i) => ({
@@ -831,13 +1250,16 @@ export class SceneManager {
    * @param {Object} options - Scene configuration options
    */
   async initialize(container, options = {}) {
+    const initId = ++this._initGeneration;
+    const stale = () => initId !== this._initGeneration;
+
     try {
       this.sceneHostElement = container;
 
       const {
         width = container.clientWidth,
         height = container.clientHeight,
-        backgroundColor = 0x1a1a1a,
+        backgroundColor = SKY_FALLBACK_COLOR,
         enableShadows = true,
         enableAntialias = true
       } = options;
@@ -845,6 +1267,7 @@ export class SceneManager {
       // Create scene
       this.scene = new THREE.Scene();
       this.scene.background = new THREE.Color(backgroundColor);
+      ensureSceneRoots(this);
 
       // Create camera
       this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
@@ -854,8 +1277,32 @@ export class SceneManager {
       const webglSupport = this.checkWebGLSupport();
       console.log('🔍 WebGL Support Check:', webglSupport);
 
-      // Create renderer with comprehensive WebGL fallback
+      // WebGPU is opt-in: GridHelper and legacy GLTF materials use ShaderMaterial paths
+      // that break the viewport on WebGPURenderer (see remote-log NodeMaterial errors).
+      const preferWebGPU =
+        options.preferWebGPU ??
+        (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PREFER_WEBGPU === '1');
+
+      // Create renderer — try WebGPU first, then WebGL fallbacks
       let renderer;
+      let webgpuBootstrap = null;
+      if (preferWebGPU) {
+        webgpuBootstrap = await createViewportRenderer({
+          width,
+          height,
+          enableAntialias,
+          enableShadows,
+        });
+      }
+      if (webgpuBootstrap?.renderer) {
+        renderer = webgpuBootstrap.renderer;
+        this.rendererType = webgpuBootstrap.type;
+        this.webgpuSupport = webgpuBootstrap.webgpuSupport;
+        console.log(`✅ Using ${this.rendererType} viewport renderer`);
+      }
+
+      if (stale()) return;
+
       const rendererConfigs = [
         // High-performance configuration
         {
@@ -922,16 +1369,19 @@ export class SceneManager {
       ];
 
       let lastError = null;
-      for (const rendererConfig of rendererConfigs) {
-        try {
-          console.log(`🔄 Trying ${rendererConfig.name} WebGL configuration...`);
-          renderer = new THREE.WebGLRenderer(rendererConfig.config);
-          console.log(`✅ ${rendererConfig.name} WebGL renderer created successfully`);
-          break;
-        } catch (error) {
-          console.warn(`⚠️ ${rendererConfig.name} WebGL failed:`, error.message);
-          lastError = error;
-          continue;
+      if (!renderer) {
+        for (const rendererConfig of rendererConfigs) {
+          try {
+            console.log(`🔄 Trying ${rendererConfig.name} WebGL configuration...`);
+            renderer = new THREE.WebGLRenderer(rendererConfig.config);
+            this.rendererType = 'webgl';
+            console.log(`✅ ${rendererConfig.name} WebGL renderer created successfully`);
+            break;
+          } catch (error) {
+            console.warn(`⚠️ ${rendererConfig.name} WebGL failed:`, error.message);
+            lastError = error;
+            continue;
+          }
         }
       }
 
@@ -949,6 +1399,7 @@ export class SceneManager {
             });
             console.log('✅ Software renderer created as fallback');
             this.isSoftwareRenderer = true;
+            this.rendererType = 'software';
           } catch (softwareError) {
             console.error('❌ Even software rendering failed:', softwareError);
             throw new Error(`WebGL is not supported on this system. Last error: ${lastError?.message}. Please try: 1) Updating your browser, 2) Updating graphics drivers, 3) Enabling hardware acceleration, 4) Using a different browser.`);
@@ -959,12 +1410,15 @@ export class SceneManager {
       }
       
       this.renderer = renderer;
+      if (typeof window !== 'undefined') {
+        window.__characterStudioWebXrRenderer = renderer;
+      }
       this.renderer.setSize(width, height);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
       
-      // Set renderer clear color to match background (will be overridden by texture when loaded)
-      // Use black (0x000000) with full opacity so background texture shows through
-      this.renderer.setClearColor(0x000000, 1.0);
+      // Match sky fallback until the equirectangular JPG is ready (avoids black/dark flash)
+      this.renderer.setClearColor(SKY_FALLBACK_COLOR, 1.0);
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       
       // Enable WebXR support
       if (this.renderer.xr) {
@@ -988,6 +1442,12 @@ export class SceneManager {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.0;
 
+      if (stale()) return;
+      if (!this.camera) {
+        this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        this.camera.position.set(0, 2.5, 2.5);
+      }
+
       // Create enhanced controls with better UX
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
@@ -1003,11 +1463,13 @@ export class SceneManager {
       this.controls.maxPolarAngle = Math.PI;
       this.controls.target.set(0, 1, 0); // Look at human height
 
-      // Setup lighting
-      this.setupLighting();
+      // Setup lighting (soft preset is the app default)
+      this.lights = { ambient: [], directional: [], point: [], hemisphere: [] };
+      this.setLighting('soft');
 
-      // Setup HDR environment map
-      this.setupHDREnvironment();
+      // Setup sky background before first frame (no dark → bright flash)
+      await this.setupHDREnvironment();
+      if (stale()) return;
 
       // Ground plane removed - user doesn't want it
 
@@ -1032,6 +1494,12 @@ export class SceneManager {
       this.setupWebViewSurvivalHooks();
 
       this.isInitialized = true;
+      try {
+        ensureSparkRenderer(this);
+        console.log('✅ SparkRenderer attached for Gaussian splat support');
+      } catch (sparkError) {
+        console.warn('SparkRenderer init skipped:', sparkError?.message || sparkError);
+      }
       console.log('✅ SceneManager: Scene initialized successfully');
       console.log('✅ SceneManager: Scene details:', {
         scene: !!this.scene,
@@ -1057,7 +1525,13 @@ export class SceneManager {
         });
       }
 
-      return { scene: this.scene, camera: this.camera, renderer: this.renderer, controls: this.controls };
+      return {
+        scene: this.scene,
+        camera: this.camera,
+        renderer: this.renderer,
+        controls: this.controls,
+        rendererType: this.rendererType,
+      };
     } catch (error) {
       console.error('❌ SceneManager: Failed to initialize scene:', error);
       console.error('❌ SceneManager: Error details:', {
@@ -1153,64 +1627,49 @@ export class SceneManager {
   }
 
   /**
-   * Setup sky background image from Character Studio
+   * Load and apply the sky background (await during scene init so first frame is correct).
    */
-  setupHDREnvironment() {
+  async setupHDREnvironment() {
     if (!this.scene) return;
-    
-    // Load the sky background image
-    const textureLoader = new THREE.TextureLoader();
-    console.log('📸 Loading sky background texture from /assets/backgrounds/background4.jpg');
-    textureLoader.load(
-      '/assets/backgrounds/background4.jpg',
-      (texture) => {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.flipY = false; // Equirectangular textures typically don't need flipping
-        texture.needsUpdate = true;
 
-        // Always keep a reference to the loaded sky texture so VR can restore it even if AR clears background.
-        this.originalSceneBackground = this.originalSceneBackground ?? texture;
-
-        // In AR, background must remain null (pass-through).
-        // IMPORTANT: This callback can run before `this.xrSession` is assigned (race), so also key off `this.xrMode`
-        // and the renderer clear alpha which AR sets to 0.
-        const isPresenting = !!this.renderer?.xr?.isPresenting;
-        const blendMode = this.xrSession?.environmentBlendMode;
-        const isARByBlend = blendMode === 'alpha-blend' || blendMode === 'additive' || this.xrSession?.mode === 'immersive-ar';
-        const isARByModeFlag = this.xrMode === 'ar';
-        const isTransparentClear =
-          typeof this.renderer?.getClearAlpha === 'function' ? this.renderer.getClearAlpha() === 0 : false;
-
-        const shouldSuppressBackground = isPresenting && (isARByBlend || isARByModeFlag || isTransparentClear);
-
-        if (shouldSuppressBackground) {
-          // Keep pass-through working
-          this.scene.background = null;
-          // Optional: still use for lighting/reflections
-          this.scene.environment = texture;
-          console.log('📱 AR active: sky texture loaded, background suppressed (pass-through).');
-        } else {
-          this.scene.background = texture;
-        }
-        console.log('✅ Sky background texture loaded and set:', texture);
-        console.log('✅ Background type:', this.scene.background ? this.scene.background.constructor.name : 'null');
-        console.log('✅ Background texture settings:', {
-          mapping: texture.mapping,
-          colorSpace: texture.colorSpace,
-          flipY: texture.flipY,
-          image: texture.image ? `${texture.image.width}x${texture.image.height}` : 'no image'
-        });
-      },
-      (progress) => {
-        console.log('📸 Background texture loading progress:', progress);
-      },
-      (error) => {
-        console.error('❌ Failed to load sky background image:', error);
-        // Keep the color background if texture fails
-        console.log('⚠️ Keeping default color background due to texture load failure');
+    console.log(`📸 Loading sky background texture from ${SKY_BACKGROUND_URL}`);
+    try {
+      const texture = await loadSkyBackgroundTexture();
+      this.applySkyBackgroundTexture(texture);
+    } catch (error) {
+      console.error('❌ Failed to load sky background image:', error);
+      console.log('⚠️ Keeping sky fallback color background due to texture load failure');
     }
-    );
+  }
+
+  /**
+   * Apply a configured equirectangular sky texture to the scene (respects AR pass-through).
+   * @param {THREE.Texture} texture
+   */
+  applySkyBackgroundTexture(texture) {
+    if (!this.scene || !texture) return;
+
+    this.configureSceneBackgroundTexture(texture);
+    this.originalSceneBackground = this.originalSceneBackground ?? texture;
+
+    const isPresenting = !!this.renderer?.xr?.isPresenting;
+    const blendMode = this.xrSession?.environmentBlendMode;
+    const isARByBlend =
+      blendMode === 'alpha-blend' || blendMode === 'additive' || this.xrSession?.mode === 'immersive-ar';
+    const isARByModeFlag = this.xrMode === 'ar';
+    const isTransparentClear =
+      typeof this.renderer?.getClearAlpha === 'function' ? this.renderer.getClearAlpha() === 0 : false;
+    const shouldSuppressBackground = isPresenting && (isARByBlend || isARByModeFlag || isTransparentClear);
+
+    if (shouldSuppressBackground) {
+      this.scene.background = null;
+      this.scene.environment = texture;
+      console.log('📱 AR active: sky texture loaded, background suppressed (pass-through).');
+    } else {
+      this.scene.background = texture;
+    }
+
+    console.log('✅ Sky background texture loaded and set:', texture);
   }
 
   /**
@@ -1236,9 +1695,9 @@ export class SceneManager {
       return;
     }
 
-    const rgbeLoader = new RGBELoader();
-    
-    rgbeLoader.load(hdrPath, (hdrTexture) => {
+    const hdrLoader = new HDRLoader();
+
+    hdrLoader.load(hdrPath, (hdrTexture) => {
       // Configure the HDR texture
       hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
       hdrTexture.colorSpace = THREE.LinearSRGBColorSpace;
@@ -1263,12 +1722,19 @@ export class SceneManager {
   }
 
   addHelpers() {
-    // Grid helper
+    if (this.rendererType === 'webgpu') {
+      console.log(
+        '[Viewport] Skipping grid/axes helpers on WebGPU (ShaderMaterial is not compatible)',
+      );
+      return;
+    }
+
     const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x444444);
+    gridHelper.name = 'viewportGridHelper';
     this.scene.add(gridHelper);
 
-    // Axes helper
     const axesHelper = new THREE.AxesHelper(2);
+    axesHelper.name = 'viewportAxesHelper';
     this.scene.add(axesHelper);
   }
 
@@ -1290,6 +1756,11 @@ export class SceneManager {
     }
   }
 
+  /** Suspend mic lip-sync on the loaded studio VRM (webcam face tracking takes over). */
+  setSceneLipSyncSuspended(suspended) {
+    this.sceneLipSync?.setSuspended(suspended);
+  }
+
   /**
    * Request microphone access and drive the current VRM mouth visemes from audio (FFT path in {@link LipSync}).
    */
@@ -1303,7 +1774,11 @@ export class SceneManager {
         return;
       }
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
         video: false,
       });
       this._sceneLipSyncStream = stream;
@@ -1319,16 +1794,192 @@ export class SceneManager {
    * @param {File|string} source - File object or URL
    * @param {Object} options - Loading options
    */
+  async loadWorldPackage(manifest, manifestUrl, options = {}) {
+    const loaded = await loadWorldPackageIntoScene(this, manifest, manifestUrl, options);
+    this._ensureXrInteraction().syncGrabbablesFromScene();
+    this._applyXrFloorAlignmentIfActive();
+    return loaded;
+  }
+
+  /** Re-anchor VR/AR wrapper when world content loads mid-session. */
+  _applyXrFloorAlignmentIfActive() {
+    if (!this.xrSession || !this.vrSceneWrapper) return;
+    const floorAlignmentY = computeXrFloorAlignmentY(this);
+    this.vrSceneWrapper.position.y = floorAlignmentY;
+    if (this.vrSceneWrapper.userData?.anchorPosition) {
+      this.vrSceneWrapper.userData.anchorPosition.y = floorAlignmentY;
+    }
+    this.vrSceneWrapper.updateMatrixWorld(true);
+    console.log('[XR] Re-applied floor alignment after world load:', floorAlignmentY);
+  }
+
+  async loadWorldFromManifestUrl(manifestUrl, options = {}) {
+    const { fetchWorldPackage } = await import('./worldPackage.js');
+    const apiEndpoint = options.apiEndpoint || '';
+    const manifest = await fetchWorldPackage(manifestUrl, apiEndpoint);
+    return this.loadWorldPackage(manifest, manifestUrl, options);
+  }
+
+  async loadWorldFromTaskResult(taskResult, apiEndpoint = '') {
+    const loadToken = this._beginViewportLoad();
+    const { fetchWorldPackage, getWorldManifestUrlFromTaskResult } = await import(
+      './worldPackage.js'
+    );
+    const { resolveTaskModelUrl } = await import('./taskModelUrl.js');
+    const manifestPath = getWorldManifestUrlFromTaskResult(taskResult);
+    if (!manifestPath) {
+      throw new Error('Task result has no world manifest URL');
+    }
+    const manifestUrl = resolveTaskModelUrl(manifestPath, apiEndpoint);
+    const worldBaseUrl =
+      taskResult.world_base_url || taskResult.result?.world_base_url || null;
+    console.log('[World] Loading from task result:', {
+      jobId: taskResult.job_id || taskResult.jobId,
+      manifestUrl,
+      worldBaseUrl,
+    });
+    const manifest = await fetchWorldPackage(manifestUrl, apiEndpoint);
+    if (this._isViewportLoadStale(loadToken)) {
+      console.log('SceneManager: Discarding superseded world load (newer request started)');
+      return null;
+    }
+    const loaded = await this.loadWorldPackage(manifest, manifestUrl, {
+      apiEndpoint,
+      worldBaseUrl: worldBaseUrl
+        ? resolveTaskModelUrl(worldBaseUrl, apiEndpoint)
+        : undefined,
+      loadToken,
+    });
+    if (this._isViewportLoadStale(loadToken)) {
+      console.log('SceneManager: Discarding superseded world package (newer request started)');
+      return null;
+    }
+    console.log('[World] Loaded into viewport:', loaded?.id);
+    return loaded;
+  }
+
+  async loadWorldEnvironment(url, options = {}) {
+    if (options.replaceWorld !== false) {
+      clearWorldLayers(this);
+    }
+    const splat = await loadWorldEnvironmentSplat(this, url, options);
+    this._ensureXrInteraction().syncGrabbablesFromScene();
+    this._applyXrFloorAlignmentIfActive();
+    return splat;
+  }
+
+  _ensureXrInteraction() {
+    if (!this.xrInteraction) {
+      this.xrInteraction = createSceneManagerXrInteraction(this);
+    }
+    return this.xrInteraction;
+  }
+
+  clearWorld() {
+    clearWorldLayers(this);
+  }
+
+  _getPlayerParent() {
+    ensureSceneRoots(this);
+    return this.playerRoot || this.scene;
+  }
+
+  _beginViewportLoad() {
+    this._viewportLoadGeneration += 1;
+    return this._viewportLoadGeneration;
+  }
+
+  _isViewportLoadStale(loadToken) {
+    return loadToken != null && loadToken !== this._viewportLoadGeneration;
+  }
+
+  _logViewportCommit(label = 'model') {
+    if (!this.currentModel) {
+      console.warn(`[Viewport] Commit skipped — no currentModel (${label})`);
+      return;
+    }
+    ensureSceneRoots(this);
+    let meshCount = 0;
+    let visibleMeshes = 0;
+    this.currentModel.traverse((child) => {
+      if (!child.isMesh) return;
+      meshCount += 1;
+      if (child.visible) visibleMeshes += 1;
+    });
+    const box =
+      modelHasSkinnedMesh(this.currentModel) || countModelBones(this.currentModel) > 0
+        ? getMeshLayoutBounds(this.currentModel)
+        : new THREE.Box3().setFromObject(this.currentModel);
+    const rendererSize = this.renderer?.getSize?.(new THREE.Vector2()) || null;
+    const playerInScene = this.playerRoot?.parent === this.scene;
+    console.log(`[Viewport] Committed ${label}`, {
+      meshCount,
+      visibleMeshes,
+      playerChildren: this.playerRoot?.children?.length ?? 0,
+      playerRootInScene: playerInScene,
+      boundingBox: box.isEmpty()
+        ? 'empty'
+        : {
+            min: { x: box.min.x, y: box.min.y, z: box.min.z },
+            max: { x: box.max.x, y: box.max.y, z: box.max.z },
+          },
+      rendererSize: rendererSize ? { w: rendererSize.x, h: rendererSize.y } : null,
+      camera: this.camera?.position?.toArray?.(),
+    });
+    if (!playerInScene) {
+      console.error(
+        '[Viewport] playerRoot is not attached to the scene — model will be invisible; re-parenting',
+      );
+      ensureSceneRoots(this);
+    }
+    if (meshCount === 0) {
+      console.warn('[Viewport] Model committed but contains no meshes — viewport may look empty');
+    }
+    if (modelHasSkinnedMesh(this.currentModel)) {
+      logRigAlignmentDiagnostics(this.currentModel, label);
+    }
+    if (rendererSize && (rendererSize.x < 2 || rendererSize.y < 2)) {
+      console.warn('[Viewport] Renderer size is near zero — canvas may not be visible');
+    }
+    try {
+      this.forceRendererUpdate?.();
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    } catch (renderError) {
+      console.error('[Viewport] Render failed after commit:', renderError?.message || renderError);
+    }
+  }
+
   async loadModel(source, options = {}) {
+    const managedViewport = Boolean(options.fromAigc || options.viewportManaged);
+    const loadToken = managedViewport ? this._beginViewportLoad() : null;
+    const isStale = () => this._isViewportLoadStale(loadToken);
     try {
       this.emit('modelLoadingStart', { source });
       console.log('Loading model:', source);
 
       let model;
-      const fileExtension = this.getFileExtension(source);
+      const fileExtension =
+        (options.fileExtension && String(options.fileExtension).toLowerCase()) ||
+        this.getFileExtension(source);
       console.log('File extension detected:', fileExtension);
 
+      const targetLayer = options.layer || options.targetLayer || 'player';
+      const isSplatFile = ['ply', 'splat', 'spz', 'ksplat', 'sog'].includes(fileExtension)
+        || isGaussianSplatExtension(fileExtension);
+      if (isSplatFile && (targetLayer === 'world' || options.worldLayer)) {
+        return this.loadWorldEnvironment(source, options);
+      }
+
       switch (fileExtension) {
+        case 'ply':
+        case 'splat':
+        case 'spz':
+        case 'ksplat':
+        case 'sog':
+          model = await loadSplatMesh(this, source, options);
+          break;
         case 'glb':
         case 'gltf':
           model = await this.loadGLTF(source);
@@ -1343,26 +1994,105 @@ export class SceneManager {
           model = await this.loadVRM(source);
           break;
         default:
-          const supportedFormats = ['glb', 'gltf', 'obj', 'fbx', 'vrm'];
+          if (isGaussianSplatExtension(fileExtension)) {
+            model = await loadSplatMesh(this, source, options);
+            break;
+          }
+          const supportedFormats = ['glb', 'gltf', 'obj', 'fbx', 'vrm', 'ply', 'splat', 'spz'];
           const fileInfo = source instanceof File ? 
             `File: ${source.name} (Type: ${source.type})` : 
             `Source: ${source}`;
           throw new Error(`Unsupported file format: ${fileExtension || 'unknown'}. ${fileInfo}. Supported formats: ${supportedFormats.join(', ')}`);
       }
 
-      // Remove existing model
+      if (isStale()) {
+        console.log('SceneManager: Discarding superseded model load (newer request started)');
+        return null;
+      }
+
+      // Remove existing model / splat
       if (this.currentModel) {
         await this._disposeSceneLipSync();
-        this.scene.remove(this.currentModel);
+        if (this.currentModel.userData?.isGaussianSplat || this.currentSplat) {
+          disposeSplatMesh(this.currentSplat || this.currentModel);
+          this.currentSplat = null;
+        }
+        const parent = this.currentModel.parent || this.scene;
+        parent.remove(this.currentModel);
         this.currentModel = null;
         this.currentVRM = null; // Clear VRM reference
       }
 
+      const isSplat =
+        Boolean(model?.userData?.isGaussianSplat) || isGaussianSplatExtension(fileExtension);
+      if (isSplat && targetLayer !== 'player') {
+        return this.loadWorldEnvironment(source, options);
+      }
+      const isVrm = !isSplat && Boolean(model?.userData?.vrm);
+      const fromAigc = Boolean(options.fromAigc);
+
+      if (options.autoRigMeta) {
+        model.userData.autoRigMeta = options.autoRigMeta;
+      }
+      if (this._shouldPreserveExportedOrientation(model, options)) {
+        model.userData.preserveExportedOrientation = true;
+      }
+
+      // Attach FBX armature before layout so scale/center applies to mesh + rig together.
+      if (options.attachRigFbxUrl && countModelBones(model) === 0) {
+        try {
+          const attached = await this.attachRigArmatureFromFbx(options.attachRigFbxUrl, model);
+          if (isStale()) {
+            console.log('SceneManager: Discarding superseded model load after FBX rig attach');
+            return null;
+          }
+          if (attached > 0) {
+            console.log(`🦴 Auto-rig: attached ${attached} bones from FBX fallback`);
+          } else {
+            console.warn(
+              '🦴 Auto-rig: GLB has no bones and FBX fallback had no armature (skeleton may be mesh-only)',
+            );
+          }
+        } catch (attachError) {
+          console.warn('🦴 Auto-rig: FBX armature attach failed:', attachError);
+        }
+      }
+
+      if (fromAigc) {
+        model.userData.fromAigc = true;
+      }
+      if (options.autoRigMeta) {
+        model.userData.autoRigMeta = options.autoRigMeta;
+      }
+
+      if (fromAigc && countModelBones(model) > 0) {
+        validateAigcRigContract(model, {
+          jobId: options.autoRigMeta?.job_id,
+          rigInfo: options.autoRigMeta?.rig_info,
+          label: 'pre-process',
+        });
+      }
+
       // Process and add new model
       console.log('Processing model with options:', options);
-      this.currentModel = this.processModel(model, options);
-      console.log('Model processed, adding to scene...');
-      this.scene.add(this.currentModel);
+      if (isSplat) {
+        this.currentSplat = model;
+        this.currentModel = model;
+      } else {
+        this.currentModel = this.processModel(model, options);
+      }
+      if (isStale()) {
+        console.log('SceneManager: Discarding superseded model load before scene add');
+        return null;
+      }
+
+      console.log('Model processed, adding to player layer...');
+      this._getPlayerParent().add(this.currentModel);
+
+      if (isStale()) {
+        console.log('SceneManager: Discarding superseded model load before finalize');
+        return null;
+      }
 
       // Restore VRM reference if this is a VRM model
       if (model && model.userData && model.userData.vrm) {
@@ -1437,15 +2167,29 @@ export class SceneManager {
       // Update materials based on render mode
       this.updateRenderMode(this.renderMode);
 
-      // Force material restoration to ensure textures are properly displayed
-      this.forceMaterialRestoration();
+      if (isVrm) {
+        this.forceMaterialRestoration();
+      } else if (!isSplat) {
+        this.prepareGltfMaterialsForDisplay(this.currentModel);
+      }
 
       // Ensure model is properly positioned
       this.ensureModelOnGround();
 
+      if (fromAigc && this.currentModel && countModelBones(this.currentModel) > 0) {
+        validateAigcRigContract(this.currentModel, {
+          jobId: options.autoRigMeta?.job_id,
+          rigInfo: options.autoRigMeta?.rig_info,
+          label: 'post-viewport-layout',
+        });
+      }
+
       // Debug: Log model position and camera position
       console.log('Model position:', this.currentModel.position);
-      const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
+      const boundingBox =
+        modelHasSkinnedMesh(this.currentModel) || countModelBones(this.currentModel) > 0
+          ? getMeshLayoutBounds(this.currentModel)
+          : new THREE.Box3().setFromObject(this.currentModel);
       console.log('Model bounding box:', boundingBox);
       console.log('Camera position:', this.camera.position);
       console.log('Camera target:', this.controls.target);
@@ -1453,6 +2197,12 @@ export class SceneManager {
       // Auto-focus camera on the model
       this.focusOnModel();
 
+      if (isStale()) {
+        console.log('SceneManager: Discarding superseded model load before modelLoaded emit');
+        return null;
+      }
+
+      this._logViewportCommit(managedViewport ? 'aigc-model' : 'model');
       this.emit('modelLoaded', { model: this.currentModel });
       return this.currentModel;
     } catch (error) {
@@ -1504,6 +2254,7 @@ export class SceneManager {
             
             gltf.scene.traverse((child) => {
               if (child.isMesh) {
+                this.ensureMeshVertexNormals(child);
                 meshCount++;
                 console.log(`🔍 Mesh found: ${child.name}`, {
                   geometry: child.geometry?.type,
@@ -1562,6 +2313,31 @@ export class SceneManager {
             }
           }
           
+          const rigBones = collectRigBonesFromGltf(gltf.scene, gltf.scenes || []);
+          if (gltf.scene) {
+            gltf.scene.userData.collectedRigBones = rigBones;
+            if (rigBones.length > 0) {
+              console.log(`🦴 Rig bones in GLTF: ${rigBones.length}`, rigBones.map((b) => b.name));
+            }
+            const riggedExport =
+              rigBones.length > 0 || modelHasSkinnedMesh(gltf.scene);
+            if (
+              riggedExport &&
+              (isPreservedOrientationGltf(gltf.asset) || isBlenderExportedGltf(gltf.asset))
+            ) {
+              gltf.scene.userData.preserveExportedOrientation = true;
+              const source = isBlenderExportedGltf(gltf.asset) ? 'DGX Blender' : 'viewport';
+              console.log(
+                `[Rig] preserveExportedOrientation=ON (${source} GLB — skip autoScale/yaw repair)`,
+              );
+            } else if (isViewportExportedGltf(gltf.asset)) {
+              gltf.scene.userData.preserveExportedOrientation = true;
+              console.log(
+                'Skipping auto forward-facing correction (viewport GLB export — orientation already baked)',
+              );
+            }
+          }
+
           // Clean up object URL after successful load
           if (objectUrl) {
             URL.revokeObjectURL(objectUrl);
@@ -1768,6 +2544,67 @@ export class SceneManager {
         }
       );
     });
+  }
+
+  /**
+   * Attach armature from a rig FBX onto the current model (keeps textured GLB mesh).
+   * @param {string|File} source
+   * @returns {Promise<number>} Number of bones attached
+   */
+  async attachRigArmatureFromFbx(source, targetModel = this.currentModel) {
+    if (!targetModel) return 0;
+
+    const fbxRoot = await this.loadFBX(source);
+    const fbxBones = collectModelBones(fbxRoot);
+    if (fbxBones.length === 0) {
+      return 0;
+    }
+
+    const prior = targetModel.getObjectByName('__attachedRigArmature__');
+    if (prior) {
+      targetModel.remove(prior);
+      prior.traverse((child) => {
+        if (child.geometry) child.geometry.dispose?.();
+        if (child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach((m) => m?.dispose?.());
+        }
+      });
+    }
+
+    const armatureGroup = new THREE.Group();
+    armatureGroup.name = '__attachedRigArmature__';
+
+    const roots = fbxBones.filter((bone) => !(bone.parent?.isBone));
+    const toAttach = roots.length > 0 ? roots : fbxBones.slice(0, 1);
+
+    for (const rootBone of toAttach) {
+      const clone = rootBone.clone(true);
+      clone.traverse((child) => {
+        if (child.isMesh) {
+          child.visible = false;
+        }
+      });
+      armatureGroup.add(clone);
+    }
+
+    targetModel.add(armatureGroup);
+    armatureGroup.updateMatrixWorld(true);
+
+    const meshBox = getMeshLayoutBounds(targetModel);
+    const rigBox = new THREE.Box3().setFromObject(armatureGroup);
+    if (!meshBox.isEmpty() && !rigBox.isEmpty()) {
+      const meshCenter = meshBox.getCenter(new THREE.Vector3());
+      const rigCenter = rigBox.getCenter(new THREE.Vector3());
+      armatureGroup.position.add(meshCenter.sub(rigCenter));
+      armatureGroup.updateMatrixWorld(true);
+    }
+
+    const sceneBones = collectModelBones(targetModel);
+    targetModel.userData.collectedRigBones = sceneBones;
+    targetModel.userData.rigArmatureFromFbx = true;
+
+    return sceneBones.length;
   }
 
   /**
@@ -1999,33 +2836,31 @@ export class SceneManager {
         child.material.needsUpdate = true;
         
         // Ensure all textures are properly updated
+        const isVRMMaterial = this.isVrmMaterial(child.material);
+        const flipTextures = isVRMMaterial;
+
         if (child.material.map) {
           child.material.map.needsUpdate = true;
-          child.material.map.flipY = false; // VRM textures should not be flipped
+          child.material.map.flipY = flipTextures ? false : true;
           console.log(`📷 Updated texture map for: ${child.name}`);
         }
         if (child.material.normalMap) {
           child.material.normalMap.needsUpdate = true;
-          child.material.normalMap.flipY = false;
+          if (flipTextures) child.material.normalMap.flipY = false;
         }
         if (child.material.roughnessMap) {
           child.material.roughnessMap.needsUpdate = true;
-          child.material.roughnessMap.flipY = false;
+          if (flipTextures) child.material.roughnessMap.flipY = false;
         }
         if (child.material.metalnessMap) {
           child.material.metalnessMap.needsUpdate = true;
-          child.material.metalnessMap.flipY = false;
+          if (flipTextures) child.material.metalnessMap.flipY = false;
         }
         if (child.material.emissiveMap) {
           child.material.emissiveMap.needsUpdate = true;
-          child.material.emissiveMap.flipY = false;
+          if (flipTextures) child.material.emissiveMap.flipY = false;
         }
-        
-        // Check if this is a VRM material and ensure proper properties
-        const isVRMMaterial = child.material.userData?.vrmMaterial || 
-                             child.material.userData?.isVRMMaterial ||
-                             child.material.type === 'VRMMaterial';
-        
+
         if (isVRMMaterial) {
           console.log(`🎨 Found VRM material on: ${child.name}`);
           this.ensureVRMMaterialProperties(child.material);
@@ -2346,15 +3181,28 @@ export class SceneManager {
   }
 
   /**
+   * VRM used for facial expressions: provider callback (OpenNexus3DStudio trait body) or imported model.
+   * @returns {import('@pixiv/three-vrm').VRM | null}
+   */
+  _resolveExpressionVRM() {
+    if (typeof this.xrExpressionVRMProvider === 'function') {
+      const list = this.xrExpressionVRMProvider();
+      if (Array.isArray(list) && list.length > 0 && list[0]) {
+        return list[0];
+      }
+    }
+    return this.currentVRM ?? null;
+  }
+
+  /**
    * Get VRM blend shapes
    */
   getVRMBlendShapes() {
-    console.log('getVRMBlendShapes called, currentVRM:', !!this.currentVRM);
-    if (!this.currentVRM) {
-      console.log('No currentVRM found');
+    const vrm = this._resolveExpressionVRM();
+    if (!vrm) {
       return [];
     }
-    
+
     const blendShapes = [];
     
     // VRM standard blend shape name mapping based on VRMExpressionPresetName
@@ -2459,17 +3307,17 @@ export class SceneManager {
     
     // First, try to get VRM expressions (these are the high-level expressions)
     let vrmExpressions = [];
-    if (this.currentVRM.blendShapeProxy) {
+    if (vrm.blendShapeProxy) {
       console.log('VRM has blendShapeProxy');
-      const expressions = this.currentVRM.blendShapeProxy.getExpressionManager();
+      const expressions = vrm.blendShapeProxy.getExpressionManager();
       if (expressions) {
         const expressionNames = expressions.getExpressionNames();
         console.log('Found VRM expressions:', expressionNames.length);
         vrmExpressions = expressionNames;
       }
-    } else if (this.currentVRM.expressionManager) {
+    } else if (vrm.expressionManager) {
       console.log('VRM has direct expressionManager');
-      const expressions = this.currentVRM.expressionManager.expressions;
+      const expressions = vrm.expressionManager.expressions;
       if (expressions) {
         const expressionNames = Object.keys(expressions);
         console.log('Found VRM expressions:', expressionNames.length);
@@ -2478,9 +3326,9 @@ export class SceneManager {
     }
     
     // Extract morph targets from all meshes in the scene
-    if (this.currentVRM.scene) {
+    if (vrm.scene) {
       console.log('Checking VRM scene for morph targets...');
-      this.currentVRM.scene.traverse((child) => {
+      vrm.scene.traverse((child) => {
         if (child.isMesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
           console.log('Found morph targets on mesh:', child.name, child.morphTargetInfluences.length);
           if (child.morphTargetDictionary) {
@@ -2515,9 +3363,9 @@ export class SceneManager {
     });
     
     // Check for blend shapes in VRM metadata
-    if (this.currentVRM.meta && this.currentVRM.meta.blendShapeGroups) {
-      console.log('Found blend shape groups in VRM meta:', this.currentVRM.meta.blendShapeGroups.length);
-      this.currentVRM.meta.blendShapeGroups.forEach(group => {
+    if (vrm.meta && vrm.meta.blendShapeGroups) {
+      console.log('Found blend shape groups in VRM meta:', vrm.meta.blendShapeGroups.length);
+      vrm.meta.blendShapeGroups.forEach(group => {
         if (group.binds) {
           group.binds.forEach(bind => {
             const name = bind.name || `BlendShape_${bind.index}`;
@@ -2544,66 +3392,92 @@ export class SceneManager {
    * Set VRM blend shape value
    */
   setVRMBlendShape(name, value) {
-    if (!this.currentVRM) return;
-    
+    const vrm = this._resolveExpressionVRM();
+    if (!vrm) return;
+
     // Try blendShapeProxy first (for VRM expressions)
-    if (this.currentVRM.blendShapeProxy) {
-      const expressions = this.currentVRM.blendShapeProxy.getExpressionManager();
+    if (vrm.blendShapeProxy) {
+      const expressions = vrm.blendShapeProxy.getExpressionManager();
       if (expressions) {
         expressions.setValue(name, value);
         return;
       }
     }
-    
+
     // Try direct expressionManager
-    if (this.currentVRM.expressionManager && this.currentVRM.expressionManager.expressions) {
-      const expressions = this.currentVRM.expressionManager.expressions;
+    if (vrm.expressionManager && vrm.expressionManager.expressions) {
+      const expressions = vrm.expressionManager.expressions;
       if (expressions[name] && typeof expressions[name].setValue === 'function') {
         expressions[name].setValue(value);
         return;
       }
     }
-    
+
     // Try blendShapeManager
-    if (this.currentVRM.blendShapeManager && this.currentVRM.blendShapeManager.expressions) {
-      const expressions = this.currentVRM.blendShapeManager.expressions;
+    if (vrm.blendShapeManager && vrm.blendShapeManager.expressions) {
+      const expressions = vrm.blendShapeManager.expressions;
       if (expressions[name] && typeof expressions[name].setValue === 'function') {
         expressions[name].setValue(value);
         return;
       }
     }
-    
+
     // Try to set morph target directly on meshes
-    if (this.currentVRM.scene) {
-      this.currentVRM.scene.traverse((child) => {
+    if (vrm.scene) {
+      vrm.scene.traverse((child) => {
         if (child.isMesh && child.morphTargetInfluences && child.morphTargetDictionary) {
           const morphIndex = child.morphTargetDictionary[name];
           if (morphIndex !== undefined) {
             child.morphTargetInfluences[morphIndex] = value;
-            console.log(`Set morph target ${name} to ${value} on mesh ${child.name}`);
             return;
           }
         }
       });
     }
-    
+
     console.warn('Could not set blend shape value for:', name);
+  }
+
+  _shouldPreserveExportedOrientation(model, options = {}, asset) {
+    return shouldPreserveExportedOrientation(options, model, asset);
   }
 
   /**
    * Process loaded model (center, scale, etc.)
    */
   processModel(model, options = {}) {
-    const { 
-      autoCenter = true, 
-      autoScale = true, 
+    let {
+      autoCenter = true,
+      autoScale = true,
       scale = 1,
       ensureForwardFacing = true,
-      orientationMode = 'auto'
+      orientationMode = 'auto',
     } = options;
-    console.log('processModel called with options:', { autoCenter, autoScale, scale, ensureForwardFacing, orientationMode });
+
+    const preserveOrientation = this._shouldPreserveExportedOrientation(model, options);
+    if (preserveOrientation || options.autoScale === false) {
+      if (preserveOrientation) {
+        model.userData.preserveExportedOrientation = true;
+        ensureForwardFacing = false;
+        orientationMode = 'none';
+      }
+      // DGX Blender / template rig GLBs are already ~1 m — autoScale breaks skin bind.
+      autoScale = false;
+    }
+
+    console.log('processModel called with options:', {
+      autoCenter,
+      autoScale,
+      scale,
+      ensureForwardFacing,
+      orientationMode,
+      preserveExportedOrientation: preserveOrientation,
+    });
 
     const applyOrientation = () => {
+      if (orientationMode === 'none') {
+        return;
+      }
       if (orientationMode === 'core3d') {
         model.rotation.y += Math.PI;
         model.updateMatrixWorld(true);
@@ -2613,8 +3487,23 @@ export class SceneManager {
       }
     };
 
+    const useMeshOnlyBounds =
+      modelHasSkinnedMesh(model) ||
+      Boolean(model?.userData?.autoRigMeta) ||
+      countModelBones(model) > 0;
+    const anchorGroundToBones =
+      (Boolean(model?.userData?.fromAigc) ||
+        Boolean(model?.userData?.preserveExportedOrientation)) &&
+      countModelBones(model) > 0;
+
+    const layoutBoundsFor = (target) => {
+      if (anchorGroundToBones) return getBoneWorldBounds(target);
+      if (useMeshOnlyBounds) return getViewportLayoutBounds(target);
+      return new THREE.Box3().setFromObject(target);
+    };
+
     if (autoCenter || autoScale) {
-      const box = new THREE.Box3().setFromObject(model);
+      const box = layoutBoundsFor(model);
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
@@ -2625,14 +3514,26 @@ export class SceneManager {
         model.scale.setScalar(scale);
       } else {
         const targetScale = autoScale ? (2 / maxDim) * scale : scale;
-        console.log('Initial model bounds:', { min: box.min, max: box.max, center, size, maxDim, targetScale });
+        console.log('Initial model bounds:', {
+          min: box.min,
+          max: box.max,
+          center,
+          size,
+          maxDim,
+          targetScale,
+          meshOnlyBounds: useMeshOnlyBounds,
+        });
         model.scale.setScalar(targetScale);
       }
       applyOrientation();
-      
+      model.updateMatrixWorld(true);
+      if (modelHasSkinnedMesh(model)) {
+        rebindSkinnedMeshes(model);
+      }
+
               if (autoCenter) {
                 // Recalculate bounding box after rotation and scaling
-                const rotatedBox = new THREE.Box3().setFromObject(model);
+                const rotatedBox = layoutBoundsFor(model);
                 
                 // Check if rotated box is valid
                 if (rotatedBox.isEmpty() || !isFinite(rotatedBox.min.y) || !isFinite(rotatedBox.max.y)) {
@@ -2666,6 +3567,13 @@ export class SceneManager {
       applyOrientation();
     }
 
+    if (useMeshOnlyBounds || modelHasSkinnedMesh(model) || countModelBones(model) > 0) {
+      normalizeRiggedModelTransforms(model, {
+        label: 'processModel',
+        preserveExportedOrientation: preserveOrientation,
+      });
+    }
+
     return model;
   }
 
@@ -2674,9 +3582,21 @@ export class SceneManager {
    */
   ensureModelOnGround() {
     if (!this.currentModel) return;
-    
-    // Get the current bounding box
-    const box = new THREE.Box3().setFromObject(this.currentModel);
+
+    if (this.currentModel.userData?.preserveExportedOrientation) {
+      if (modelHasSkinnedMesh(this.currentModel)) {
+        this.currentModel.updateMatrixWorld(true);
+        rebindSkinnedMeshes(this.currentModel);
+      }
+      return;
+    }
+
+    const useLayoutBounds =
+      modelHasSkinnedMesh(this.currentModel) ||
+      countModelBones(this.currentModel) > 0;
+    const box = useLayoutBounds
+      ? getViewportLayoutBounds(this.currentModel)
+      : new THREE.Box3().setFromObject(this.currentModel);
     
     // Check if bounding box is valid
     if (box.isEmpty() || !isFinite(box.min.y) || !isFinite(box.max.y)) {
@@ -2694,9 +3614,64 @@ export class SceneManager {
         newPosition: this.currentModel.position
       });
     }
+
+    if (modelHasSkinnedMesh(this.currentModel)) {
+      this.currentModel.updateMatrixWorld(true);
+      rebindSkinnedMeshes(this.currentModel);
+    }
     
-    // Also ensure model orientation is correct
-    this.ensureModelOrientation();
+    if (
+      !this.currentModel?.userData?.fromAigc &&
+      !this.currentModel?.userData?.preserveExportedOrientation
+    ) {
+      this.ensureModelOrientation();
+    }
+  }
+
+  /**
+   * Fix GLTF/GLB materials after 3DAIGC-API download (VRM uses different texture rules).
+   */
+  prepareGltfMaterialsForDisplay(root = this.currentModel) {
+    if (!root) return;
+
+    root.traverse((child) => {
+      if (!child.isMesh || !child.material) return;
+      this.ensureMeshVertexNormals(child);
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of mats) {
+        if (!mat) continue;
+        if (root.userData?.fromAigc) {
+          mat.side = THREE.DoubleSide;
+        }
+        const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'];
+        for (const key of maps) {
+          const tex = mat[key];
+          if (!tex) continue;
+          tex.colorSpace =
+            key === 'map' || key === 'emissiveMap' ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+          tex.flipY = true;
+          tex.needsUpdate = true;
+        }
+        mat.wireframe = false;
+        mat.transparent = false;
+        mat.opacity = 1.0;
+        mat.needsUpdate = true;
+      }
+    });
+
+    if (this.scene && this.originalSceneBackground && !this.renderer?.xr?.isPresenting) {
+      if (!this.scene.environment && this.originalSceneBackground instanceof THREE.Texture) {
+        this.scene.environment = this.originalSceneBackground;
+      }
+    }
+  }
+
+  isVrmMaterial(material) {
+    return Boolean(
+      material?.userData?.vrmMaterial ||
+        material?.userData?.isVRMMaterial ||
+        material?.type === 'VRMMaterial',
+    );
   }
 
   /**
@@ -2761,14 +3736,51 @@ export class SceneManager {
   }
 
   /**
+   * @param {THREE.Bone} bone
+   * @param {number} color
+   * @returns {THREE.Mesh|null}
+   */
+  _createBoneHelperMesh(bone, color = 0xff6600) {
+    const boneName = bone.name || 'bone';
+    const isFingerBone =
+      boneName.toLowerCase().includes('finger') ||
+      boneName.toLowerCase().includes('thumb') ||
+      boneName.toLowerCase().includes('hand') ||
+      boneName.toLowerCase().includes('toe');
+    const sphereSize = isFingerBone ? 0.008 : 0.015;
+    const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 1.0,
+    });
+    const boneHelper = new THREE.Mesh(geometry, material);
+    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+    getBoneDisplayWorldPosition(bone, modelRoot, boneHelper.position);
+    boneHelper.userData.boneName = boneName;
+    boneHelper.userData.isBoneHelper = true;
+    boneHelper.userData.originalBone = bone;
+    return boneHelper;
+  }
+
+  /**
    * Create bone visualization for skeleton mode
    */
   createBoneVisualization() {
     try {
       console.log('Creating bone visualization...');
-      if (!this.currentModel) {
-        console.log('No current model found');
+      const expressionVrm = this._resolveExpressionVRM();
+      const modelRoot = this.currentModel ?? expressionVrm?.scene;
+      if (!modelRoot) {
+        console.log('No viewport model root for bone visualization');
         return;
+      }
+
+      modelRoot.updateMatrixWorld(true);
+      const skinned = findPrimarySkinnedMesh(modelRoot);
+      if (skinned?.skeleton) {
+        skinned.skeleton.update();
+        skinned.bind(skinned.skeleton, skinned.matrixWorld);
       }
 
       // Remove existing bone visualization
@@ -2782,11 +3794,9 @@ export class SceneManager {
       this.boneHelpers = [];
 
       // Create bone visualization for VRM models
-      if (this.currentVRM && this.currentVRM.humanoid) {
+      if (expressionVrm?.humanoid) {
         console.log('Creating VRM bone visualization');
-        console.log('VRM object:', this.currentVRM);
-        console.log('Humanoid:', this.currentVRM.humanoid);
-        const humanoid = this.currentVRM.humanoid;
+        const humanoid = expressionVrm.humanoid;
         
         // Create helpers for each bone
         if (humanoid.humanoidBones && Array.isArray(humanoid.humanoidBones)) {
@@ -2840,105 +3850,29 @@ export class SceneManager {
         
         // If no bones were found via VRM humanoid, try to find bones directly from the model
         if (boneHelpers.length === 0) {
-          console.log('No VRM humanoid bones found, trying direct model traversal...');
-          this.currentModel.traverse((child) => {
-            try {
-              if (child.isBone) {
-                console.log('Found direct bone:', child.name, 'at position:', child.position);
-                // Create a small sphere to represent the bone joint
-                // Make finger joints much smaller
-                const isFingerBone = child.name.toLowerCase().includes('finger') || 
-                                   child.name.toLowerCase().includes('thumb') || 
-                                   child.name.toLowerCase().includes('hand') ||
-                                   child.name.toLowerCase().includes('toe');
-                const sphereSize = isFingerBone ? 0.008 : 0.015;
-                const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
-                const material = new THREE.MeshBasicMaterial({ 
-                  color: 0xff0000, // Red for unselected bones
-                  transparent: true,
-                  opacity: 1.0 // Fully opaque for better visibility
-                });
-                const boneHelper = new THREE.Mesh(geometry, material);
-                
-                // Position at bone location in world space
-                child.getWorldPosition(boneHelper.position);
-                boneHelper.userData.boneName = child.name;
-                boneHelper.userData.isBoneHelper = true;
-                boneHelper.userData.originalBone = child;
-                
-                if (this.scene) {
-                  this.scene.add(boneHelper);
-                  boneHelpers.push(boneHelper);
-                  console.log('Added direct bone helper for', child.name, 'at position:', boneHelper.position);
-                } else {
-                  console.warn('No scene available to add direct bone helper');
-                }
-              }
-            } catch (error) {
-              console.warn('Error creating direct bone helper for', child.name, error);
-            }
-          });
-          
-          // Create bone connections for direct bones
-          try {
-            this.createBoneConnectionsForModel(this.currentModel, boneConnections);
-          } catch (error) {
-            console.warn('Error creating direct bone connections:', error);
-          }
+          console.log('No VRM humanoid bones found, using rig bone collector...');
+          this._addBoneHelpersFromRigBones(
+            collectModelBones(modelRoot),
+            boneHelpers,
+            boneConnections,
+            0xff0000,
+          );
         }
       } else {
         console.log('Creating non-VRM bone visualization');
-        console.log('Current model:', this.currentModel);
-        console.log('Current VRM:', this.currentVRM);
-        let boneCount = 0;
-        // For non-VRM models, traverse the scene to find bones
-        this.currentModel.traverse((child) => {
-          try {
-            if (child.isBone) {
-              boneCount++;
-              console.log('Found bone:', child.name, 'at position:', child.position);
-              // Create a small sphere to represent the bone joint
-              // Make finger joints much smaller
-              const isFingerBone = child.name.toLowerCase().includes('finger') || 
-                                 child.name.toLowerCase().includes('thumb') || 
-                                 child.name.toLowerCase().includes('hand') ||
-                                 child.name.toLowerCase().includes('toe');
-              const sphereSize = isFingerBone ? 0.008 : 0.015;
-              const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
-              const material = new THREE.MeshBasicMaterial({ 
-                color: 0xff6600, // Bright orange like in the image
-                transparent: true,
-                opacity: 1.0 // Fully opaque for better visibility
-              });
-              const boneHelper = new THREE.Mesh(geometry, material);
-              
-              // Position at bone location in world space
-              child.getWorldPosition(boneHelper.position);
-              boneHelper.userData.boneName = child.name;
-              boneHelper.userData.isBoneHelper = true;
-              boneHelper.userData.originalBone = child;
-              
-              if (this.scene) {
-                this.scene.add(boneHelper);
-                boneHelpers.push(boneHelper);
-                console.log('Added bone helper for', child.name, 'at position:', boneHelper.position);
-              } else {
-                console.warn('No scene available to add bone helper');
-              }
-            }
-          } catch (error) {
-            console.warn('Error creating bone helper for', child.name, error);
-          }
-        });
-
-        console.log('Total bones found in model:', boneCount);
-        
-        // Create bone connections for non-VRM models
-        try {
-          this.createBoneConnectionsForModel(this.currentModel, boneConnections);
-        } catch (error) {
-          console.warn('Error creating bone connections for model:', error);
+        const rigBones = getPrimarySkeletonBones(modelRoot);
+        console.log('Rig bones collected:', rigBones.length, rigBones.map((b) => b.name));
+        if (
+          rigBones.length === 0 &&
+          modelRoot.userData?.autoRigMeta?.bone_count > 0
+        ) {
+          console.warn(
+            '🦴 Auto-rig job reported',
+            modelRoot.userData.autoRigMeta.bone_count,
+            'bones but the loaded GLB has no armature. Restart dev server after API update, or re-run auto-rig to refresh FBX fallback.',
+          );
         }
+        this._addBoneHelpersFromRigBones(rigBones, boneHelpers, boneConnections, 0xff6600);
       }
 
       // Store bone helpers and connections for cleanup
@@ -2970,9 +3904,10 @@ export class SceneManager {
     try {
       console.log('Creating fallback bone visualization');
       
+      const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
       // Create a simple wireframe box to represent the model's bounding box
-      if (this.currentModel && this.scene) {
-        const box = new THREE.Box3().setFromObject(this.currentModel);
+      if (modelRoot && this.scene) {
+        const box = new THREE.Box3().setFromObject(modelRoot);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
         
@@ -3060,60 +3995,87 @@ export class SceneManager {
   }
 
   /**
-   * Create bone connections for non-VRM models
+   * @param {THREE.Bone[]} bones
+   * @param {THREE.Mesh[]} boneHelpers
+   * @param {THREE.Line[]} boneConnections
+   * @param {number} color
    */
-  createBoneConnectionsForModel(model, boneConnections) {
+  _addBoneHelpersFromRigBones(bones, boneHelpers, boneConnections, color) {
+    bones.forEach((bone) => {
+      try {
+        const boneHelper = this._createBoneHelperMesh(bone, color);
+        if (boneHelper && this.scene) {
+          this.scene.add(boneHelper);
+          boneHelpers.push(boneHelper);
+        }
+      } catch (error) {
+        console.warn('Error creating bone helper for', bone.name, error);
+      }
+    });
+    try {
+      this.createBoneConnectionsFromBones(bones, boneConnections);
+    } catch (error) {
+      console.warn('Error creating bone connections:', error);
+    }
+  }
+
+  /**
+   * Create bone connections for rig bones (scene graph or SkinnedMesh skeleton).
+   */
+  createBoneConnectionsFromBones(bones, boneConnections) {
     try {
       const bonePositions = new Map();
-      
-      // First, collect all bone positions
-      model.traverse((child) => {
+
+      const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+      bones.forEach((bone) => {
         try {
-          if (child.isBone) {
-            const worldPosition = new THREE.Vector3();
-            child.getWorldPosition(worldPosition);
-            bonePositions.set(child.name, worldPosition);
-          }
+          const worldPosition = new THREE.Vector3();
+          getBoneDisplayWorldPosition(bone, modelRoot, worldPosition);
+          bonePositions.set(bone.name, worldPosition);
         } catch (error) {
-          console.warn('Error getting bone position for', child.name, error);
+          console.warn('Error getting bone position for', bone.name, error);
         }
       });
 
-      // Create connections between parent and child bones
-      model.traverse((child) => {
+      bones.forEach((bone) => {
         try {
-          if (child.isBone && child.parent && child.parent.isBone) {
-            const parentPosition = bonePositions.get(child.parent.name);
+          const parent = bone.parent;
+          if (parent?.isBone) {
+            const parentPosition = bonePositions.get(parent.name);
             if (parentPosition) {
               const childWorldPosition = new THREE.Vector3();
-              child.getWorldPosition(childWorldPosition);
+              getBoneDisplayWorldPosition(bone, modelRoot, childWorldPosition);
               const geometry = new THREE.BufferGeometry().setFromPoints([
                 parentPosition,
-                childWorldPosition
+                childWorldPosition,
               ]);
-              const material = new THREE.LineBasicMaterial({ 
-                color: 0xff6600, // Bright orange like in the image
+              const material = new THREE.LineBasicMaterial({
+                color: 0xff6600,
                 transparent: true,
-                opacity: 1.0 // Fully opaque for better visibility
+                opacity: 1.0,
               });
               const connection = new THREE.Line(geometry, material);
               connection.userData.isBoneConnection = true;
               if (this.scene) {
                 this.scene.add(connection);
                 boneConnections.push(connection);
-                console.log('Added bone connection from', child.parent.name, 'to', child.name);
-              } else {
-                console.warn('No scene available to add bone connection');
               }
             }
           }
         } catch (error) {
-          console.warn('Error creating bone connection for', child.name, error);
+          console.warn('Error creating bone connection for', bone.name, error);
         }
       });
     } catch (error) {
-      console.warn('Error in createBoneConnectionsForModel:', error);
+      console.warn('Error in createBoneConnectionsFromBones:', error);
     }
+  }
+
+  /**
+   * Create bone connections for non-VRM models
+   */
+  createBoneConnectionsForModel(model, boneConnections) {
+    this.createBoneConnectionsFromBones(collectModelBones(model), boneConnections);
   }
 
   /**
@@ -3955,8 +4917,10 @@ export class SceneManager {
     console.log(`💡 Setting lighting preset: ${preset}`);
     
     // Remove existing lights
-    const existingLights = this.scene.children.filter(child => child.isLight);
-    existingLights.forEach(light => this.scene.remove(light));
+    if (Array.isArray(this.scene.children)) {
+      const existingLights = this.scene.children.filter((child) => child.isLight);
+      existingLights.forEach((light) => this.scene.remove(light));
+    }
     
     // Create new lighting based on preset
     switch (preset) {
@@ -3979,7 +4943,7 @@ export class SceneManager {
         this._createHarshLighting();
         break;
       default:
-        this._createStudioLighting();
+        this._createSoftLighting();
     }
   }
 
@@ -4181,9 +5145,13 @@ export class SceneManager {
     if (!this.currentModel || !this.camera || !this.controls) return;
 
     console.log('Focusing camera on model...');
-    
-    // Get model bounding box
-    const box = new THREE.Box3().setFromObject(this.currentModel);
+
+    const useLayoutBounds =
+      modelHasSkinnedMesh(this.currentModel) ||
+      countModelBones(this.currentModel) > 0;
+    const box = useLayoutBounds
+      ? getMeshLayoutBounds(this.currentModel)
+      : new THREE.Box3().setFromObject(this.currentModel);
     
     // Check if bounding box is valid
     if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) {
@@ -4362,11 +5330,18 @@ export class SceneManager {
    * Store original materials when model is loaded
    */
   storeOriginalMaterials() {
-    if (!this.currentModel) return;
-    
+    const roots = this._getViewportRenderRoots();
+    if (!roots.length) return;
+
     console.log('🔧 Storing original materials...');
-    
-    this.currentModel.traverse((child) => {
+
+    roots.forEach((root) => this._storeOriginalMaterialsOnRoot(root));
+  }
+
+  _storeOriginalMaterialsOnRoot(root) {
+    if (!root) return;
+
+    root.traverse((child) => {
       if (child.isMesh && child.material) {
         // Only store if not already stored
         if (!child.userData.originalMaterial) {
@@ -4593,7 +5568,8 @@ export class SceneManager {
    * Update model materials based on render mode
    */
   updateRenderMode(mode) {
-    if (!this.currentModel) return;
+    const roots = this._getViewportRenderRoots();
+    if (!roots.length) return;
 
     // Store original materials if not already stored
     this.storeOriginalMaterials();
@@ -4605,7 +5581,7 @@ export class SceneManager {
     const partColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
     let partColorizeIndex = 0;
 
-    this.currentModel.traverse((child) => {
+    const applyModeToMesh = (child) => {
       if (!child.isMesh) return;
 
       switch (mode) {
@@ -4631,7 +5607,7 @@ export class SceneManager {
             if (child.userData.originalColor && m.color) {
               m.color.copy(child.userData.originalColor);
             }
-            if (m.userData?.vrmMaterial || m.userData?.isVRMMaterial) {
+            if (this.isVrmMaterial(m)) {
               this.ensureVRMMaterialProperties(m);
               if (m.map) {
                 m.map.needsUpdate = true;
@@ -4642,11 +5618,13 @@ export class SceneManager {
                 m.map.wrapS = THREE.RepeatWrapping;
                 m.map.wrapT = THREE.RepeatWrapping;
               }
+            } else if (m.map) {
+              m.map.colorSpace = THREE.SRGBColorSpace;
+              m.map.flipY = true;
             }
             m.needsUpdate = true;
             if (m.map) {
               m.map.needsUpdate = true;
-              m.map.flipY = false;
             }
           }
           if (child.geometry?.attributes?.uv) {
@@ -4711,6 +5689,10 @@ export class SceneManager {
         default:
           break;
       }
+    };
+
+    roots.forEach((root) => {
+      root.traverse((child) => applyModeToMesh(child));
     });
 
     if (mode === 'skeleton') {
@@ -5101,13 +6083,7 @@ export class SceneManager {
       }
     } else if (typeof source === 'string') {
       console.log('String source:', source);
-      // Strip query parameters and hash from URL before extracting extension
-      const urlWithoutQuery = source.split('?')[0].split('#')[0];
-      const parts = urlWithoutQuery.split('.');
-      console.log('String parts:', parts);
-      if (parts.length > 1) {
-        extension = parts.pop().toLowerCase();
-      }
+      extension = inferModelFileExtensionFromSource(source);
     }
     
     console.log('File extension detected:', extension);
@@ -5120,6 +6096,12 @@ export class SceneManager {
    * @param {Object} options - Export options
    */
   async exportModel(format = 'glb', options = {}) {
+    if (options.animationClips?.length) {
+      console.log(
+        `[GLB export] Embedding ${options.animationClips.length} animation clip(s), ` +
+          `${options.animationClips[0]?.tracks?.length ?? 0} tracks`,
+      );
+    }
     if (!this.currentModel) {
       throw new Error('No model to export');
     }
@@ -5159,20 +6141,20 @@ export class SceneManager {
     const {
       filename = 'opennexus3dstudio_export.glb',
       forCharacterStudio = true,
+      animationClips,
       ...exportOptions
     } = options;
 
+    const glbOpts = {
+      filename,
+      animationClips,
+      ...exportOptions,
+    };
+
     if (forCharacterStudio) {
-      return await this.glbExporter.exportForCharacterStudio(this.currentModel, {
-        filename,
-        ...exportOptions
-      });
-    } else {
-      return await this.glbExporter.exportToGLB(this.currentModel, {
-        filename,
-        ...exportOptions
-      });
+      return await this.glbExporter.exportForCharacterStudio(this.currentModel, glbOpts);
     }
+    return await this.glbExporter.exportToGLB(this.currentModel, glbOpts);
   }
 
   /**
@@ -5212,7 +6194,12 @@ export class SceneManager {
     void this._disposeSceneLipSync();
     this.currentVRM = null;
     if (this.currentModel) {
-      this.scene.remove(this.currentModel);
+      if (this.currentModel.userData?.isGaussianSplat || this.currentSplat) {
+        disposeSplatMesh(this.currentSplat || this.currentModel);
+        this.currentSplat = null;
+      }
+      const parent = this.currentModel.parent || this.scene;
+      parent.remove(this.currentModel);
       this.currentModel = null;
       this.emit('modelCleared');
     }
@@ -5265,6 +6252,14 @@ export class SceneManager {
       }
       this._maybeLogNativeFaceRemoteDiag(vrmsFlat, nativeRecFlat);
 
+      if (this._webcamBodyFrameHook) {
+        try {
+          this._webcamBodyFrameHook();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }
@@ -5294,6 +6289,25 @@ export class SceneManager {
   }
 
   /**
+   * Unlock face-recording playback audio on XR entry button click (AR/VR gesture window).
+   * @param {HTMLElement|null} button
+   * @param {string} logLabel
+   */
+  _attachFaceRecordingAudioUnlockToXrButton(button, logLabel) {
+    if (!button || button._faceRecordingAudioUnlockAttached) return;
+    button._faceRecordingAudioUnlockAttached = true;
+    button.addEventListener(
+      'click',
+      async () => {
+        console.log(`${logLabel} — unlocking face recording audio...`);
+        resetFaceRecordingAudioXrUnlock();
+        await unlockFaceRecordingAudioPlayback();
+      },
+      { capture: true },
+    );
+  }
+
+  /**
    * Enable AR mode with floor alignment matching VR mode
    * Returns ARButton element that can be added to the UI
    * @param {HTMLElement} container - Optional container element to add button to
@@ -5313,6 +6327,7 @@ export class SceneManager {
     // If button already exists, return it instead of creating a new one
     if (this.arButton) {
       console.log('📱 AR button already exists, reusing...');
+      this._attachFaceRecordingAudioUnlockToXrButton(this.arButton, '📱 AR button clicked');
       return this.arButton;
     }
 
@@ -5320,17 +6335,18 @@ export class SceneManager {
     // Require bounded-floor for proper physical floor alignment
     const arButton = ARButton.createButton(this.renderer, {
       requiredFeatures: ['bounded-floor'],
-      optionalFeatures: ['local-floor', 'local', 'viewer', XR_EXPRESSION_TRACKING_FEATURE]
+      optionalFeatures: [
+        'local-floor', 'local', 'viewer',
+        XR_EXPRESSION_TRACKING_FEATURE,
+      ],
     });
 
-    // Customize button with emoji icon - use MutationObserver to persist changes
+    // Ensure button always has an ID (Three.js only sets it in the "supported" path)
     if (arButton) {
-      // Set emoji icon immediately
+      arButton.id = 'ARButton';
       arButton.innerHTML = '📱';
       arButton.title = 'Enter Augmented Reality';
       arButton.setAttribute('aria-label', 'Enter Augmented Reality');
-      
-      // Style the button for icon display
       arButton.style.fontSize = '1.2rem';
       arButton.style.padding = '4px 8px';
       arButton.style.minWidth = '32px';
@@ -5339,27 +6355,16 @@ export class SceneManager {
       arButton.style.display = 'inline-flex';
       arButton.style.alignItems = 'center';
       arButton.style.justifyContent = 'center';
-      
-      // Use MutationObserver to keep emoji when button text changes
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.type === 'childList' || mutation.type === 'characterData') {
-            // Restore emoji if text was changed
-            if (arButton.textContent !== '📱' && !arButton.textContent.includes('📱')) {
-              arButton.innerHTML = '📱';
-            }
-          }
-        });
+
+      // MutationObserver: keep emoji when Three.js changes button text
+      const observer = new MutationObserver(() => {
+        if (arButton.textContent !== '📱' && !arButton.textContent.includes('📱')) {
+          arButton.innerHTML = '📱';
+        }
       });
-      
-      observer.observe(arButton, {
-        childList: true,
-        characterData: true,
-        subtree: true
-      });
-      
-      // Store observer for cleanup
+      observer.observe(arButton, { childList: true, characterData: true, subtree: true });
       arButton._emojiObserver = observer;
+      this._attachFaceRecordingAudioUnlockToXrButton(arButton, '📱 AR button clicked');
     }
 
     // Store button reference
@@ -5370,7 +6375,7 @@ export class SceneManager {
       container.appendChild(arButton);
     }
 
-    console.log('✅ AR button created with emoji icon');
+    console.log('✅ AR button created');
     return arButton;
   }
 
@@ -5417,6 +6422,8 @@ export class SceneManager {
       const xrEmoji = isAR ? '📱' : isVR ? '🥽' : '🔎';
       // Store mode early to avoid races with async loaders (e.g., sky texture load).
       this.xrMode = isAR ? 'ar' : isVR ? 'vr' : 'xr';
+      resetFaceRecordingAudioXrUnlock();
+      await unlockFaceRecordingAudioPlayback();
 
       // Save the current non-XR view so exiting AR/VR returns to the same 3D renderer view.
       // Important: only capture if we don't already have a saved view (so VR->AR switching inside XR
@@ -5479,6 +6486,8 @@ export class SceneManager {
       if (typeof window !== 'undefined' && window.location) {
         const params = new URLSearchParams(window.location.search);
         this.xrDebugInputs = params.get('xrDebugInputs') === '1';
+        this.xrMenuExitEnabled = params.get('xrMenuExit') === '1';
+        this.xrGazeExitEnabled = params.get('xrGazeExit') === '1';
       }
 
       // ASCII marker for remote log sinks
@@ -5505,7 +6514,7 @@ export class SceneManager {
       // Both AR and VR MUST use bounded-floor for proper physical floor alignment
       // 'bounded-floor' uses Android XR's boundary floor level settings (aligns Y=0 to physical floor)
       // Try bounded-floor first, fall back to local-floor only if absolutely necessary
-      const refSpaceTypes = ['bounded-floor', 'local-floor'];
+      const refSpaceTypes = ['bounded-floor', 'local-floor', 'local', 'viewer'];
 
       for (const refSpaceType of refSpaceTypes) {
         try {
@@ -5590,8 +6599,14 @@ export class SceneManager {
       
       // Log input sources on session start to help debug which buttons are exposed for long-press recenter.
       try {
-        const sources = session.inputSources || [];
+        const sources = this._getXRInputSources(session);
+        this._xrNoWebXrInputSources = sources.length === 0;
         console.log(`${xrEmoji} InputSources at start: ${sources.length}`);
+        if (this._xrNoWebXrInputSources) {
+          console.warn(
+            `${xrEmoji} No WebXR inputSources — Menu/B may not reach the page; use gaze exit HUD or navigator.getGamepads fallback`,
+          );
+        }
         sources.forEach((s, i) => {
           console.log(`${xrEmoji} InputSource[${i}]:`, {
             handedness: s.handedness,
@@ -5602,11 +6617,41 @@ export class SceneManager {
           });
         });
         session.addEventListener('inputsourceschange', (ev) => {
+          const added = ev.added ? Array.from(ev.added) : [];
+          const removed = ev.removed ? Array.from(ev.removed) : [];
+          const nowSources = this._getXRInputSources(session);
+          this._xrNoWebXrInputSources = nowSources.length === 0;
           console.log(`${xrEmoji} inputsourceschange:`, {
-            added: ev.added ? ev.added.length : 0,
-            removed: ev.removed ? ev.removed.length : 0,
+            added: added.length,
+            removed: removed.length,
+            total: nowSources.length,
+          });
+          added.forEach((s, i) => {
+            const handTrack = this._isXRHandTrackingInputSource(s);
+            console.log(`${xrEmoji} InputSource added[${i}]:`, {
+              handedness: s.handedness,
+              profiles: s.profiles,
+              hasGamepad: !!s.gamepad,
+              buttons: s.gamepad?.buttons?.length,
+              handTracking: handTrack,
+              note: handTrack
+                ? 'pinch/select will NOT exit XR (not Menu/B)'
+                : undefined,
+            });
           });
         });
+        if (this.xrMenuExitEnabled) {
+          console.info(
+            `${xrEmoji} In-app Menu/B exit enabled (?xrMenuExit=1) — firm press only; hand pinch ignored`,
+          );
+        } else {
+          console.info(
+            `${xrEmoji} In-app controller exit OFF (use headset Home). Add ?xrMenuExit=1 to exit via Menu/B`,
+          );
+        }
+        if (this.xrGazeExitEnabled) {
+          console.info(`${xrEmoji} Gaze exit enabled (?xrGazeExit=1) — look at red panel 2s to leave`);
+        }
 
         // Track selectstart/selectend holds as an additional "recenter" gesture.
         // Some headsets/controllers do not expose their system/touchpad buttons via Gamepad,
@@ -5618,6 +6663,7 @@ export class SceneManager {
             console.warn('[REORIENT_FIX] ⚠️ SELECT_START: No inputSource in event');
             return;
           }
+          // Do not exit on selectstart — hand pinch fires select constantly on Galaxy XR.
           // Use targetRaySpace as stable key (persists across inputSource object changes)
           const key = src.targetRaySpace || src;
           const downAt =
@@ -5640,6 +6686,25 @@ export class SceneManager {
             return;
           }
           const key = src.targetRaySpace || src;
+          const hold = this.xrRecenterSelectHoldState.get(key);
+          const now =
+            typeof performance !== 'undefined' && typeof performance.now === 'function'
+              ? performance.now()
+              : Date.now();
+          const holdMs = 900;
+          if (
+            this.xrMenuExitEnabled &&
+            hold &&
+            !hold.triggered &&
+            now - hold.downAt < holdMs &&
+            this.isXRSystemExitInputSource(src)
+          ) {
+            this.requestXRSessionExit('system-select-short-press', {
+              handedness: src.handedness,
+              durationMs: Math.round(now - hold.downAt),
+              profiles: src.profiles,
+            });
+          }
           const wasTracking = this.xrRecenterSelectHoldState.has(key);
           this.xrRecenterSelectHoldState.delete(key);
           if (wasTracking) {
@@ -5777,27 +6842,18 @@ export class SceneManager {
           }
           
           // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
-          // Models should be positioned so their bottom is at Y=0 (physical floor)
-          // Calculate offset needed to align model bottom to Y=0
-          let floorAlignmentY = 0;
-          if (this.currentModel) {
-            // Calculate bounding box in world space (after model positioning)
-            const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
-            if (!boundingBox.isEmpty()) {
-              const modelBottomY = boundingBox.min.y; // Bottom of model in world space
-              // If model bottom is not at Y=0, we need to offset the wrapper
-              // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
-              floorAlignmentY = -modelBottomY;
-              console.log(`📐 VR Model positioning:`, {
-                modelBottomY: modelBottomY,
-                floorAlignmentY: floorAlignmentY,
-                modelPosition: this.currentModel.position,
-                wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
-              });
-              console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
-            } else {
-              console.warn('⚠️ VR: Model bounding box is empty, using default positioning');
-            }
+          // Align avatar + world layers so the lowest content sits on Y=0
+          const floorAlignmentY = computeXrFloorAlignmentY(this);
+          if (this.currentModel || this.worldRoot?.children?.length) {
+            console.log(`📐 VR floor alignment:`, {
+              floorAlignmentY,
+              hasModel: !!this.currentModel,
+              hasWorld: !!(this.worldRoot?.children?.length),
+              wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`,
+            });
+            console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+          } else {
+            console.warn('⚠️ VR: No model/world content for floor alignment, using Y=0');
           }
           
           // Set wrapper position in world space (reference space coordinates)
@@ -5921,27 +6977,17 @@ export class SceneManager {
             }
             
             // With 'bounded-floor', Y=0 in the reference space IS the physical floor level
-            // Models should be positioned so their bottom is at Y=0 (physical floor)
-            // Calculate offset needed to align model bottom to Y=0
-            let floorAlignmentY = 0;
-            if (this.currentModel) {
-              // Calculate bounding box in world space (after model positioning)
-              const boundingBox = new THREE.Box3().setFromObject(this.currentModel);
-              if (!boundingBox.isEmpty()) {
-                const modelBottomY = boundingBox.min.y; // Bottom of model in world space
-                // If model bottom is not at Y=0, we need to offset the wrapper
-                // floorAlignmentY = -modelBottomY ensures model bottom ends up at Y=0
-                floorAlignmentY = -modelBottomY;
-                console.log(`📐 AR Model positioning:`, {
-                  modelBottomY: modelBottomY,
-                  floorAlignmentY: floorAlignmentY,
-                  modelPosition: this.currentModel.position,
-                  wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`
-                });
-                console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
-              } else {
-                console.warn('⚠️ AR: Model bounding box is empty, using default positioning');
-              }
+            const floorAlignmentY = computeXrFloorAlignmentY(this);
+            if (this.currentModel || this.worldRoot?.children?.length) {
+              console.log(`📐 AR floor alignment:`, {
+                floorAlignmentY,
+                hasModel: !!this.currentModel,
+                hasWorld: !!(this.worldRoot?.children?.length),
+                wrapperWillBeAt: `(0, ${floorAlignmentY}, -0.5)`,
+              });
+              console.log(`📐 With bounded-floor: Y=0 = physical floor level (Android XR boundaries)`);
+            } else {
+              console.warn('⚠️ AR: No model/world content for floor alignment, using Y=0');
             }
             
             // Set wrapper position in world space (reference space coordinates)
@@ -5968,11 +7014,19 @@ export class SceneManager {
       this.xrSession = session;
       this.xrRenderer = this.renderer;
 
+      if (this.renderer?.xr && typeof window !== 'undefined' && !window.__IWER_MCP_MANAGED) {
+        this.renderer.xr.multiviewStereo = false;
+      }
+
+      ensureXrLocomotionRig(this);
+      this._ensureXrInteraction().onSessionStart(session, { isVR, isAR });
+
       // Ensure renderer is set up for XR rendering
       if (this.renderer && this.renderer.xr) {
         const renderSessionMode = isVR ? 'VR' : (isAR ? 'AR' : 'XR');
         console.log(`🎬 Setting up XR render loop for ${renderSessionMode}...`);
-        
+        this.createVRExitHud();
+
         // Stop regular render loop if running (XR uses its own loop via setAnimationLoop)
         if (this.isRendering) {
           this.stopRenderLoop();
@@ -5989,8 +7043,15 @@ export class SceneManager {
             // Don't interfere with Three.js's reference space handling in the render loop
             // The reference space is set once at session start and Three.js handles it from there
 
-            // Fallback recenter support (long-press on controller/headset inputs)
-            this.maybeHandleXRRecenter(time, frame);
+            // Fallback recenter / exit (must not throw — kills XR frames on Galaxy XR)
+            try {
+              this.maybeHandleXRRecenter(time, frame);
+              this.maybeHandleXRControllerExit(time);
+              this.maybeHandleXRGazeExit(time);
+              this._ensureXrInteraction().update(time, frame);
+            } catch (xrInputErr) {
+              console.warn('[XR] Input handler error:', xrInputErr?.message || xrInputErr);
+            }
 
             // WebXR Expression Tracking → VRM (Android XR / draft "expression-tracking" feature)
             const xrTf = /** @type {XRFrame|null|undefined} */ (frame ?? this.renderer.xr?.getFrame?.());
@@ -6038,6 +7099,8 @@ export class SceneManager {
                   '😐 WebXR Expression Tracking feature active — mapping XR expressions to VRM mouth/blink'
                 );
               }
+              tickNativeFacePlaybackOnXrFrame();
+
               const vrms =
                 typeof this.xrExpressionVRMProvider === 'function'
                   ? this.xrExpressionVRMProvider().filter(Boolean)
@@ -6194,6 +7257,7 @@ export class SceneManager {
          console.log(`${endMode === 'ar' ? '📱' : '🥽'} ${endMode.toUpperCase()} session ended`);
          this.xrExpressionFeatureLogged = false;
          this._xrExprFirstFrameDiagLogged = false;
+         resetFaceRecordingAudioXrUnlock();
 
          // Use setTimeout to ensure cleanup happens after session fully ends
          setTimeout(() => {
@@ -6212,13 +7276,16 @@ export class SceneManager {
            if (!this.isRendering) {
              this.startRenderLoop();
            }
+           resumeNativeFacePlaybackScheduling();
          }, 0);
        });
 
       // Call original setSession - this initializes Three.js XR
       // The reference space type is already set above, so Three.js will use it
+      await unlockFaceRecordingAudioPlayback();
       const result = await originalSetSession(session);
-      
+      await unlockFaceRecordingAudioPlayback();
+
       // CRITICAL: Now set our reference space object on Three.js
       // The type is already set, so we just need to set the actual reference space object
       if (referenceSpace && this.renderer.xr) {
@@ -6248,8 +7315,10 @@ export class SceneManager {
     let vrButton;
     try {
       vrButton = VRButton.createButton(this.renderer, {
-        requiredFeatures: ['bounded-floor'], // Require bounded-floor for proper physical floor alignment
-        optionalFeatures: ['local-floor', 'local', 'viewer']
+        requiredFeatures: ['bounded-floor'],
+        optionalFeatures: [
+          'local-floor', 'local', 'viewer',
+        ],
       });
       console.log('✅ VRButton.createButton succeeded');
     } catch (error) {
@@ -6264,14 +7333,12 @@ export class SceneManager {
       }
     }
 
-    // Customize button with emoji icon - use MutationObserver to persist changes
+    // Ensure button always has an ID (Three.js only sets it in the "supported" path)
     if (vrButton) {
-      // Set emoji icon immediately
+      vrButton.id = 'VRButton';
       vrButton.innerHTML = '🥽';
       vrButton.title = 'Enter Virtual Reality';
       vrButton.setAttribute('aria-label', 'Enter Virtual Reality');
-      
-      // Style the button for icon display
       vrButton.style.fontSize = '1.2rem';
       vrButton.style.padding = '4px 8px';
       vrButton.style.minWidth = '32px';
@@ -6280,28 +7347,16 @@ export class SceneManager {
       vrButton.style.display = 'inline-flex';
       vrButton.style.alignItems = 'center';
       vrButton.style.justifyContent = 'center';
-      
-      // Use MutationObserver to keep emoji when button text changes
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.type === 'childList' || mutation.type === 'characterData') {
-            // Restore emoji if text was changed
-            if (vrButton.textContent !== '🥽' && !vrButton.textContent.includes('🥽')) {
-              vrButton.innerHTML = '🥽';
-            }
-          }
-        });
+
+      // MutationObserver: keep emoji when Three.js changes button text
+      const observer = new MutationObserver(() => {
+        if (vrButton.textContent !== '🥽' && !vrButton.textContent.includes('🥽')) {
+          vrButton.innerHTML = '🥽';
+        }
       });
-      
-      observer.observe(vrButton, {
-        childList: true,
-        characterData: true,
-        subtree: true
-      });
-      
-      // Store observer for cleanup
+      observer.observe(vrButton, { childList: true, characterData: true, subtree: true });
       vrButton._emojiObserver = observer;
-      
+
       // Override button's click handler to manually request session (bypass Three.js internal "layers" feature request)
       // This fixes the issue where VRButton tries to request "layers" feature which isn't supported on Galaxy XR
       // Three.js VRButton may use addEventListener, so we intercept at capture phase
@@ -6311,7 +7366,8 @@ export class SceneManager {
         event.stopImmediatePropagation();
         
         console.log('🥽 VR button clicked - manually requesting session...');
-        
+        await unlockFaceRecordingAudioPlayback();
+
         try {
           // Check if VR is supported
           if (!navigator.xr) {
@@ -6329,23 +7385,26 @@ export class SceneManager {
           // This avoids the "Unsupported feature requested: layers" error
           console.log('🔄 Requesting VR session with compatible features...');
           const session = await navigator.xr.requestSession('immersive-vr', {
-            requiredFeatures: [], // Don't require any features
+            requiredFeatures: [],
             optionalFeatures: [
               'bounded-floor',
               'local-floor',
               'local',
               'viewer',
-              XR_EXPRESSION_TRACKING_FEATURE
-            ] // Allow floor + draft expression-tracking when UA supports it
+              XR_EXPRESSION_TRACKING_FEATURE,
+            ],
           });
           
           console.log('✅ VR session requested successfully');
           console.log('🥽 Session features:', session.enabledFeatures || 'none');
-          
+
+          await unlockFaceRecordingAudioPlayback();
+
           // Manually call our setSession override (which handles reference space, anchoring, etc.)
           if (this.renderer && this.renderer.xr && this.renderer.xr.setSession) {
             await this.renderer.xr.setSession(session);
           }
+          await unlockFaceRecordingAudioPlayback();
         } catch (error) {
           console.error('❌ Failed to start VR session:', error);
           console.error('Error details:', {
@@ -6378,6 +7437,10 @@ export class SceneManager {
    */
   handleXRSessionEnd(mode = 'xr') {
     console.log(`🧹 Cleaning up ${mode.toUpperCase()} session...`);
+    this.xrInteraction?.onSessionEnd();
+    this._xrExitInFlight = false;
+    this._xrNoWebXrInputSources = false;
+    this.removeVRExitHud();
 
     // Restore camera position and rotation to pre-XR state
     if (this.camera && this.preXRCameraPosition) {
@@ -6503,6 +7566,15 @@ export class SceneManager {
     // Restore scene structure if XR wrapper was created (used by both VR and AR)
     if (this.vrSceneWrapper && this.scene) {
       console.log(`🧹 Restoring scene structure from ${mode.toUpperCase()} wrapper...`);
+
+      if (this.xrLocomotionRig?.parent === this.vrSceneWrapper) {
+        const rigChildren = [...this.xrLocomotionRig.children];
+        for (const child of rigChildren) {
+          this.vrSceneWrapper.add(child);
+        }
+        this.vrSceneWrapper.remove(this.xrLocomotionRig);
+        this.xrLocomotionRig = null;
+      }
       
       // Move all children back to scene (make a copy to avoid iteration issues)
       const children = [...this.vrSceneWrapper.children];
@@ -6647,6 +7719,7 @@ export class SceneManager {
    */
   dispose() {
     console.log('🧹 Cleaning up SceneManager...');
+    this._initGeneration += 1;
     
     // End XR session if active
     if (this.xrSession) {
@@ -6707,6 +7780,7 @@ export class SceneManager {
     void this._disposeSceneLipSync();
     // Clear current model
     this.clearModel();
+    disposeSparkRenderer(this);
     
     // Dispose of renderer
     if (this.renderer) {
@@ -6725,6 +7799,15 @@ export class SceneManager {
       this.scene.clear();
       this.scene = null;
     }
+
+    this.playerRoot = null;
+    this.worldRoot = null;
+    this.propsRoot = null;
+    this.worldPropMeshes = [];
+    this.worldEnvironmentSplat = null;
+    this.worldColliderMesh = null;
+    this.activeWorldId = null;
+    this.activeWorldManifest = null;
     
     // Clear XR-related properties
     this.vrSceneWrapper = null;
