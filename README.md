@@ -3,18 +3,18 @@
 [![Apache2.0 License](https://img.shields.io/badge/license-Apache2.0-green.svg)](LICENSE)
 [![Cross-Platform](https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Web%20%7C%20XR-blue)](#)
 
-**OpenNexus3DStudio: SPACE-TIME EDITION** is a unified 3D AIGC application with advanced WebXR support that combines **Open3DStudio**, **OpenNexus3DStudio**, and **Character Studio** into a single platform. It works closely with the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
+**OpenNexus3DStudio: SPACE-TIME EDITION** is a unified 3D AIGC application with advanced WebXR support. It combines legacy **Open3DStudio** capabilities with **OpenNexus3DStudio** (WebXR, WebGPU, blockchain) and integrated **VRM avatar authoring** (appearance traits, animation, mint/export). It works closely with the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
 
-**Project Evolution**: The project started as **Open3DStudio** with basic 3D AIGC capabilities, evolved into **OpenNexus3DStudio** with WebXR, WebGPU, and advanced blockchain features, and now includes **Character Studio** for comprehensive VRM character creation and management.
+**Project Evolution**: The project started as **Open3DStudio**, evolved into **OpenNexus3DStudio: SPACE-TIME EDITION** with WebXR, WebGPU, and blockchain features, and now ships avatar/VRM workflows in the same app (formerly referred to separately as "Character Studio").
 
-**Goals & structure**: The [roadmap](docs/docs/history.md#roadmap) includes connecting wallet to load profiles or mint files and AI personality features. Character Studio is planned with a **soulbound base body** VRM (non-transferable) and **equippable** wearables/traits; programmatic avatar configuration from owned wallet assets is in progress (see [Create an Avatar](docs/docs/General/create-an-avatar.md#configure-programmatically) and [Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)). Technical and product roadmaps are detailed in the docs (e.g. [Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)).
+**Goals & structure**: The [roadmap](docs/docs/history.md#roadmap) includes connecting wallet to load profiles or mint files and AI personality features. OpenNexus3DStudio uses a **soulbound base body** VRM (non-transferable) and **equippable** wearables/traits; programmatic avatar configuration from owned wallet assets is in progress (see [Create an Avatar](docs/docs/General/create-an-avatar.md#configure-programmatically) and [Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)). Technical and product roadmaps are detailed in the docs (e.g. [Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)).
 
-The supported workflows include text-to-3d, image-to-3d, mesh segmentation, texture generation, auto-rigging, part completion, VRM model optimization, and more. **Character Studio** provides advanced VRM character creation, customization, animation, and management capabilities.
+The supported workflows include text-to-3d, image-to-3d, mesh segmentation, texture generation, auto-rigging, part completion, VRM model optimization, avatar trait customization, animation, and more.
 
 ## Demo 
-You can have a try on [Vercel Deployment](https://opennexus3dstudio-n5hap1p9y-fishwowaters-projects.vercel.app) or download the shipped applications from [Releases](https://github.com/FishWoWater/OpenNexus3DStudio/releases).
+Browse the [screenshot & demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7) or clone and build from [github.com/AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) (desktop: `npm run dist-mac` / `dist-win` / `dist-linux`).
 
-Notice that you need to deploy the API backend on your own machine or server, or try my API endpoint: [http://i-2.gpushare.com:42180](http://i-2.gpushare.com:42180) (it's deployed on a single 3060Ti and ONLY enables the mesh segmentation feature).
+Deploy the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend on your own machine or server (see **API Backend Setup** below). Screenshots: [demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7).
 
 ## 🚀 Core Principles
 - **All Local**: No data leaves your device. 
@@ -29,7 +29,44 @@ Notice that you need to deploy the API backend on your own machine or server, or
 * Part Completion
 * Auto Rigging
 
-The available models are up to the API backend, refer to [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) for the example model matrix
+The available models are up to the API backend, refer to [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) for the example model matrix
+
+## Gaussian splats (3DGS)
+
+Gaussian splats live in **this app** — same `SceneManager` viewport as VRM and mesh workflows, not a separate product. **Generation** runs on DGX via [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API); **viewing** uses [Spark.js](https://sparkjs.dev/) (`sparkSplatManager.js`, `@sparkjsdev/spark`) in the main Three.js scene.
+
+### Shipped today
+
+| Capability | Client | API (DGX) |
+|------------|--------|-----------|
+| Splat preview in viewport | `SplatMesh` alongside VRM/meshes | `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) |
+| World package load | **World Library** + `worldSceneLoader.js` | `POST /api/v1/world-generation/image-to-world` |
+| Avatar + optional splat | **Avatar from Image** + “Gaussian splat preview” checkbox | mesh + template rig + parallel TripoSplat |
+
+Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in the New Task panel (`TaskManager.jsx`).
+
+### What's not done yet
+
+- **Full XR world building** — persistent splat environments with mesh props, collision, grab, and locomotion in the main `/` WebXR session (IWSDK Option A Phases 3–5 shipped on SceneManager; `/xr` lab remains for IWSDK regression)
+- **Gaussian-VRM / RGBAvatar body pipelines** — scan-based full-body avatars and highest-fidelity head attachment; separate from viewport TripoSplat preview. SKUs and tiers are in [Monetization Roadmap](MONETIZATION_ROADMAP.md) (Gaussian-VRM full-body, Gaussian-VRM + RGBAvatar); not the same code path as `image-to-splat`.
+
+### Where it lives (architecture)
+
+```text
+[DGX 3DAIGC-API]  TripoSplat, image-to-world, avatar mesh/rig jobs
+       ↓
+[OpenNexus3DStudio /]  SceneManager — one renderer, one WebXR session, VRM + tools
+       ↓                  SparkRenderer + SplatMesh in the same scene as avatars
+[Future XR worlds]       IWSDK Option A interaction + world packages (not a second app)
+```
+
+`/xr` remains an **IWSDK lab** for grab/locomotion regression; the **main app** (`/`) runs the same interaction stack via SceneManager (Phases 3–5: rays, distance/proximity grab, thumbstick locomotion) alongside loaded worlds and VRM.
+
+**Further reading**
+
+- [Avatar pipeline (client)](docs/AVATAR_PIPELINE.md) — avatar-from-image, optional splat preview, Arc2Avatar direction
+- [Avatar pipeline (API)](https://github.com/AlfaOmegaGrafx/3DAIGC-API/blob/main/docs/AVATAR_PIPELINE.md) — endpoints, template rig, splat-generation
+- [IWSDK Option A Migration Blueprint](docs/IWSDK_OPTION_A_MIGRATION_BLUEPRINT.md) — Spark + world package stack, XR world building order
 
 ## ✨ Applications Features
 
@@ -50,17 +87,18 @@ The available models are up to the API backend, refer to [3DAIGC-API](https://gi
   - **WebXR expression tracking** when the browser exposes `expression-tracking` (VRM blink / mouth)
   - **Native face relay** when it does not — companion APK + dev-server ingest (see [OpenXR face tracking](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md))
 - **IWSDK immersive lab** (`/xr`): Meta [Immersive Web SDK](https://iwsdk.dev/) route for locomotion, grab, and spatial interaction experiments — separate from main VRM authoring; validated on **Galaxy XR** at `https://<your-PC-LAN-IP>:3000/xr` ([integration guide](docs/IWSDK_INTEGRATION.md))
+- **Gaussian splats (3DGS)**: Spark.js splat rendering in the main viewport (`SceneManager`); TripoSplat and world packages from **3DAIGC-API**; **WebXR grab + locomotion on `/`** (distance/proximity grab, thumbstick move/turn) with worlds + VRM in one session — see [Gaussian splats (3DGS)](#gaussian-splats-3dgs)
 - **WebGPU Rendering**: Automatic WebGPU detection with WebGL fallback
 - **Advanced Post-Processing**: SSAO (Screen Space Ambient Occlusion), Bloom effects, FXAA anti-aliasing
 - **Spatial Audio**: PositionalAudio support for immersive audio experiences
 - **Core3D Integration**: Access to thousands of 3D models, materials library, AI-powered design generation
-- **Shared 3D Viewer**: Unified viewing system shared with Character Studio
+- **Shared 3D Viewer**: Unified viewing system for OpenNexus3DStudio
 - **Universal3DViewer**: Smart wrapper that auto-detects application mode
 - **Blockchain Integration**: x402 protocol micropayments, Thirdweb wallet support, Base network
 - Enhanced rendering and performance optimizations
 - All Open3DStudio features included
 
-### Character Studio Features
+### OpenNexus3DStudio Avatar & VRM Features
 - **VRM Character Creation**: Create and customize VRM avatars with trait-based system
 - **Avatar Structure**: Base body VRM avatar is **soulbound** (non-transferable); clothing, hair, and accessories are equippable layers (see [Modder getting-started](docs/docs/Modders/getting-started.md)—base body layer 0)
 - **Trait System**: Mix and match character components (body, clothing, hair, accessories, etc.)
@@ -72,7 +110,7 @@ The available models are up to the API backend, refer to [3DAIGC-API](https://gi
 - **Manifest-Driven Workflows**: Programmatic avatar assembly using JSON configuration
 - **Wallet-Driven Assembly** (planned): Configure avatars and wearables from owned wallet assets; see [Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)
 - **Character Optimization**: One-click optimization reducing models to single draw calls
-- **Model Bridge**: Seamless import/export between OpenNexus3DStudio and Character Studio formats
+- **Model Bridge**: Seamless import/export between Core3D designs and avatar/VRM workflows
 
 ## 🛠️ Quick Start
 
@@ -85,7 +123,7 @@ The available models are up to the API backend, refer to [3DAIGC-API](https://gi
 
 ```bash
 # Clone the repository
-git clone https://github.com/FishWoWater/OpenNexus3DStudio.git
+git clone https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio.git
 cd OpenNexus3DStudio
 
 # Install dependencies
@@ -107,6 +145,12 @@ npm run dev:iwsdk
 npm run electron-dev
 # Electron app launches automatically
 ```
+
+### Surface + DGX Spark (two-machine dev)
+
+Typical setup: **Surface** runs `npm run dev` and Galaxy XR tests; **DGX Spark** runs 3DAIGC-API and optional Cursor Remote SSH. Files are copied over SSH (`scp`), not GitHub — **only one machine should edit `src/` at a time** or work can be overwritten.
+
+**Sync cheat sheet:** [Dev machine topology — Surface ↔ DGX sync](docs/DEV_MACHINE_TOPOLOGY.md#surface--dgx-sync-cheat-sheet) (incremental `-Paths`, lock file, ownership table).
 
 ### WebXR Development (HTTPS Required)
 
@@ -136,7 +180,7 @@ WebXR (VR/AR) requires HTTPS to work. For local development:
    ```
 
 3. **Access via HTTPS**:
-   - `https://localhost:3000` — main Character Studio (PC)
+   - `https://localhost:3000` — main OpenNexus3DStudio app (PC)
    | URL | Use on Galaxy XR |
    |-----|------------------|
    | `https://YOUR_IP:3000/` | **Main app** — VRM authoring, SceneManager AR/VR, **native face relay** |
@@ -163,13 +207,13 @@ npm run dist-linux  # Linux
 
 ### API Backend Setup
 
-1. Clone and setup the [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) backend
+1. Clone and setup the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend
 2. Start the API server (usually on port 8000)
 3. Update the API endpoint in OpenNexus3DStudio if needed
 
-### Character Studio Asset Setup
+### OpenNexus3DStudio Asset Setup
 
-Character Studio requires asset packs to function. You can:
+OpenNexus3DStudio requires asset packs for avatar traits. You can:
 
 1. **Use default assets**: Run `npm run get-assets` to clone required loot-assets from GitHub
 2. **Add custom assets**: Copy your asset packs to the `public/` folder
@@ -206,9 +250,9 @@ Character Studio requires asset packs to function. You can:
 - `Core3DService`: Core3D API communication
 - All Open3DStudio components with enhanced capabilities
 
-#### Character Studio Components
+#### OpenNexus3DStudio Avatar Components
 - `CharacterManager`: Core character management with VRM support
-- `CharacterStudioBridge`: Bridge for importing OpenNexus3DStudio models into Character Studio
+- `CharacterStudioBridge`: Legacy bridge class for GLB import into avatar workflows (internal API name)
 - Uses `Shared3DViewer` and `Universal3DViewer` (developed by OpenNexus3DStudio)
 - `AnimationManager`: Handles character animations and bone remapping
 - `BlinkManager`: Automatic eye blinking system
@@ -329,11 +373,11 @@ npm run dist-linux  # Linux
 This README reflects the current project structure and aligns with the documented roadmaps:
 
 - **[History & Roadmap](docs/docs/history.md)**: Connect wallet to load profiles or mint files; AI personality for VRM; optional profiles/personality from user‑controlled personal data exports; integration with external 3D launchpads for minting avatars and wearables; **[moeChat](https://github.com/moeru-ai/chat)** ([demo](https://chat.moeru.ai/)) as **default** companion runtime for “talk to your VRM” (WebXR); **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** — export/handoff only, not merged into this repo
-- **[Monetization Roadmap](MONETIZATION_ROADMAP.md)**: Revenue streams (x402, SaaS tiers, NFT marketplace) including **§11** personalized AI (DataConnect → Character Studio → 3DAIGC-API), **3d-anvil** launchpad economics, **moeChat-first** companion handoff + optional **AIRI**; **v3.2.8** documents **IWSDK `/xr` lab** and **Android XR native face relay**
+- **[Monetization Roadmap](MONETIZATION_ROADMAP.md)**: Revenue streams (x402, SaaS tiers, NFT marketplace) including **§11** personalized AI (DataConnect → OpenNexus3DStudio → 3DAIGC-API), **3d-anvil** launchpad economics, **moeChat-first** companion handoff + optional **AIRI**; **v3.2.8** documents **IWSDK `/xr` lab** and **Android XR native face relay**; **Gaussian-VRM / RGBAvatar** avatar tiers are roadmap SKUs distinct from viewport TripoSplat preview (see **Gaussian splats (3DGS)** above)
 - **[Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)**: Programmatic avatar/wearables from connected wallet (RMRK EVM, Thirdweb); soulbound base body + equippable wearables
 - **[Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)**: Ready Player Me migration opportunity (avatar API, GLB export, SDKs)
 
-Character Studio’s planned avatar model: **soulbound base body** (layer 0, non-transferable) with **equippable** clothing, hair, and accessories—supporting wallet-driven assembly when implemented.
+OpenNexus3DStudio’s avatar model: **soulbound base body** (layer 0, non-transferable) with **equippable** clothing, hair, and accessories—supporting wallet-driven assembly when implemented.
 
 ## 📚 Additional Documentation
 
@@ -345,12 +389,15 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - Task management and progress tracking
 
 ### OpenNexus3DStudio Documentation
+- [Avatar pipeline (client)](docs/AVATAR_PIPELINE.md) - Photo → rigged GLB/VRM, optional splat preview, key client files
+- [IWSDK Option A Migration Blueprint](docs/IWSDK_OPTION_A_MIGRATION_BLUEPRINT.md) - IWSDK → main app migration; Spark world building stack
 - [IWSDK Integration](docs/IWSDK_INTEGRATION.md) - Meta Immersive Web SDK (`/xr` route, Galaxy XR testing, optional PC emulator)
 - [OpenXR Face Tracking (Android XR)](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md) - Native face relay when Chrome lacks expression-tracking
 - [Android XR Face Bridge APK](native/android-xr-face-bridge/README.md) - Companion app build and Chrome handoff
 - [Webcam / Avatar Control](docs/WEBCAM_AVATAR_CONTROL.md) - Desktop webcam + XR expression paths
 - [WebXR Floor Anchoring & Backgrounds](docs/XR_MODE_FLOOR_ANCHORING_AND_BACKGROUNDS.md) - XR implementation details
 - [HTTPS Setup Guide](docs/HTTPS_SETUP.md) - WebXR development setup
+- [Dev machine topology & sync cheat sheet](docs/DEV_MACHINE_TOPOLOGY.md) - Surface vs DGX roles, incremental sync, cross-sync prevention
 - [Three.js WebGPU & WebXR Migration](docs/THREEJS_WEBGPU_WEBXR_MIGRATION.md) - Technical migration guide
 - [x402 & Thirdweb Integration](INTEGRATION_SUMMARY.md) - Blockchain integration details
 - [VR Positioning](docs/VR_POSITIONING.md) - VR positioning configuration
@@ -359,8 +406,8 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [Shared 3D Viewer System](src/components/Shared3DViewer_README.md) - Unified viewer documentation
 - [Core3D Integration](src/components/Core3D_README.md) - Core3D API integration guide
 
-### Character Studio Documentation
-- [Character Studio Quickstart](docs/docs/quickstart.md) - Getting started with Character Studio
+### Avatar & modder documentation (OpenNexus3DStudio)
+- [Quickstart](docs/docs/quickstart.md) - Getting started with avatar traits and VRM
 - [Create an Avatar](docs/docs/General/create-an-avatar.md) - Avatar creation guide (includes programmatic/wallet-driven goals)
 - [Optimize Avatars](docs/docs/General/optimize-avatars.md) - Avatar optimization guide
 - [Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md) - Configure avatars from connected wallet (RMRK EVM, Thirdweb)
@@ -372,13 +419,13 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 
 ## 📄 License
 
-**OpenNexus3DStudio** (including **Character Studio**) is licensed under [Apache2.0 License](LICENSE). The code and application maintain continuity with the original Open3DStudio project while evolving as OpenNexus3DStudio: SPACE-TIME EDITION, which now includes the integrated Character Studio functionality.
+**OpenNexus3DStudio: SPACE-TIME EDITION** is licensed under [Apache2.0 License](LICENSE). The code maintains continuity with the original Open3DStudio project while evolving as a unified 3D AIGC + avatar platform.
 
 ## 🙏 Acknowledgments
 
 - [Three.js](https://threejs.org/) for 3D rendering
 - [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) for VRM model support
-- [3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) for the backend API
+- [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) for the backend API
 - [TripoStudio](https://studio.tripo3d.ai/) for inspiration
 - [Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio) for the foundation
-- [M3-org](https://github.com/M3-org) for Character Studio foundation and inspiration
+- [M3-org](https://github.com/M3-org) for the upstream avatar-trait foundation and inspiration

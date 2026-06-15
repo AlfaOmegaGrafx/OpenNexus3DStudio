@@ -293,9 +293,12 @@ SCENE_CONTROLS_BACKUP.md
 # MCP Configuration (contains sensitive keys)
 .cursor/mcp.json
 
-# Monetization roadmap
-# (Tracked in git; update dates when modifying.)
+# Monetization roadmap — canonical file only (PC-owned; see DEV_MACHINE_TOPOLOGY.md)
 # protect-monetization-roadmap.js - PROTECTION SCRIPT - DO NOT DELETE
+MONETIZATION_ROADMAP_*.md
+MONETIZATION_ROADMAP_*.html
+MONETIZATION_ROADMAP*.html
+!MONETIZATION_ROADMAP.md
 
 # Privacy: local diagnostics, uploads, and secrets (never commit)
 uploads/
@@ -314,3 +317,6 @@ certs/
 
 # Large local reference PDFs at repo root only (do not match native/.../third_party/openxr/)
 /OpenXR/
+
+# DGX in-flight src/ edit lock (local on Spark only; never commit)
+.sync-lock-dgx
