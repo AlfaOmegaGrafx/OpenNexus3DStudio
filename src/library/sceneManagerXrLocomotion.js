@@ -14,6 +14,33 @@ const SNAP_TURN_DEG = 30;
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _move = new THREE.Vector3();
+const _pivot = new THREE.Vector3();
+
+/**
+ * Snap-turn the locomotion rig around the viewer's floor position (not rig origin).
+ * Keeps the headset fixed while the world rotates — standard VR comfort turn.
+ * @param {THREE.Group} rig
+ * @param {THREE.Camera} camera
+ * @param {number} radians
+ */
+export function snapTurnLocomotionRigAroundViewer(rig, camera, radians) {
+  const parent = rig.parent;
+  camera.getWorldPosition(_pivot);
+  if (parent) {
+    parent.updateMatrixWorld(true);
+    parent.worldToLocal(_pivot);
+  }
+  _pivot.y = rig.position.y;
+
+  const ox = rig.position.x - _pivot.x;
+  const oz = rig.position.z - _pivot.z;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  rig.position.x = _pivot.x + ox * cos + oz * sin;
+  rig.position.z = _pivot.z + -ox * sin + oz * cos;
+  rig.rotation.y += radians;
+}
 
 export class SceneManagerXrLocomotion {
   /**
@@ -80,7 +107,7 @@ export class SceneManagerXrLocomotion {
       const sign = Math.sign(turnAxis);
       if (this._snapTurnArmed || sign !== this._lastTurnSign) {
         const radians = THREE.MathUtils.degToRad(SNAP_TURN_DEG) * sign;
-        rig.rotateY(radians);
+        snapTurnLocomotionRigAroundViewer(rig, camera, radians);
         this.sceneManager.emit?.('xrLocomotion', { type: 'turn', radians });
         this._snapTurnArmed = false;
         this._lastTurnSign = sign;

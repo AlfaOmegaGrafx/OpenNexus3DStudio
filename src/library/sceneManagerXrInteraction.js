@@ -37,6 +37,7 @@ export class SceneManagerXrInteraction {
     this._demoCube = null;
     this._lastFrameTime = 0;
     this._capabilityLogged = false;
+    this._playerRootVisibleBeforeXr = true;
   }
 
   /**
@@ -45,6 +46,13 @@ export class SceneManagerXrInteraction {
    */
   onSessionStart(session, options = {}) {
     ensureXrLocomotionRig(this.sceneManager);
+    const playerRoot = this.sceneManager.playerRoot;
+    if (playerRoot && options.isVR !== false) {
+      this._playerRootVisibleBeforeXr = playerRoot.visible;
+      // First-person VR: hide viewport avatar so it does not occlude the view or
+      // appear to "own" the controller rays at the model's head height.
+      playerRoot.visible = false;
+    }
     this.syncGrabbablesFromScene();
     if (this.grab._grabbableRoots.length === 0 && options.isVR !== false) {
       this._ensureDemoGrabbable();
@@ -54,6 +62,10 @@ export class SceneManagerXrInteraction {
   }
 
   onSessionEnd() {
+    const playerRoot = this.sceneManager.playerRoot;
+    if (playerRoot) {
+      playerRoot.visible = this._playerRootVisibleBeforeXr;
+    }
     this._removeDemoGrabbable();
     this.grab.reset();
     this.input.reset();
