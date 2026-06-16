@@ -10,10 +10,11 @@ import "./PanelStyles.css";
 import downloadIcon from "/ui/download.svg";
 import backButtonIcon from "/ui/backButton_white.png";
 import mintIcon from "/ui/mint.svg";
-// Import loot-assets icons
-import saveIcon from "/loot-assets/loot/icons/CHEST.svg";
-import fileIcon from "/loot-assets/loot/icons/TYPE.svg";
-import formatIcon from "/loot-assets/loot/icons/Special.svg";
+import { lootIconUrl } from '../library/lootAssetsConfig';
+
+const saveIcon = lootIconUrl('CHEST.svg');
+const fileIcon = lootIconUrl('TYPE.svg');
+const formatIcon = lootIconUrl('Special.svg');
 
 function SavePanel({ onNavigate }) {
   const { characterManager, model } = useContext(SceneContext);

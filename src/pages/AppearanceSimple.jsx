@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import styles from './Appearance.module.css';
-
-// Import loot-assets icons (using PNG thumbnails for colorful loot graphics)
-import bodyIcon from "/loot-assets/loot/thumbnails/Body/orion.png";
-import headIcon from "/loot-assets/loot/thumbnails/Head/hood.png";
-import handsIcon from "/loot-assets/loot/thumbnails/Hands/gloves.png";
-import shoesIcon from "/loot-assets/loot/thumbnails/Shoes/shoes.png";
-import chestIcon from "/loot-assets/loot/thumbnails/Chest/robe.png";
-import neckIcon from "/loot-assets/loot/thumbnails/Neck/amulet.png";
-import weaponIcon from "/loot-assets/loot/thumbnails/Weapon/long_sword.png";
-import waistIcon from "/loot-assets/loot/thumbnails/Waist/sash.png";
+import { lootThumbnailUrl } from '../library/lootAssetsConfig';
 import colorPickerIcon from '../images/color-palette.png';
 import randomizeIcon from '../images/randomize.png';
 import cancelIcon from '../images/cancel.png';
+
+const bodyIcon = lootThumbnailUrl('Body', 'orion.png');
+const headIcon = lootThumbnailUrl('Head', 'hood.png');
+const handsIcon = lootThumbnailUrl('Hands', 'gloves.png');
+const shoesIcon = lootThumbnailUrl('Shoes', 'shoes.png');
+const chestIcon = lootThumbnailUrl('Chest', 'robe.png');
+const neckIcon = lootThumbnailUrl('Neck', 'amulet.png');
+const weaponIcon = lootThumbnailUrl('Weapon', 'long_sword.png');
+const waistIcon = lootThumbnailUrl('Waist', 'sash.png');
 
 const AppearanceSimple = ({ onNavigate }) => {
   const [selectedTrait, setSelectedTrait] = useState(null);

@@ -9,10 +9,11 @@ import "./PanelStyles.css";
 // Import icons
 import backButtonIcon from "/ui/backButton_white.png";
 import loadingIcon from "/ui/loading.svg";
-// Import loot-assets icons
-import uploadIcon from "/loot-assets/loot/icons/WEAPON.svg";
-import urlIcon from "/loot-assets/loot/icons/SIGIL.svg";
-import fileIcon from "/loot-assets/loot/icons/BODY.svg";
+import { lootIconUrl } from '../library/lootAssetsConfig';
+
+const uploadIcon = lootIconUrl('WEAPON.svg');
+const urlIcon = lootIconUrl('SIGIL.svg');
+const fileIcon = lootIconUrl('BODY.svg');
 
 function LoadPanel({ onNavigate }) {
   const { characterManager, loadModel } = useContext(SceneContext);
