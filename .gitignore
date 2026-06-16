@@ -399,3 +399,107 @@ certs/
 
 # DGX in-flight src/ edit lock (local on Spark only; never commit)
 .sync-lock-dgx
+
+# =============================================================================
+# Security: local-only at ANY directory depth (same rules as repo root)
+# =============================================================================
+**/.env
+**/.env.backup
+**/.env.local
+**/.env.production
+**/.env.test
+**/.env.default
+!.env.example
+!**/.env.example
+
+**/*.pem
+**/*.pem.disabled
+**/cert.pem
+**/key.pem
+**/certs/
+
+**/.mcp.json
+**/.codex/
+**/.iwsdk/
+**/.cursor/
+**/.cursorrules
+**/.sessionmem-team/
+**/.playwright-mcp/
+**/.vscode/mcp.json
+**/.vscode/settings.json
+**/.vscode/*.code-workspace
+
+**/MONETIZATION_ROADMAP.md
+**/MONETIZATION_ROADMAP_*.md
+**/MONETIZATION_ROADMAP_*.html
+**/MONETIZATION_ROADMAP*.html
+**/MONETIZATION_ROADMAP_BACKUP.md
+**/protect-monetization-roadmap.js
+**/protect-roadmap.bat
+**/Pitch Deck/
+**/Data Connect memory/
+**/WALLET_COMPARISON.md
+**/x402 & Thirdweb INTEGRATION_SUMMARY.md
+**/PRODUCTION_READINESS.md
+
+**/docs/APPLICATION_FORM_FILLED.md
+**/docs/LEGAL_COMPLIANCE_SUMMARY.md
+**/docs/READY_PLAYER_ME_OPPORTUNITY_SUMMARY.md
+**/docs/READY_PLAYER_ME_STRATEGIC_PLAN.md
+**/docs/STRATEGIC_PLAN_READY_PLAYER_ME_OPPORTUNITY.md
+**/docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md
+
+**/uploads/
+**/graphify-out/
+**/memory-bank/
+**/memory/
+**/logs/
+**/test-results/
+
+**/todo.md
+**/CLAUDE.md
+**/cursor_fluxpose_vs_mbient_labs_comparis.md
+**/HOW_TO_USE_NEW_FEATURES.md
+**/SERVER_TROUBLESHOOTING.md
+**/THREE_JS_MIGRATION.md
+**/VRM_ATLAS_OPTIMIZATION.md
+**/VRM_COMPATIBILITY_ANALYSIS.md
+**/VRM_COMPATIBILITY_FIXES.md
+**/VRM_OPTIMIZATION_ANALYSIS.md
+**/VRM_OPTIMIZATION_IMPLEMENTATION.md
+**/VRM_OPTIMIZATION_PLAN.md
+**/VRM_OPTIMIZATION_STATUS.md
+**/SCENE_CONTROLS_BACKUP.md
+
+**/fix-ai-workbench-connection.ps1
+**/fix-nvidia-sync-daemon.ps1
+**/restart-dev-server.ps1
+**/setup-dgx-spark-ssh.ps1
+**/start-dgx-spark-api.sh
+**/test-dgx-spark-connection.ps1
+**/update-dgx-spark-env.ps1
+**/verify-env-config.ps1
+**/sync-dgx.ps1
+**/sync-from-dgx.ps1
+**/sync-to-dgx.ps1
+
+**/scripts/update-roadmap-date.js
+**/scripts/update-roadmap-date.bat
+**/scripts/fix-cursor-remote-loop.ps1
+**/scripts/fix-dgx-ssh-now.ps1
+**/scripts/repair-dgx-auth.ps1
+**/scripts/repair-dgx-remote.ps1
+**/scripts/setup-thirdweb-mcp.js
+**/scripts/cursor.ssh.config
+**/scripts/cursor-ssh-extras.config
+**/scripts/dgx-spark.ssh.config
+**/scripts/nvidia-sync.ssh.config
+**/scripts/nvidia-sync-ssh.config
+**/scripts/nvidia-sync-state-store.json
+**/scripts/known_hosts.dgx
+**/scripts/sync-dgx.ps1
+**/scripts/sync-from-dgx.ps1
+**/scripts/sync-to-dgx.ps1
+
+# Bundled JDK in native tree (local dev only)
+native/android-xr-face-bridge/.jdk/
