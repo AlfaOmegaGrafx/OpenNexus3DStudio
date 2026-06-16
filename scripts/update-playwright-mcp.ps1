@@ -19,7 +19,12 @@ if ($config.mcpServers.Playwright) {
     $config.mcpServers.PSObject.Properties.Remove('Playwright')
 }
 
-# Add/Update playwright-extension configuration
+# Add/Update playwright-extension configuration (token from env — never hardcode)
+$token = $env:PLAYWRIGHT_MCP_EXTENSION_TOKEN
+if (-not $token) {
+    Write-Error "Set PLAYWRIGHT_MCP_EXTENSION_TOKEN in your environment, then re-run this script."
+    exit 1
+}
 $config.mcpServers.'playwright-extension' = @{
     command = 'npx'
     args = @(
@@ -27,7 +32,7 @@ $config.mcpServers.'playwright-extension' = @{
         '--extension'
     )
     env = @{
-        PLAYWRIGHT_MCP_EXTENSION_TOKEN = 'REDACTED'
+        PLAYWRIGHT_MCP_EXTENSION_TOKEN = $token
     }
 }
 

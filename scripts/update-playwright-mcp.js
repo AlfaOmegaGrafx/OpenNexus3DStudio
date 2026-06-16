@@ -24,7 +24,12 @@ if (config.mcpServers.Playwright) {
   delete config.mcpServers.Playwright;
 }
 
-// Add/Update playwright-extension configuration
+// Add/Update playwright-extension configuration (token from env — never hardcode)
+const token = process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN;
+if (!token) {
+  console.error('Set PLAYWRIGHT_MCP_EXTENSION_TOKEN in your environment, then re-run this script.');
+  process.exit(1);
+}
 config.mcpServers['playwright-extension'] = {
   command: 'npx',
   args: [
@@ -32,7 +37,7 @@ config.mcpServers['playwright-extension'] = {
     '--extension'
   ],
   env: {
-    PLAYWRIGHT_MCP_EXTENSION_TOKEN: 'REDACTED'
+    PLAYWRIGHT_MCP_EXTENSION_TOKEN: token
   }
 };
 

@@ -1,14 +1,18 @@
 ---
-description: Never commit secrets, env files, or private business docs
+description: Prevent committing secrets, env files, and private business documents
 alwaysApply: true
 ---
 
-# Local-only files (never commit or push)
+# Security — never commit or push
 
-- **Secrets:** `.env`, `*.pem`, `certs/`, API keys, tokens, passwords, SSH private keys
-- **Business private:** `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, strategy/financial markdown
-- **Machine-local:** `.mcp.json`, `.codex/`, `.iwsdk/`, `uploads/`, DGX sync scripts, SSH configs
+Before any git commit or push:
 
-Use `.env.example` for placeholders only. If a file is listed in `.gitignore` or `scripts/security-purge-paths.txt`, keep it local.
+1. **Never stage:** `.env`, `*.pem`, `certs/`, `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `uploads/`, `.mcp.json`, `.codex/`, `.iwsdk/`, SSH configs with keys
+2. **Use templates only:** `.env.example` with empty placeholders — no real API keys in tracked files
+3. **Scripts that write MCP config** (`update-playwright-mcp.*`) must read tokens from **environment variables**, never string literals
+4. **Pre-commit hook:** run `sh scripts/install-secret-guard-hook.sh` after clone if hooks are missing
+5. **Scan before push:** `bash scripts/scan-repo-secrets.sh .` (PC) or on DGX after sync
 
-When adding MCP servers, follow `mcp-workspace.mdc`: define servers in `.cursor/mcp.json` with `env` placeholders — never hardcode secrets in committed files.
+If `git filter-repo` was used, force-push cleaned history only — never push local secret files.
+
+DGX clones must `git fetch opennexus main && git reset --hard opennexus/main` after security updates (backup `.env` first).
