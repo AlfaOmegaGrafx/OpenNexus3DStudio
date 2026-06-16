@@ -143,6 +143,7 @@ export class SceneManagerXrGrab {
 
   /**
    * Right thumbstick up/down moves held objects along the grabbing hand's pointer ray.
+   * Up = closer to user, down = farther along ray (Galaxy XR stick polarity).
    * @param {number} stickY
    * @param {number} deltaSeconds
    * @param {import('./sceneManagerXrInput.js').XrPointerState[]} pointers
@@ -154,7 +155,7 @@ export class SceneManagerXrGrab {
     for (const [hand, grab] of this.activeGrabs) {
       const pointer = pointers.find((p) => p.handedness === hand);
       if (!pointer) continue;
-      grab.rayDistance += axis * PLACEMENT_SPEED * deltaSeconds;
+      grab.rayDistance -= axis * PLACEMENT_SPEED * deltaSeconds;
       grab.rayDistance = THREE.MathUtils.clamp(
         grab.rayDistance,
         RAY_MIN_DISTANCE,
