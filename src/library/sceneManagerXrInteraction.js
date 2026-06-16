@@ -11,6 +11,8 @@ import {
   ensureXrLocomotionRig,
 } from './sceneManagerXrLocomotion.js';
 import { SceneManagerXrTeleport } from './sceneManagerXrTeleport.js';
+import { SceneManagerXrAvatarView } from './sceneManagerXrAvatarView.js';
+import { SceneManagerXrMenu } from './sceneManagerXrMenu.js';
 import {
   isThumbstickTeleportAim,
   readRightThumbstickAxes,
@@ -34,10 +36,11 @@ export class SceneManagerXrInteraction {
     this.grab = new SceneManagerXrGrab(sceneManager);
     this.locomotion = new SceneManagerXrLocomotion(sceneManager);
     this.teleport = new SceneManagerXrTeleport(sceneManager);
+    this.avatarView = new SceneManagerXrAvatarView(sceneManager);
+    this.menu = new SceneManagerXrMenu(sceneManager, this.avatarView);
     this._demoCube = null;
     this._lastFrameTime = 0;
     this._capabilityLogged = false;
-    this._playerRootVisibleBeforeXr = true;
   }
 
   /**
@@ -46,26 +49,23 @@ export class SceneManagerXrInteraction {
    */
   onSessionStart(session, options = {}) {
     ensureXrLocomotionRig(this.sceneManager);
-    const playerRoot = this.sceneManager.playerRoot;
-    if (playerRoot && options.isVR !== false) {
-      this._playerRootVisibleBeforeXr = playerRoot.visible;
-      // First-person VR: hide viewport avatar so it does not occlude the view or
-      // appear to "own" the controller rays at the model's head height.
-      playerRoot.visible = false;
-    }
+    this.avatarView.onSessionStart(options);
     this.syncGrabbablesFromScene();
     if (this.grab._grabbableRoots.length === 0 && options.isVR !== false) {
       this._ensureDemoGrabbable();
     }
     this._logCapabilityOnce(session, options);
-    console.log('[XR][interaction] Session started — input, grab, locomotion, teleport active on /');
+    console.log(
+      '[XR][interaction] Session started — input, grab, locomotion, teleport active on /',
+      this.avatarView.hasAvatar()
+        ? `(avatar: ${this.avatarView.mode}, left Y = menu, left X = toggle view)`
+        : '',
+    );
   }
 
   onSessionEnd() {
-    const playerRoot = this.sceneManager.playerRoot;
-    if (playerRoot) {
-      playerRoot.visible = this._playerRootVisibleBeforeXr;
-    }
+    this.menu.reset();
+    this.avatarView.onSessionEnd();
     this._removeDemoGrabbable();
     this.grab.reset();
     this.input.reset();
@@ -134,6 +134,7 @@ export class SceneManagerXrInteraction {
       this.teleport.isAiming() ||
       isThumbstickTeleportAim(rightStick.y, rightStick.x);
     this.locomotion.update(deltaSeconds, pointers, { skipRightTurn });
+    this.menu.update(pointers);
   }
 
   _ensureDemoGrabbable() {
