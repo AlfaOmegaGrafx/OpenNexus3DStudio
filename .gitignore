@@ -377,6 +377,8 @@ scripts/dgx-spark.ssh.config
 scripts/nvidia-sync.ssh.config
 scripts/nvidia-sync-state-store.json
 scripts/known_hosts.dgx
+scripts/repo-hygiene-check.sh
+scripts/post-leak-verify.sh
 
 # Privacy: local diagnostics, uploads, and secrets (never commit)
 uploads/
