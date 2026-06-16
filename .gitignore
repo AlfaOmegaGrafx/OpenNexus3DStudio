@@ -290,20 +290,99 @@ scripts/restore-scene-controls.bat
 restore-scene-controls.js
 SCENE_CONTROLS_BACKUP.md
 
+# IDE / agent tooling (local only; may contain tokens or machine paths)
+.cursor/
+.cursorrules
+.codex/
+.iwsdk/
+.mcp.json
+.sessionmem-team/
+.playwright-mcp/
+.vscode/mcp.json
+.vscode/settings.json
+.vscode/*.code-workspace
+
 # MCP Configuration (contains sensitive keys)
 .cursor/mcp.json
 
-# Monetization roadmap — canonical file only (PC-owned; see DEV_MACHINE_TOPOLOGY.md)
-# protect-monetization-roadmap.js - PROTECTION SCRIPT - DO NOT DELETE
+# Business / financial / strategy (local only — never publish)
+MONETIZATION_ROADMAP.md
 MONETIZATION_ROADMAP_*.md
 MONETIZATION_ROADMAP_*.html
 MONETIZATION_ROADMAP*.html
-!MONETIZATION_ROADMAP.md
+MONETIZATION_ROADMAP_BACKUP.md
+protect-monetization-roadmap.js
+protect-roadmap.bat
+Pitch Deck/
+Data Connect memory/
+docs/READY_PLAYER_ME_OPPORTUNITY_SUMMARY.md
+docs/READY_PLAYER_ME_STRATEGIC_PLAN.md
+docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md
+docs/APPLICATION_FORM_FILLED.md
+docs/LEGAL_COMPLIANCE_SUMMARY.md
+docs/docs/READY_PLAYER_ME_OPPORTUNITY_SUMMARY.md
+docs/docs/READY_PLAYER_ME_STRATEGIC_PLAN.md
+docs/docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md
+docs/docs/APPLICATION_FORM_FILLED.md
+docs/docs/LEGAL_COMPLIANCE_SUMMARY.md
+WALLET_COMPARISON.md
+x402 & Thirdweb INTEGRATION_SUMMARY.md
+PRODUCTION_READINESS.md
+
+# Local dev notes / scratch (not required to run the app)
+todo.md
+CLAUDE.md
+memory-bank/
+graphify-out/
+cursor_fluxpose_vs_mbient_labs_comparis.md
+HOW_TO_USE_NEW_FEATURES.md
+SERVER_TROUBLESHOOTING.md
+THREE_JS_MIGRATION.md
+VRM_ATLAS_OPTIMIZATION.md
+VRM_COMPATIBILITY_ANALYSIS.md
+VRM_COMPATIBILITY_FIXES.md
+VRM_OPTIMIZATION_ANALYSIS.md
+VRM_OPTIMIZATION_IMPLEMENTATION.md
+VRM_OPTIMIZATION_PLAN.md
+VRM_OPTIMIZATION_STATUS.md
+SCENE_CONTROLS_BACKUP.md
+restore-scene-controls.js
+
+# Machine-specific dev scripts (keep locally; use docs/ for shared setup)
+fix-ai-workbench-connection.ps1
+fix-nvidia-sync-daemon.ps1
+restart-dev-server.ps1
+setup-dgx-spark-ssh.ps1
+start-dgx-spark-api.sh
+test-dgx-spark-connection.ps1
+update-dgx-spark-env.ps1
+verify-env-config.ps1
+sync-dgx.ps1
+sync-from-dgx.ps1
+sync-to-dgx.ps1
+scripts/update-roadmap-date.js
+scripts/update-roadmap-date.bat
+scripts/fix-cursor-remote-loop.ps1
+scripts/fix-dgx-ssh-now.ps1
+scripts/repair-dgx-auth.ps1
+scripts/repair-dgx-remote.ps1
+scripts/cursor.ssh.config
+scripts/cursor-ssh-extras.config
+scripts/dgx-spark.ssh.config
+scripts/nvidia-sync.ssh.config
+scripts/nvidia-sync-state-store.json
+scripts/known_hosts.dgx
 
 # Privacy: local diagnostics, uploads, and secrets (never commit)
 uploads/
 test-results/
+logs/
 memory/
+.env
+.env.backup
+.env.local
+.env.production
+.env.test
 *.pem
 *.pem.disabled
 cert.pem

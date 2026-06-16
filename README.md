@@ -48,7 +48,7 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
 ### What's not done yet
 
 - **Full XR world building** — persistent splat environments with mesh props, collision, grab, and locomotion in the main `/` WebXR session (IWSDK Option A Phases 3–5 shipped on SceneManager; `/xr` lab remains for IWSDK regression)
-- **Gaussian-VRM / RGBAvatar body pipelines** — scan-based full-body avatars and highest-fidelity head attachment; separate from viewport TripoSplat preview. SKUs and tiers are in [Monetization Roadmap](MONETIZATION_ROADMAP.md) (Gaussian-VRM full-body, Gaussian-VRM + RGBAvatar); not the same code path as `image-to-splat`.
+- **Gaussian-VRM / RGBAvatar body pipelines** — scan-based full-body avatars and highest-fidelity head attachment; separate from viewport TripoSplat preview (not the same code path as `image-to-splat`).
 
 ### Where it lives (architecture)
 
@@ -370,12 +370,10 @@ npm run dist-linux  # Linux
 
 ## 📋 Roadmap Alignment
 
-This README reflects the current project structure and aligns with the documented roadmaps:
+This README reflects the current project structure. Public technical docs live under `docs/` (see **Additional Documentation** below). Copy `.env.example` to `.env` for local configuration — never commit `.env`.
 
 - **[History & Roadmap](docs/docs/history.md)**: Connect wallet to load profiles or mint files; AI personality for VRM; optional profiles/personality from user‑controlled personal data exports; integration with external 3D launchpads for minting avatars and wearables; **[moeChat](https://github.com/moeru-ai/chat)** ([demo](https://chat.moeru.ai/)) as **default** companion runtime for “talk to your VRM” (WebXR); **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** — export/handoff only, not merged into this repo
-- **[Monetization Roadmap](MONETIZATION_ROADMAP.md)**: Revenue streams (x402, SaaS tiers, NFT marketplace) including **§11** personalized AI (DataConnect → OpenNexus3DStudio → 3DAIGC-API), **3d-anvil** launchpad economics, **moeChat-first** companion handoff + optional **AIRI**; **v3.2.8** documents **IWSDK `/xr` lab** and **Android XR native face relay**; **Gaussian-VRM / RGBAvatar** avatar tiers are roadmap SKUs distinct from viewport TripoSplat preview (see **Gaussian splats (3DGS)** above)
 - **[Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)**: Programmatic avatar/wearables from connected wallet (RMRK EVM, Thirdweb); soulbound base body + equippable wearables
-- **[Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)**: Ready Player Me migration opportunity (avatar API, GLB export, SDKs)
 
 OpenNexus3DStudio’s avatar model: **soulbound base body** (layer 0, non-transferable) with **equippable** clothing, hair, and accessories—supporting wallet-driven assembly when implemented.
 
@@ -399,7 +397,7 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [HTTPS Setup Guide](docs/HTTPS_SETUP.md) - WebXR development setup
 - [Dev machine topology & sync cheat sheet](docs/DEV_MACHINE_TOPOLOGY.md) - Surface vs DGX roles, incremental sync, cross-sync prevention
 - [Three.js WebGPU & WebXR Migration](docs/THREEJS_WEBGPU_WEBXR_MIGRATION.md) - Technical migration guide
-- [x402 & Thirdweb Integration](INTEGRATION_SUMMARY.md) - Blockchain integration details
+- [x402 & Thirdweb Integration](src/library/README_X402_INTEGRATION.md) - Blockchain integration details
 - [VR Positioning](docs/VR_POSITIONING.md) - VR positioning configuration
 - [AR Floor Anchoring Fix](docs/AR_FLOOR_ANCHORING_FIX.md) - AR implementation details
 - [Android XR Floor Anchoring](docs/ANDROID_XR_FLOOR_ANCHORING.md) - Android XR compatibility
@@ -415,7 +413,6 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [Modder Documentation](docs/docs/Modders/getting-started.md) - Guide for custom assets and manifests (base body = layer 0, soulbound)
 - [Developer Documentation](docs/docs/Developers/overview.md) - API and architecture documentation
 - [History & Roadmap](docs/docs/history.md) - Project history and roadmap (wallet load profiles, mint files, AI personality)
-- [Monetization Roadmap](MONETIZATION_ROADMAP.md) - Spacetime revenue model (**§11**, x402, 3d-anvil, IWSDK lab, native face bridge, **moeChat-first** companion + optional **AIRI** v3.2.8+)
 
 ## 📄 License
 
