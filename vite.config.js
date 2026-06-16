@@ -290,13 +290,15 @@ export default defineConfig(({ command, mode }) => {
     },
   },
   resolve: {
-    alias: {
-      buffer: 'buffer/',
-      // Force all Three.js imports to use the same instance
-      three: path.resolve(__dirname, 'node_modules/three'),
-      // Alias for centralized Three.js module
-      '@/three': path.resolve(__dirname, 'src/library/three.js'),
-    },
+    alias: [
+      { find: 'buffer', replacement: 'buffer/' },
+      // Exact `three` only — a directory alias breaks `three/webgpu` and `three/addons/*` export paths
+      {
+        find: /^three$/,
+        replacement: path.resolve(__dirname, 'node_modules/three/build/three.module.js'),
+      },
+      { find: '@/three', replacement: path.resolve(__dirname, 'src/library/three.js') },
+    ],
   },
   server: {
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
