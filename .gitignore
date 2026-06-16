@@ -291,8 +291,6 @@ restore-scene-controls.js
 SCENE_CONTROLS_BACKUP.md
 
 # IDE / agent tooling (local only; may contain tokens or machine paths)
-.cursor/
-.cursorrules
 .codex/
 .iwsdk/
 .mcp.json
@@ -302,8 +300,15 @@ SCENE_CONTROLS_BACKUP.md
 .vscode/settings.json
 .vscode/*.code-workspace
 
-# MCP Configuration (contains sensitive keys)
+# Cursor: safe rules may be committed (see recursive **/.cursor/ block at bottom)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .cursor/mcp.json
+.cursor/settings.json
+.cursor/plans/
+.cursor/cursor_created/
+.cursorrules
 
 # Business / financial / strategy (local only — never publish)
 MONETIZATION_ROADMAP.md
@@ -421,13 +426,21 @@ certs/
 **/.mcp.json
 **/.codex/
 **/.iwsdk/
-**/.cursor/
 **/.cursorrules
 **/.sessionmem-team/
 **/.playwright-mcp/
 **/.vscode/mcp.json
 **/.vscode/settings.json
 **/.vscode/*.code-workspace
+
+# Cursor: commit safe rules only; block MCP tokens and machine settings at any depth
+**/.cursor/*
+!**/.cursor/rules/
+!**/.cursor/rules/**
+**/.cursor/mcp.json
+**/.cursor/settings.json
+**/.cursor/plans/
+**/.cursor/cursor_created/
 
 **/MONETIZATION_ROADMAP.md
 **/MONETIZATION_ROADMAP_*.md

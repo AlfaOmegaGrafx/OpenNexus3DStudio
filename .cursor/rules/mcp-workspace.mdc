@@ -1,0 +1,12 @@
+---
+description: All MCP servers must be configured in the workspace .cursor/mcp.json
+alwaysApply: true
+---
+
+# MCP configuration in workspace
+
+- **Always use the workspace MCP config.** When adding, changing, or documenting MCP (Model Context Protocol) servers, update `.cursor/mcp.json` in this repository. Do not rely only on user-global `~/.cursor/mcp.json`.
+- **Single source of truth.** Define every MCP server used by this project in `.cursor/mcp.json` so the project is self-contained and works for anyone who clones it (after they add their own API keys/tokens where needed).
+- **Secrets.** Use `env` or `headers` for API keys and tokens. Prefer placeholders or references to `.env` in comments; do not commit real secrets.
+
+- **Avoid duplicates.** Each MCP server should be defined in only one place: either in this workspace `.cursor/mcp.json` or in the global `~/.cursor/mcp.json`, not both. If the same server is in both, Cursor merges them and it appears twice in Settings > Tools > MCP. Prefer defining project-only MCPs (e.g. context7) in the workspace; define shared MCPs (Playwright, Linear, Thirdweb, Chrome DevTools) in global only to avoid duplicate entries.

@@ -1,0 +1,14 @@
+---
+description: Never commit secrets, env files, or private business docs
+alwaysApply: true
+---
+
+# Local-only files (never commit or push)
+
+- **Secrets:** `.env`, `*.pem`, `certs/`, API keys, tokens, passwords, SSH private keys
+- **Business private:** `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, strategy/financial markdown
+- **Machine-local:** `.mcp.json`, `.codex/`, `.iwsdk/`, `uploads/`, DGX sync scripts, SSH configs
+
+Use `.env.example` for placeholders only. If a file is listed in `.gitignore` or `scripts/security-purge-paths.txt`, keep it local.
+
+When adding MCP servers, follow `mcp-workspace.mdc`: define servers in `.cursor/mcp.json` with `env` placeholders — never hardcode secrets in committed files.
