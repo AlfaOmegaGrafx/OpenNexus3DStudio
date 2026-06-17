@@ -20,6 +20,14 @@
 import { openxrFloatParametersToWebXRRecord } from './openxrFaceParameterMap.js';
 import { resetFaceExpressionNeutralBaseline } from './xrExpressionTrackingDriver.js';
 
+/**
+ * Web-side OpenXR toggle.  When `false` the `openxrParameters` dense-float
+ * path in the native face bridge is skipped entirely.  Mirror of the APK-side
+ * `FaceTrackingCoordinator.OPENXR_ENABLED`.  Flip to `true` when the APK
+ * re-enables the OpenXR face engine.
+ */
+export const OPENXR_WEB_ENABLED = false;
+
 /** WebView / main-thread jank can delay rAF; keep native weights usable longer than one XR frame. */
 const DEFAULT_MAX_AGE_MS = 2000;
 /** Chrome WebXR: APK relay can gap while PiP/keeper catches up — match APK handoff stale (30s). */
@@ -148,12 +156,12 @@ export function initNativeFaceBridge() {
         const rec = {};
         if (typeof obj.source === 'string') {
           _lastSource = obj.source === 'openxr' || obj.source === 'jetpack' ? obj.source : 'unknown';
-        } else if (Array.isArray(obj.openxrParameters) && obj.openxrParameters.length > 0) {
+        } else if (OPENXR_WEB_ENABLED && Array.isArray(obj.openxrParameters) && obj.openxrParameters.length > 0) {
           _lastSource = 'openxr';
         } else if (obj.weights && typeof obj.weights === 'object') {
           _lastSource = 'jetpack';
         }
-        if (Array.isArray(obj.openxrParameters) && obj.openxrParameters.length > 0) {
+        if (OPENXR_WEB_ENABLED && Array.isArray(obj.openxrParameters) && obj.openxrParameters.length > 0) {
           Object.assign(rec, openxrFloatParametersToWebXRRecord(obj.openxrParameters));
         }
         const weights =
