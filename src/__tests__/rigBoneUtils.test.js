@@ -6,8 +6,11 @@ import {
   alignSkinnedMeshToRig,
   getBoneDisplayWorldPosition,
   getPrimarySkeletonBones,
+  getSkeletonJointSphereRadius,
+  SKELETON_JOINT_SPHERE_RADIUS,
   getSkinnedDisplayWorldBounds,
   getViewportLayoutBounds,
+  normalizeRiggedModelTransforms,
   rebindSkinnedMeshes,
   updateSkeletonDisplayCorrection,
 } from '../library/rigBoneUtils.js';
@@ -31,6 +34,11 @@ describe('rigBoneUtils', () => {
     root.updateMatrixWorld(true);
     const rebound = rebindSkinnedMeshes(root);
     expect(rebound).toBe(1);
+  });
+
+  it('uses a fixed joint sphere radius for every model', () => {
+    expect(getSkeletonJointSphereRadius()).toBe(SKELETON_JOINT_SPHERE_RADIUS);
+    expect(getSkeletonJointSphereRadius()).toBe(0.012);
   });
 
   it('prefers active skinned skeleton bones for visualization', () => {
@@ -219,5 +227,26 @@ describe('rigBoneUtils', () => {
     const hipsWorld = new THREE.Vector3();
     hips.getWorldPosition(hipsWorld);
     expect(hipsWorld.y).toBeCloseTo(1, 0);
+  });
+
+  it('skips armature mesh repair for uploaded VRM roots', () => {
+    const root = new THREE.Group();
+    root.userData.vrm = { meta: { metaVersion: '1' } };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 1, 0);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.4, 1.6, 0.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    skinned.position.set(0, 0, 0);
+    skinned.rotation.y = 0;
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    normalizeRiggedModelTransforms(root, { label: 'test-vrm' });
+    expect(skinned.rotation.y).toBe(0);
   });
 });

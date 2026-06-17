@@ -5,7 +5,7 @@
   "homepage": "https://github.com/FishWoWater/OpenNexus3DStudio",
   "scripts": {
     "dev": "vite --host",
-    "dev:surface": "node node_modules/vite/bin/vite.js --host 10.0.0.32 --strictPort false",
+    "dev:surface": "node node_modules/vite/bin/vite.js --host 10.0.0.32",
     "dev:iwsdk": "iwsdk dev up --open --foreground",
     "dev:runtime": "vite --host",
     "dev:vite": "vite --host",

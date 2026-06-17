@@ -24,7 +24,6 @@ export const loadVRM = async(url) => {
     
     const vrm = await gltfLoader.loadAsync(url);
     if (vrm.userData?.vrmMeta?.metaVersion === '0'){
-      vrm.scene.rotation.y = Math.PI;
       vrm.scene.traverse((child)=>{
         if (child.isMesh) {
           child.userData.isVRM0 = true;

@@ -54,8 +54,12 @@ for nested in \
   scripts/scripts/scripts \
   src/components/components \
   src/components/components/components \
+  src/context/context \
+  src/context/context/context \
   src/pages/pages \
   src/pages/pages/pages \
+  src/services/services \
+  src/services/services/services \
   src/library/library \
   src/__tests__/__tests__
 do

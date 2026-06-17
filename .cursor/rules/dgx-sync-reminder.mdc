@@ -17,6 +17,11 @@ Whenever you **create, edit, or delete** files under this repo, **apply scp sync
    bash scripts/sync-to-pc.sh
    ```
    Use `--include-src` only when `src/` was edited on DGX (lock first per sync rules).
+   After milestones, also push agent context:
+   ```bash
+   bash scripts/sync-to-pc.sh --include-agent-context
+   bash scripts/sync-sessionmem-team.sh
+   ```
 4. **Run `bash scripts/ensure-dgx-sync-ready.sh`** after PC→DGX syncs or doc cleanup.
 5. **Do not** nag about sync if you already ran it. Only report if sync **failed**.
 
@@ -35,6 +40,8 @@ test in the browser:
 ```bash
 cd /home/sifr/OpenNexus3DStudio
 bash scripts/sync-to-pc.sh --include-src
+bash scripts/sync-to-pc.sh --include-agent-context   # memory-bank + graphify-out
+bash scripts/sync-sessionmem-team.sh               # SessionMem team folder
 ```
 
 Requires OpenSSH on Surface (port 22). Surface has a matching rule:

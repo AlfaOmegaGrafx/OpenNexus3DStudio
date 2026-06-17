@@ -666,12 +666,11 @@ export default defineConfig(({ command, mode }) => {
   },
   resolve: {
     alias: [
+      { find: /^three\/addons\/(.*)/, replacement: path.resolve(__dirname, 'node_modules/three/examples/jsm/$1') },
+      { find: 'three/webgpu', replacement: path.resolve(__dirname, 'node_modules/three/build/three.webgpu.js') },
+      { find: 'three/tsl', replacement: path.resolve(__dirname, 'node_modules/three/build/three.tsl.js') },
+      { find: /^three$/, replacement: path.resolve(__dirname, 'node_modules/three/build/three.module.js') },
       { find: 'buffer', replacement: 'buffer/' },
-      // Exact `three` only — a directory alias breaks `three/webgpu` and `three/addons/*` export paths
-      {
-        find: /^three$/,
-        replacement: path.resolve(__dirname, 'node_modules/three/build/three.module.js'),
-      },
       { find: '@/three', replacement: path.resolve(__dirname, 'src/library/three.js') },
     ],
   },
@@ -695,7 +694,7 @@ export default defineConfig(({ command, mode }) => {
       console.warn('⚠️  WebXR (AR/VR) will not work on Galaxy XR without HTTPS')
       return false // Fall back to HTTP
     })(),
-    strictPort: true, // fail if port in use (avoids multiple dev servers on 3001, 3002…). E2E uses PORT=3099
+    strictPort: false, // allow Cursor on 127.0.0.1:3000 while Vite serves LAN (Galaxy XR)
   },
   optimizeDeps: {
     include: [
@@ -713,6 +712,13 @@ export default defineConfig(({ command, mode }) => {
     esbuildOptions: {
       // Ensure Three.js is properly resolved
       resolveExtensions: ['.js', '.jsx', '.ts', '.tsx'],
+      alias: {
+        'three/addons/postprocessing/Pass.js': path.resolve(
+          __dirname,
+          'node_modules/three/examples/jsm/postprocessing/Pass.js',
+        ),
+        'three/webgpu': path.resolve(__dirname, 'node_modules/three/build/three.webgpu.js'),
+      },
     },
   },
   ssr: {

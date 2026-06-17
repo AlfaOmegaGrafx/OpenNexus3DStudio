@@ -631,6 +631,29 @@ export const getUniqueId = () => {
   return uniqueId;
 }
 
+/** @param {import('@pixiv/three-vrm').VRMHumanoid|{ humanBones?: object, humanoidBones?: string[] }} humanoid */
+export function getHumanoidBoneNames(humanoid) {
+  if (!humanoid) return [];
+  if (Array.isArray(humanoid.humanoidBones) && humanoid.humanoidBones.length > 0) {
+    return humanoid.humanoidBones;
+  }
+  if (humanoid.humanBones && typeof humanoid.humanBones === 'object') {
+    return Object.keys(humanoid.humanBones);
+  }
+  return [];
+}
+
+/**
+ * Rig bone used for skinning (not VRM normalized pose helpers).
+ * Skeleton viz must use this — getNormalizedBoneNode returns Normalized_* nodes
+ * that do not match skinned mesh bind positions (see remote-log Sifr2 load).
+ */
+export function getHumanoidRigBone(humanoid, boneName) {
+  const raw = humanoid?.humanBones?.[boneName]?.node;
+  if (raw) return raw;
+  return humanoid?.getNormalizedBoneNode?.(boneName) ?? null;
+}
+
 export const renameVRMBones = (vrm) => {
   const bones = vrm.humanoid.humanBones;
 

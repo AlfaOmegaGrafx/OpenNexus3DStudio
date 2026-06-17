@@ -1,0 +1,34 @@
+---
+description: Check browser remote logs before debugging viewport/VRM/rig issues (Surface + DGX)
+alwaysApply: true
+---
+
+# Remote log first (Surface + DGX)
+
+Before changing code for **viewport, VRM upload, rig/bone alignment, orientation (180° flip), or load failures**, read runtime evidence when it exists.
+
+## Where logs live
+
+| Machine | Path |
+|---------|------|
+| **Surface** | `logs/remote-log.txt` (rotated archives: `logs/remote-log.*.txt`) |
+| **DGX** | Same paths under `/home/sifr/OpenNexus3DStudio/logs/` |
+
+Enable in browser: `?remoteLog=1` on the dev URL (e.g. `https://<Surface-LAN-IP>:3000/?remoteLog=1`).
+
+## Required agent behavior
+
+1. **Grep recent lines** in `remote-log.txt` (and latest archive if the file was just rotated) for the feature under fix — e.g. `VRM0`, `normalization`, `rotated`, `AvatarBody`, `bone visualization`, `[Rig]`, `processModel`, `curVRM=true`.
+2. **Note timestamps** of the user's repro (match their screenshot/session) before editing.
+3. **Prefer log-proven fixes** over guessing — if logs show `rotated armature via hips` vs `rotated scene root (all skins move together)`, treat that as the regression signal.
+4. After a fix, tell the user what log line should appear on the next re-upload (e.g. scene-root rotation, not hips-only).
+5. **Canonical VRM pipeline:** `docs/VRM_UPLOAD_DISPLAY_EXPORT.md` (upload / display / export; scene-root transforms for multi-skin VRM0).
+
+## DGX agent
+
+If debugging a Surface repro, SSH is optional — Surface `logs/` is the source of truth when the user tests in the browser on PC. When testing on DGX-hosted dev, read DGX `logs/` the same way.
+
+## Do not skip when
+
+- User reports misaligned bones, flipped mesh, or “it worked a minute ago”
+- Hot reload may have left stale state — still read the last full VRM load block in the log

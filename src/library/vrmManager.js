@@ -65,14 +65,6 @@ export class VRMManager {
      * @param {Object} vrm - The VRM model to set up
      */
     _setupVRM0(vrm) {
-        if (vrm.humanoid.humanBones.hips.node.parent == vrm.scene) {
-            const dummyRotate = new THREE.Object3D();
-            dummyRotate.name = "newRootNode";
-            addChildAtFirst(vrm.scene, dummyRotate);
-            dummyRotate.add(vrm.humanoid.humanBones.hips.node);
-        }
-        vrm.humanoid.humanBones.hips.node.parent.rotateY(3.14159);
-
         vrm.scene.traverse((child) => {
             if (child.isSkinnedMesh) {
                 for (let i = 0; i < child.skeleton.bones.length; i++) {

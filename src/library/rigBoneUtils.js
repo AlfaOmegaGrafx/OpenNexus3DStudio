@@ -83,11 +83,36 @@ export function modelHasSkinnedMesh(root) {
 export function findPrimarySkinnedMesh(root) {
   if (!root) return null;
   /** @type {import('three').SkinnedMesh|null} */
-  let skinned = null;
+  let best = null;
+  let bestVerts = -1;
+  let bestBody = null;
   root.traverse((child) => {
-    if (!skinned && child.isSkinnedMesh) skinned = child;
+    if (!child.isSkinnedMesh) return;
+    const name = (child.name || '').toLowerCase();
+    const verts = child.geometry?.attributes?.position?.count ?? 0;
+    if (name.includes('body') && !name.includes('eyebrow')) {
+      if (!bestBody || verts >= (bestBody.geometry?.attributes?.position?.count ?? 0)) {
+        bestBody = child;
+      }
+      return;
+    }
+    if (verts > bestVerts) {
+      bestVerts = verts;
+      best = child;
+    }
   });
-  return skinned;
+  return bestBody ?? best;
+}
+
+/**
+ * Fixed world-space skeleton joint sphere radius.
+ * Calibrated to VRM eyeball scale (not derived per upload).
+ */
+export const SKELETON_JOINT_SPHERE_RADIUS = 0.012;
+
+/** @returns {number} */
+export function getSkeletonJointSphereRadius() {
+  return SKELETON_JOINT_SPHERE_RADIUS;
 }
 
 /**
@@ -460,6 +485,36 @@ export function rebindSkinnedMeshes(root) {
 }
 
 /**
+ * Log per-mesh skin bind info for VRM0 multi-skin uploads (remote-log diagnosis).
+ * @param {import('three').Object3D|null|undefined} root
+ * @param {number} [reboundCount]
+ */
+export function logVrmMultiSkinLayout(root, reboundCount = 0) {
+  if (!root) return;
+  /** @type {{ name: string, bones: number, hipsUuid: string|null }[]} */
+  const meshes = [];
+  const hipsUuids = new Set();
+  root.traverse((child) => {
+    if (!child.isSkinnedMesh) return;
+    const hipsBone = child.skeleton?.bones?.find((b) => /^hips$/i.test(b.name || ''));
+    const hipsUuid = hipsBone?.uuid ?? null;
+    if (hipsUuid) hipsUuids.add(hipsUuid);
+    meshes.push({
+      name: child.name || '(unnamed)',
+      bones: child.skeleton?.bones?.length ?? 0,
+      hipsUuid,
+    });
+  });
+  console.log('[VRM] Multi-skin layout after normalize', {
+    skinnedMeshes: meshes.length,
+    reboundCount,
+    sharedHipsBone: hipsUuids.size <= 1,
+    hipsUuidCount: hipsUuids.size,
+    meshes,
+  });
+}
+
+/**
  * @param {import('three').Object3D|null|undefined} root
  */
 /**
@@ -467,14 +522,7 @@ export function rebindSkinnedMeshes(root) {
  * @returns {import('three').Bone[]}
  */
 export function getPrimarySkeletonBones(root) {
-  if (!root) return [];
-  /** @type {import('three').SkinnedMesh|null} */
-  let skinned = null;
-  root.traverse((child) => {
-    if (!skinned && child.isSkinnedMesh && child.skeleton?.bones?.length) {
-      skinned = child;
-    }
-  });
+  const skinned = findPrimarySkinnedMesh(root);
   if (skinned?.skeleton?.bones?.length) {
     return skinned.skeleton.bones;
   }
@@ -590,6 +638,7 @@ export function updateSkeletonDisplayCorrection(root) {
   delete root.userData.rigSkeletonDisplayCenter;
 
   if (!modelHasSkinnedMesh(root)) return;
+  if (root.userData?.vrm || root.userData?.vrmNormalized) return;
 
   const meshBox = getMeshLayoutBounds(root);
   const hips = findHipsBone(root);
@@ -627,6 +676,11 @@ export function getBoneDisplayWorldPosition(bone, modelRoot, target = new THREE.
   bone.getWorldPosition(target);
   if (!modelRoot) return target;
 
+  // Uploaded VRM: never apply AIGC skeleton display offsets (viz must match skin bind).
+  if (modelRoot.userData?.vrm || modelRoot.userData?.vrmNormalized) {
+    return target;
+  }
+
   const offset = modelRoot.userData?.rigSkeletonDisplayOffset;
   if (offset) target.add(offset);
 
@@ -648,6 +702,10 @@ export function getBoneDisplayWorldPosition(bone, modelRoot, target = new THREE.
  */
 export function normalizeRiggedModelTransforms(root, options = {}) {
   if (!root) return;
+
+  if (root.userData?.vrm || root.userData?.vrmBindPassthrough) {
+    return;
+  }
 
   const preserveExport =
     options.preserveExportedOrientation === true ||

@@ -63,6 +63,7 @@ import {
   getBoneDisplayWorldPosition,
   getBoneWorldBounds,
   getMeshLayoutBounds,
+  getSkeletonJointSphereRadius,
   getViewportLayoutBounds,
   getPrimarySkeletonBones,
   logRigAlignmentDiagnostics,
@@ -80,6 +81,7 @@ import {
   shouldPreserveExportedOrientation,
 } from './modelOrientationUtils.js';
 import { createViewportRenderer } from './rendererBootstrap.js';
+import { getHumanoidBoneNames, getHumanoidRigBone } from './utils.js';
 
 const SKY_BACKGROUND_URL = '/assets/backgrounds/background4.jpg';
 /** Horizon tone of background4.jpg — shown only until the JPG decode finishes */
@@ -2078,6 +2080,8 @@ export class SceneManager {
       if (isSplat) {
         this.currentSplat = model;
         this.currentModel = model;
+      } else if (isVrm) {
+        this.currentModel = model;
       } else {
         this.currentModel = this.processModel(model, options);
       }
@@ -2098,67 +2102,54 @@ export class SceneManager {
       if (model && model.userData && model.userData.vrm) {
         this.currentVRM = model.userData.vrm;
         console.log('🔍 VRM reference restored after processing:', !!this.currentVRM);
-        
-        // Fix VRM model orientation - rotate to face forward
-        if (this.currentModel && this.currentModel.rotation) {
-          this.currentModel.rotation.y = Math.PI; // Rotate 180 degrees to face forward
-          console.log('🔄 VRM model rotated to face forward in scene manager');
-          console.log('🔄 Scene manager rotation after fix:', this.currentModel.rotation);
-        }
 
         void this._attachSceneLipSyncMicrophone();
-        
-        // Force VRM material restoration after processing
-        this.forceVRMMaterialRestoration();
-        
-        // Additional VRM texture debugging and restoration
-        setTimeout(() => {
-          this.debugVRMTextures();
-          this.validateVRMTextures();
-          this.recreateVRMMaterials();
-          this.forceVRMTextureBinding();
+
+        if (!model.userData.vrmBindPassthrough) {
           this.forceVRMMaterialRestoration();
-          this.forceRendererUpdate();
-          // Force solid mode to ensure textures are visible
-          this.updateRenderMode('solid');
-        }, 100);
-        
-        // Final attempt after a longer delay
-        setTimeout(() => {
-          this.recreateVRMMaterials();
-          this.forceVRMTextureBinding();
-          this.forceVRMMaterialRestoration();
-          this.forceRendererUpdate();
-          // Force solid mode again to ensure textures are visible
-          this.updateRenderMode('solid');
-          // Force a final render
-          if (this.renderer && this.scene && this.camera) {
-            this.renderer.render(this.scene, this.camera);
-          }
-        }, 500);
-        
-        // Ultimate attempt - force everything after 1 second
-        setTimeout(() => {
-          console.log('🚀 Ultimate VRM fix attempt...');
-          this.currentModel.traverse((child) => {
-            if (child.isMesh && child.material) {
-              console.log(`🚀 Ultimate fix for: ${child.name}`);
-              child.material.wireframe = false;
-              child.material.transparent = false;
-              child.material.opacity = 1.0;
-              child.material.needsUpdate = true;
-              if (child.material.map) {
-                child.material.map.needsUpdate = true;
-                child.material.map.flipY = false;
-              }
+          setTimeout(() => {
+            this.debugVRMTextures();
+            this.validateVRMTextures();
+            this.recreateVRMMaterials();
+            this.forceVRMTextureBinding();
+            this.forceVRMMaterialRestoration();
+            this.forceRendererUpdate();
+            this.updateRenderMode('solid');
+          }, 100);
+          setTimeout(() => {
+            this.recreateVRMMaterials();
+            this.forceVRMTextureBinding();
+            this.forceVRMMaterialRestoration();
+            this.forceRendererUpdate();
+            this.updateRenderMode('solid');
+            if (this.renderer && this.scene && this.camera) {
+              this.renderer.render(this.scene, this.camera);
             }
-          });
-          this.updateRenderMode('solid');
-          if (this.renderer && this.scene && this.camera) {
-            this.renderer.render(this.scene, this.camera);
-          }
-          console.log('🚀 Ultimate VRM fix completed');
-        }, 1000);
+          }, 500);
+          setTimeout(() => {
+            console.log('🚀 Ultimate VRM fix attempt...');
+            this.currentModel.traverse((child) => {
+              if (child.isMesh && child.material) {
+                console.log(`🚀 Ultimate fix for: ${child.name}`);
+                child.material.wireframe = false;
+                child.material.transparent = false;
+                child.material.opacity = 1.0;
+                child.material.needsUpdate = true;
+                if (child.material.map) {
+                  child.material.map.needsUpdate = true;
+                  child.material.map.flipY = false;
+                }
+              }
+            });
+            this.updateRenderMode('solid');
+            if (this.renderer && this.scene && this.camera) {
+              this.renderer.render(this.scene, this.camera);
+            }
+            console.log('🚀 Ultimate VRM fix completed');
+          }, 1000);
+        } else {
+          console.log('[VRM] Passthrough upload — skipping material/layout mutation');
+        }
       }
 
       // Store original materials for render mode restoration
@@ -2167,9 +2158,9 @@ export class SceneManager {
       // Update materials based on render mode
       this.updateRenderMode(this.renderMode);
 
-      if (isVrm) {
+      if (isVrm && !this.currentModel?.userData?.vrmBindPassthrough) {
         this.forceMaterialRestoration();
-      } else if (!isSplat) {
+      } else if (!isVrm && !isSplat) {
         this.prepareGltfMaterialsForDisplay(this.currentModel);
       }
 
@@ -2627,10 +2618,11 @@ export class SceneManager {
       const startTime = Date.now();
       
       const vrm = await this.vrmLoader.loadVRM(url, {
-        normalize: true,
-        addDefaultMaterials: true,
-        processBlendShapes: true,
-        setupBones: true
+        passthrough: true,
+        normalize: false,
+        addDefaultMaterials: false,
+        processBlendShapes: false,
+        setupBones: false,
       });
       
       const loadTime = Date.now() - startTime;
@@ -3446,6 +3438,10 @@ export class SceneManager {
    * Process loaded model (center, scale, etc.)
    */
   processModel(model, options = {}) {
+    if (model?.userData?.vrmNormalized || model?.userData?.vrmBindPassthrough) {
+      return model;
+    }
+
     let {
       autoCenter = true,
       autoScale = true,
@@ -3454,7 +3450,9 @@ export class SceneManager {
       orientationMode = 'auto',
     } = options;
 
-    const preserveOrientation = this._shouldPreserveExportedOrientation(model, options);
+    const isUploadedVrm = Boolean(model?.userData?.vrm);
+    let preserveOrientation =
+      isUploadedVrm || this._shouldPreserveExportedOrientation(model, options);
     if (preserveOrientation || options.autoScale === false) {
       if (preserveOrientation) {
         model.userData.preserveExportedOrientation = true;
@@ -3492,6 +3490,7 @@ export class SceneManager {
       Boolean(model?.userData?.autoRigMeta) ||
       countModelBones(model) > 0;
     const anchorGroundToBones =
+      !isUploadedVrm &&
       (Boolean(model?.userData?.fromAigc) ||
         Boolean(model?.userData?.preserveExportedOrientation)) &&
       countModelBones(model) > 0;
@@ -3562,6 +3561,11 @@ export class SceneManager {
                   scale: model.scale,
                   controlsTarget: this.controls ? this.controls.target : 'no controls'
                 });
+
+                if (modelHasSkinnedMesh(model)) {
+                  model.updateMatrixWorld(true);
+                  rebindSkinnedMeshes(model);
+                }
               }
     } else {
       applyOrientation();
@@ -3582,6 +3586,10 @@ export class SceneManager {
    */
   ensureModelOnGround() {
     if (!this.currentModel) return;
+
+    if (this.currentModel.userData?.vrmNormalized) {
+      return;
+    }
 
     if (this.currentModel.userData?.preserveExportedOrientation) {
       if (modelHasSkinnedMesh(this.currentModel)) {
@@ -3736,30 +3744,44 @@ export class SceneManager {
   }
 
   /**
+   * Skeleton gizmos draw on top so joints inside the head (eyes) stay visible at all angles.
+   * @param {THREE.Object3D} obj
+   * @param {number} [renderOrder]
+   */
+  _applySkeletonOverlayRenderState(obj, renderOrder = 9998) {
+    obj.renderOrder = renderOrder;
+    obj.frustumCulled = false;
+    const mat = obj.material;
+    if (!mat) return;
+    mat.depthTest = false;
+    mat.depthWrite = false;
+    mat.transparent = true;
+  }
+
+  /**
    * @param {THREE.Bone} bone
    * @param {number} color
    * @returns {THREE.Mesh|null}
    */
-  _createBoneHelperMesh(bone, color = 0xff6600) {
+  _createBoneHelperMesh(bone, color = 0xff6600, sphereSize) {
     const boneName = bone.name || 'bone';
-    const isFingerBone =
-      boneName.toLowerCase().includes('finger') ||
-      boneName.toLowerCase().includes('thumb') ||
-      boneName.toLowerCase().includes('hand') ||
-      boneName.toLowerCase().includes('toe');
-    const sphereSize = isFingerBone ? 0.008 : 0.015;
-    const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
+    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+    const radius = sphereSize ?? getSkeletonJointSphereRadius();
+    const geometry = new THREE.SphereGeometry(radius, 12, 10);
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
       opacity: 1.0,
+      depthTest: false,
+      depthWrite: false,
     });
     const boneHelper = new THREE.Mesh(geometry, material);
-    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+    this._applySkeletonOverlayRenderState(boneHelper, 9998);
     getBoneDisplayWorldPosition(bone, modelRoot, boneHelper.position);
     boneHelper.userData.boneName = boneName;
     boneHelper.userData.isBoneHelper = true;
     boneHelper.userData.originalBone = bone;
+    boneHelper.userData.sphereRadius = radius;
     return boneHelper;
   }
 
@@ -3780,7 +3802,6 @@ export class SceneManager {
       const skinned = findPrimarySkinnedMesh(modelRoot);
       if (skinned?.skeleton) {
         skinned.skeleton.update();
-        skinned.bind(skinned.skeleton, skinned.matrixWorld);
       }
 
       // Remove existing bone visualization
@@ -3793,71 +3814,27 @@ export class SceneManager {
       this.selectedBone = null;
       this.boneHelpers = [];
 
-      // Create bone visualization for VRM models
-      if (expressionVrm?.humanoid) {
-        console.log('Creating VRM bone visualization');
-        const humanoid = expressionVrm.humanoid;
-        
-        // Create helpers for each bone
-        if (humanoid.humanoidBones && Array.isArray(humanoid.humanoidBones)) {
-          console.log('Found humanoid bones:', humanoid.humanoidBones.length, humanoid.humanoidBones);
-          humanoid.humanoidBones.forEach((boneName, index) => {
-            try {
-              const bone = humanoid.getNormalizedBoneNode(boneName);
-              console.log(`Processing bone ${boneName}:`, bone);
-              if (bone) {
-                // Create a small sphere to represent the bone joint
-                // Make finger joints much smaller
-                const isFingerBone = boneName.toLowerCase().includes('finger') || 
-                                   boneName.toLowerCase().includes('thumb') || 
-                                   boneName.toLowerCase().includes('hand') ||
-                                   boneName.toLowerCase().includes('toe');
-                const sphereSize = isFingerBone ? 0.008 : 0.015;
-                const geometry = new THREE.SphereGeometry(sphereSize, 8, 6);
-                const material = new THREE.MeshBasicMaterial({ 
-                  color: 0xff0000, // Red for unselected bones
-                  transparent: true,
-                  opacity: 1.0 // Fully opaque for better visibility
-                });
-                const boneHelper = new THREE.Mesh(geometry, material);
-                
-                // Position at bone location in world space
-                bone.getWorldPosition(boneHelper.position);
-                boneHelper.userData.boneName = boneName;
-                boneHelper.userData.isBoneHelper = true;
-                boneHelper.userData.originalBone = bone;
-                
-                if (this.scene) {
-                  this.scene.add(boneHelper);
-                  boneHelpers.push(boneHelper);
-                  console.log('Added bone helper for', boneName, 'at position:', boneHelper.position);
-                } else {
-                  console.warn('No scene available to add bone helper');
-                }
-              }
-            } catch (error) {
-              console.warn('Error creating bone helper for', boneName, error);
-            }
-          });
-        }
+      const jointRadius = getSkeletonJointSphereRadius();
 
-        // Create bone connections (lines between parent and child bones)
-        try {
-          this.createBoneConnections(humanoid, boneConnections);
-        } catch (error) {
-          console.warn('Error creating bone connections:', error);
-        }
-        
-        // If no bones were found via VRM humanoid, try to find bones directly from the model
-        if (boneHelpers.length === 0) {
-          console.log('No VRM humanoid bones found, using rig bone collector...');
-          this._addBoneHelpersFromRigBones(
-            collectModelBones(modelRoot),
-            boneHelpers,
-            boneConnections,
-            0xff0000,
-          );
-        }
+      // VRM humanoid nodes are often Normalized_* helpers — skinned meshes bind to
+      // their own skeleton.bones (Hips, Spine, …). Visualize that rig, not humanoid.
+      if (expressionVrm?.humanoid || modelRoot.userData?.vrm) {
+        const rigBones = getPrimarySkeletonBones(modelRoot);
+        const skinned = findPrimarySkinnedMesh(modelRoot);
+        console.log(
+          'Creating VRM bone visualization from skinned mesh',
+          skinned?.name ?? '(unknown)',
+          'bones:',
+          rigBones.length,
+          rigBones.slice(0, 6).map((b) => b.name),
+        );
+        this._addBoneHelpersFromRigBones(
+          rigBones,
+          boneHelpers,
+          boneConnections,
+          0xff0000,
+          jointRadius,
+        );
       } else {
         console.log('Creating non-VRM bone visualization');
         const rigBones = getPrimarySkeletonBones(modelRoot);
@@ -3872,7 +3849,13 @@ export class SceneManager {
             'bones but the loaded GLB has no armature. Restart dev server after API update, or re-run auto-rig to refresh FBX fallback.',
           );
         }
-        this._addBoneHelpersFromRigBones(rigBones, boneHelpers, boneConnections, 0xff6600);
+        this._addBoneHelpersFromRigBones(
+          rigBones,
+          boneHelpers,
+          boneConnections,
+          0xff6600,
+          jointRadius,
+        );
       }
 
       // Store bone helpers and connections for cleanup
@@ -3939,12 +3922,12 @@ export class SceneManager {
   createBoneConnections(humanoid, boneConnections) {
     try {
       const bonePositions = new Map();
-      
-      // First, collect all bone positions
-      if (humanoid.humanoidBones && Array.isArray(humanoid.humanoidBones)) {
-        humanoid.humanoidBones.forEach((boneName) => {
+      const humanoidBoneNames = getHumanoidBoneNames(humanoid);
+
+      if (humanoidBoneNames.length > 0) {
+        humanoidBoneNames.forEach((boneName) => {
           try {
-            const bone = humanoid.getNormalizedBoneNode(boneName);
+            const bone = getHumanoidRigBone(humanoid, boneName);
             if (bone) {
               const worldPosition = new THREE.Vector3();
               bone.getWorldPosition(worldPosition);
@@ -3955,10 +3938,9 @@ export class SceneManager {
           }
         });
 
-        // Create connections between parent and child bones
-        humanoid.humanoidBones.forEach((boneName) => {
+        humanoidBoneNames.forEach((boneName) => {
           try {
-            const bone = humanoid.getNormalizedBoneNode(boneName);
+            const bone = getHumanoidRigBone(humanoid, boneName);
             if (bone && bone.parent && bone.parent.isBone) {
               const parentPosition = bonePositions.get(bone.parent.name);
               if (parentPosition) {
@@ -3968,12 +3950,15 @@ export class SceneManager {
                   parentPosition,
                   boneWorldPosition
                 ]);
-                const material = new THREE.LineBasicMaterial({ 
-                  color: 0xff6600, // Bright orange like in the image
+                const material = new THREE.LineBasicMaterial({
+                  color: 0xff6600,
                   transparent: true,
-                  opacity: 1.0 // Fully opaque for better visibility
+                  opacity: 1.0,
+                  depthTest: false,
+                  depthWrite: false,
                 });
                 const connection = new THREE.Line(geometry, material);
+                this._applySkeletonOverlayRenderState(connection, 9997);
                 connection.userData.isBoneConnection = true;
                 if (this.scene) {
                   this.scene.add(connection);
@@ -4000,10 +3985,10 @@ export class SceneManager {
    * @param {THREE.Line[]} boneConnections
    * @param {number} color
    */
-  _addBoneHelpersFromRigBones(bones, boneHelpers, boneConnections, color) {
+  _addBoneHelpersFromRigBones(bones, boneHelpers, boneConnections, color, jointRadius) {
     bones.forEach((bone) => {
       try {
-        const boneHelper = this._createBoneHelperMesh(bone, color);
+        const boneHelper = this._createBoneHelperMesh(bone, color, jointRadius);
         if (boneHelper && this.scene) {
           this.scene.add(boneHelper);
           boneHelpers.push(boneHelper);
@@ -4053,8 +4038,11 @@ export class SceneManager {
                 color: 0xff6600,
                 transparent: true,
                 opacity: 1.0,
+                depthTest: false,
+                depthWrite: false,
               });
               const connection = new THREE.Line(geometry, material);
+              this._applySkeletonOverlayRenderState(connection, 9997);
               connection.userData.isBoneConnection = true;
               if (this.scene) {
                 this.scene.add(connection);
@@ -4076,51 +4064,6 @@ export class SceneManager {
    */
   createBoneConnectionsForModel(model, boneConnections) {
     this.createBoneConnectionsFromBones(collectModelBones(model), boneConnections);
-  }
-
-  /**
-   * Highlight a specific bone with selection state
-   */
-  highlightBone(boneName) {
-    if (!this.boneHelpers) return;
-    
-    // Check if this bone is already selected
-    const currentlySelected = this.boneHelpers.find(helper => 
-      helper.userData.boneName === this.selectedBoneName
-    );
-    
-    // If clicking the same bone, toggle it off
-    if (this.selectedBoneName === boneName && currentlySelected) {
-      this.selectedBoneName = null;
-      // Reset all bone colors and scales to default
-      this.boneHelpers.forEach(helper => {
-        helper.material.color.setHex(0xff0000); // Red for unselected
-        helper.material.opacity = 1.0;
-        helper.scale.set(1, 1, 1);
-      });
-      console.log('Deselected bone:', boneName);
-      return;
-    }
-    
-    // Reset all bone colors and scales to default
-    this.boneHelpers.forEach(helper => {
-      helper.material.color.setHex(0xff0000); // Red for unselected
-      helper.material.opacity = 1.0;
-      helper.scale.set(1, 1, 1);
-    });
-    
-    // Highlight the selected bone
-    const selectedBone = this.boneHelpers.find(helper => 
-      helper.userData.boneName === boneName
-    );
-    
-    if (selectedBone) {
-      this.selectedBoneName = boneName;
-      selectedBone.material.color.setHex(0x00ff00); // Green for selected
-      selectedBone.material.opacity = 1.0;
-      selectedBone.scale.set(1.5, 1.5, 1.5); // Make selected bone larger
-      console.log('Selected bone:', boneName);
-    }
   }
 
   /**
@@ -5629,9 +5572,6 @@ export class SceneManager {
           }
           if (child.geometry?.attributes?.uv) {
             child.geometry.attributes.uv.needsUpdate = true;
-          }
-          if (this.currentModel && this.currentVRM) {
-            this.currentModel.rotation.y = Math.PI;
           }
           break;
         }

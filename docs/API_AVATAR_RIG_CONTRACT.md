@@ -47,7 +47,7 @@ Client-only structural codes: `no_model_root`, `empty_mesh_bounds`, `empty_bone_
 
 | Path | Source | Client behavior |
 |------|--------|-----------------|
-| **VRM load** | `.vrm` file, loot assets, etc. | `vrmLoader.normalizeVRM` only — **no** contract flags, **no** `preserveExportedOrientation` |
+| **VRM load** | `.vrm` file, loot assets, etc. | `vrmLoader.normalizeVRM` only — **no** contract flags, **no** `preserveExportedOrientation`. Full pipeline: [VRM_UPLOAD_DISPLAY_EXPORT.md](VRM_UPLOAD_DISPLAY_EXPORT.md) |
 | **AIGC GLB** | Avatar-from-image / template rig on DGX | Validate contract; repair skinned mesh only on **FAIL**; anchor feet to y=0 |
 
 DGX template rig **should** export a GLB in the same coordinate frame as `template.vrm`

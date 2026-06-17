@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { renameVRMBones } from './utils.js';
+import { applyVrm0SceneForwardFix } from './modelOrientationUtils.js';
 
 export class VRMLoader {
   constructor() {
@@ -130,6 +132,7 @@ export class VRMLoader {
       
       // Process the VRM model
       const processedVRM = await this.processVRM(vrm, {
+        passthrough: options.passthrough === true,
         normalize,
         addDefaultMaterials,
         processBlendShapes,
@@ -350,13 +353,32 @@ export class VRMLoader {
    */
   async processVRM(vrm, options = {}) {
     const {
+      passthrough = false,
       normalize = true,
       addDefaultMaterials = true,
       processBlendShapes = true,
       setupBones = true
     } = options;
 
+    if (passthrough) {
+      if (vrm.scene) {
+        applyVrm0SceneForwardFix(vrm.scene, 'VRM0 upload passthrough');
+        vrm.scene.userData.vrmNormalized = true;
+        vrm.scene.userData.vrmBindPassthrough = true;
+      }
+      console.log('[VRM] Upload passthrough — scene yaw only if needed; no scale/rebind/rename');
+      return vrm;
+    }
+
     console.log('🔄 VRM Loader: Processing VRM model...');
+
+    if (vrm.humanoid) {
+      try {
+        renameVRMBones(vrm);
+      } catch (error) {
+        console.warn('VRM bone rename skipped:', error);
+      }
+    }
 
     // Normalize the model
     if (normalize) {
@@ -392,34 +414,13 @@ export class VRMLoader {
   }
 
   /**
-   * Normalize VRM model
-   * @param {Object} vrm - VRM object
+   * @deprecated Uploads use passthrough — no layout mutation.
    */
   normalizeVRM(vrm) {
-    if (!vrm) {
-      console.warn('VRM object is undefined, cannot normalize');
-      return;
-    }
-    
-    if (vrm.scene) {
-      // Center and scale the model
-      const box = new THREE.Box3().setFromObject(vrm.scene);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2 / maxDim;
-      
-      vrm.scene.scale.setScalar(scale);
-      vrm.scene.position.sub(center.multiplyScalar(scale));
-      
-      // Fix VRM model orientation - rotate to face forward
-      vrm.scene.rotation.y = Math.PI;
-      console.log('🔄 VRM model rotated to face forward during normalization');
-      console.log('🔄 VRM scene rotation after fix:', vrm.scene.rotation);
-      
-      // Ensure bone alignment is preserved
-      this.preserveBoneAlignment(vrm);
-    }
+    if (!vrm?.scene) return;
+    vrm.scene.userData.vrmNormalized = true;
+    vrm.scene.userData.vrmBindPassthrough = true;
+    console.log('[VRM] normalizeVRM skipped (passthrough policy)');
   }
 
   /**

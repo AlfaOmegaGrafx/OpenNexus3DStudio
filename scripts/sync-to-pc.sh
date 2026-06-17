@@ -6,6 +6,8 @@
 # Usage:
 #   bash scripts/sync-to-pc.sh
 #   bash scripts/sync-to-pc.sh --include-src
+#   bash scripts/sync-to-pc.sh --include-agent-context
+#   bash scripts/sync-to-pc.sh --include-src --include-agent-context
 #   SURFACE_ROOT='C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio' bash scripts/sync-to-pc.sh
 #
 # Default Surface path — override SURFACE_ROOT if your clone lives elsewhere.
@@ -13,9 +15,11 @@
 set -euo pipefail
 
 INCLUDE_SRC=0
+INCLUDE_AGENT_CONTEXT=0
 for arg in "$@"; do
   case "$arg" in
     --include-src) INCLUDE_SRC=1 ;;
+    --include-agent-context) INCLUDE_AGENT_CONTEXT=1 ;;
   esac
 done
 
@@ -127,7 +131,16 @@ echo ""
 echo "Pushing public/worlds/ (static world index + packaged worlds) ..."
 push_dir_if_exists 'public/worlds'
 
+if [[ "$INCLUDE_AGENT_CONTEXT" -eq 1 ]]; then
+  echo ""
+  echo "Pushing agent context (memory-bank/, graphify-out/) ..."
+  push_dir_if_exists 'memory-bank'
+  push_dir_if_exists 'graphify-out'
+fi
+
 echo ""
 echo "NOT pushed: src/ unless --include-src (PC-owned by default)"
+echo "NOT pushed: memory-bank/, graphify-out/ unless --include-agent-context"
+echo "NOT pushed: .sessionmem-team/ — use bash scripts/sync-sessionmem-team.sh"
 echo "NOT pushed: app scripts/, MONETIZATION_ROADMAP.md (PC-owned)"
 echo "Done."

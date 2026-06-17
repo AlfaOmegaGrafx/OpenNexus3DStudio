@@ -57,6 +57,8 @@ Use `DGX-Remote` away from LAN.
 ```powershell
 .\scripts\sync-to-dgx.ps1      # PC code → DGX
 .\scripts\sync-from-dgx.ps1    # DGX docs/branding → PC
+.\scripts\sync-from-dgx.ps1 -IncludeAgentContext   # + memory-bank + graphify-out
+.\scripts\sync-sessionmem-team.ps1   # SessionMem team memories
 .\scripts\sync-dgx.ps1 -Direction to-dgx
 .\scripts\sync-dgx.ps1 -Direction from-dgx
 .\scripts\sync-to-dgx.ps1 -Remote

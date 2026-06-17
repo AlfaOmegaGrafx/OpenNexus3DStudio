@@ -56,6 +56,10 @@ If the rig was **backward** or **floating at hips**, re-run after pulling latest
 
 XR face tracking needs wrap or head-stitch — tracked in API docs.
 
+## Uploaded VRM (not AIGC)
+
+User-uploaded `.vrm` files use a **separate** path from rigged GLBs. See [VRM_UPLOAD_DISPLAY_EXPORT.md](VRM_UPLOAD_DISPLAY_EXPORT.md) (scene-root transforms, multi-skin rebind, skeleton viz, export round-trip).
+
 ## VRM drag-drop metadata
 
 `CombinedImport` + `vrmTemplateMetadata.js`:
