@@ -1,0 +1,79 @@
+---
+description: 3DAIGC-API and Character Studio dev workflow across DGX Spark and PC
+alwaysApply: true
+---
+
+# 3DAIGC-API + Character Studio Workflow
+
+## Where things run
+
+- **DGX Spark**: `3DAIGC-API` backend (`/home/sifr/3DAIGC-API`, port `7842`)
+- **PC**: Character Studio dev server (`/home/sifr/OpenNexus3DStudio`, Vite)
+
+Do **not** start the Character Studio dev server on Spark unless the user explicitly asks. The user runs it locally on their PC.
+
+## Complementary changes (required)
+
+Backend and frontend are one integration. When changing `3DAIGC-API`, also update Character Studio so the client matches the API contract.
+
+| Backend change | Character Studio counterpart |
+|----------------|------------------------------|
+| New model in `config/models.yaml` + adapter | `src/library/aiModelsCatalog.js` (model entry, labels, defaults) |
+| API request/response shape | `src/library/taskManager.js` (upload flow, payloads, polling) |
+| Model params / `output_format` | `src/components/TaskAdvancedOptions.jsx`, catalog defaults |
+| Feature availability | Dynamic model lists from `/api/v1/system/models` — avoid hardcoded dropdowns |
+
+Reference API docs: `Open3DStudio/docs/api/api.md` and `3DAIGC-API/docs/api_documentation.md`.
+
+## Sync (DGX ↔ Surface — auto scp, never git)
+
+After every edit, agents **must run** the correct scp script themselves (standing user permission):
+
+| Direction | Script | Machine |
+|-----------|--------|---------|
+| Surface → DGX | `.\scripts\sync-to-dgx.ps1` | Surface |
+| DGX → Surface | `bash scripts/sync-to-pc.sh` | DGX |
+| DGX docs → Surface | `.\scripts\sync-from-dgx.ps1` | Surface |
+
+**Agents must not** `git push`, `git pull`, `git fetch`, or touch `upstream` unless the user explicitly requests it. Publishing to GitHub is **user-only** (agent SSH key was removed after the `.env` leak).
+
+See `.cursor/rules/agent-run-instructions.mdc` for full rules.
+
+## Server operations on Spark
+
+- Start/restart **3DAIGC-API** when backend config or adapters change (`scripts/run_server.sh`; requires Redis).
+- After enabling a new model, verify it appears under the correct feature in `/api/v1/system/models`.
+
+## Graphify (codebase map for Cursor)
+
+Both repos have `.cursor/rules/graphify.mdc` and a local AST graph in `graphify-out/` (gitignored).
+
+- **Refresh after code changes (DGX):** `bash scripts/refresh-graphify-dgx.sh` or `graphify update . --no-cluster` in each repo.
+- **Refresh on Surface:** `.\scripts\refresh-graphify-surface.ps1` or `graphify update . --no-cluster` in `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` after DGX sync.
+- **Query:** `graphify query "how does X connect to Y?"` before large greps.
+- **Scope:** `.graphifyignore` excludes `thirdparty/`, `node_modules/`, outputs, and huge roadmaps.
+- Does **not** replace workflow rules or chat memory — only cross-file structure in the repo.
+
+## SessionMem (cross-session memory, both machines)
+
+- Installed globally: `npm install -g sessionmem`; registered per repo: `sessionmem install`.
+- **Team mode** shared folder: `OpenNexus3DStudio/.sessionmem-team/` (gitignored). Project ID namespace: `OpenNexus3DStudio` (migrated from legacy `CharacterStudio`).
+- **After coding on either machine:** run team sync **only when the user asks** — `bash scripts/sync-sessionmem-team.sh` (DGX) or `.\scripts\sync-sessionmem-team.ps1` (Surface).
+
+## Cursor Memory Bank (tacticlaunch/cursor-bank)
+
+- Rules: `.cursor/rules/core.mdc`, `memory-bank.mdc`
+- Docs: `memory-bank/*.md` — read at task start; update with **update memory bank** after milestones.
+- Commands: **PLAN** (plan only), **ACT** (implement), **update memory bank** (refresh docs).
+
+## GitHub (no agent push access)
+
+After the `.env` leak, the user **removed the agent SSH key from GitHub**. The agent **must not** `git push`, `git pull`, `git fetch`, merge `upstream`, or open PRs unless the user explicitly asks.
+
+- **Commits:** only when the user explicitly asks.
+- **Publishing:** user-only from Surface.
+- **DGX ↔ Surface:** auto-run scp sync scripts after edits — **not** git, **not** upstream.
+
+## Agent behavior (DGX + Surface — equal roles)
+
+DGX and Surface agents have the **same permissions**: write project files, run local commands, SSH to the other machine, auto-run scp sync after edits. **Never** offer the user a menu of optional next steps — execute what is necessary or report a blocker. See `.cursor/rules/agent-run-instructions.mdc`.

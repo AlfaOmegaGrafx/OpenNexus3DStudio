@@ -1,9 +1,9 @@
 /**
  * SharedHDRManager - Manages HDR environment across multiple scenes
- * Ensures consistent lighting and environment across main scene and CharacterStudio
+ * Ensures consistent lighting and environment across main scene and OpenNexus3DStudio avatar viewport
  */
 import * as THREE from 'three';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 
 class SharedHDRManager {
   constructor() {
@@ -12,7 +12,7 @@ class SharedHDRManager {
     this.intensity = 0.5;
     this.isLoaded = false;
     this.scenes = new Set(); // Track scenes using this HDR
-    this.loader = new RGBELoader();
+    this.loader = new HDRLoader();
   }
 
   /**

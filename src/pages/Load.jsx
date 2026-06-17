@@ -8,21 +8,20 @@ import { ViewContext, ViewMode } from '../context/ViewContext';
 import { SoundContext } from "../context/SoundContext"
 import { AudioContext } from "../context/AudioContext"
 
-import { lootIconUrl } from '../library/lootAssetsConfig';
-
-const bodyIcon = lootIconUrl('BODY.svg');
-const headIcon = lootIconUrl('HEAD.svg');
-const weaponIcon = lootIconUrl('WEAPON.svg');
-const chestIcon = lootIconUrl('CHEST.svg');
-const handsIcon = lootIconUrl('HANDS.svg');
-const shoesIcon = lootIconUrl('SHOES.svg');
-const hairIcon = lootIconUrl('HAIR.svg');
-const eyesIcon = lootIconUrl('EYES.svg');
-const hatIcon = lootIconUrl('HATS.svg');
-const maskIcon = lootIconUrl('MASKS.svg');
-const wingsIcon = lootIconUrl('WINGS.svg');
-const tailIcon = lootIconUrl('TAIL.svg');
-const sigilIcon = lootIconUrl('SIGIL.svg');
+// Import loot icons for character traits
+import bodyIcon from '/loot-assets/icons/BODY.svg';
+import headIcon from '/loot-assets/icons/HEAD.svg';
+import weaponIcon from '/loot-assets/icons/WEAPON.svg';
+import chestIcon from '/loot-assets/icons/CHEST.svg';
+import handsIcon from '/loot-assets/icons/HANDS.svg';
+import shoesIcon from '/loot-assets/icons/SHOES.svg';
+import hairIcon from '/loot-assets/icons/HAIR.svg';
+import eyesIcon from '/loot-assets/icons/EYES.svg';
+import hatIcon from '/loot-assets/icons/HATS.svg';
+import maskIcon from '/loot-assets/icons/MASKS.svg';
+import wingsIcon from '/loot-assets/icons/WINGS.svg';
+import tailIcon from '/loot-assets/icons/TAIL.svg';
+import sigilIcon from '/loot-assets/icons/SIGIL.svg';
 
 function Load() {
     const { account, library, activate } = useWeb3React();

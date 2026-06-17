@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Remove accidental duplicates on DGX after PC → DGX sync.
-# Run from CharacterStudio repo root on DGX:
+# Run from OpenNexus3DStudio repo root on DGX:
 #   bash scripts/prune-sync-duplicates.sh
 #
 # Safe to re-run. Only deletes known duplicate patterns — never MONETIZATION_ROADMAP.md.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate DGX CharacterStudio tree after PC sync. Safe to re-run.
+# Validate DGX OpenNexus3DStudio tree after PC sync. Safe to re-run.
 # Usage: bash scripts/ensure-dgx-sync-ready.sh
 
 set -euo pipefail

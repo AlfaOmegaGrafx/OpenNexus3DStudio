@@ -53,7 +53,7 @@ export class ManifestRestrictions {
             const restriction = this.restrictionMaps[r]
             restriction.restrictedTraits.size && console.log(`Trait: ${restriction.group.trait} is restrciting ${Array.from(restriction.restrictedTraits.values()).join(', ')}`)
             restriction.restrictedTypes.size && console.log(`Trait: ${restriction.group.trait} also restricts types ${Array.from(restriction.restrictedTypes.values()).join(', ')}`)
-            restriction.restrictedBlendshapes.size && console.log(`Trait: ${restriction.group.trait} has blendshape restrictions on trait ${Array.from(restriction.restrictedBlendshapes.values()).join(', ')}`)
+            restriction.restrictedMorphs.size && console.log(`Trait: ${restriction.group.trait} has morph restrictions on trait ${Array.from(restriction.restrictedMorphs.values()).join(', ')}`)
         }
         this.itemRestrictions.forEach((v,k)=>{
             log.push(`Item ${k} is restricting item ${Array.from(v.values()).join(', ')}`)
@@ -185,7 +185,7 @@ export class ManifestRestrictions {
         if (this.traitRestrictions) {
             for (const prop in this.traitRestrictions) {
                 if (traitRes[prop] == null) {
-                    traitRes[prop] = { restrictedTraits: [], restrictedTypes: [], restrictedBlendshapes: [] }
+                    traitRes[prop] = { restrictedTraits: [], restrictedTypes: [], restrictedMorphs: [] }
                 }
                 traitRes[prop].restrictedTraits = getAsArray(this.traitRestrictions[prop].restrictedTraits).map((t)=>{
                     if(!this.manifestData.requiredTraits.includes(t)){
@@ -196,7 +196,10 @@ export class ManifestRestrictions {
                     }
                 }).filter((t) => !!t)
                 traitRes[prop].restrictedTypes = getAsArray(this.traitRestrictions[prop].restrictedTypes).filter((t) => !!t);
-                traitRes[prop].restrictedBlendshapes = getAsArray(this.traitRestrictions[prop].restrictedBlendshapes).filter((t) => !!t);
+                traitRes[prop].restrictedMorphs = getAsArray(
+                  this.traitRestrictions[prop].restrictedMorphs
+                  ?? this.traitRestrictions[prop].restrictedBlendshapes
+                ).filter((t) => !!t);
             }
         }
         this.traitRestrictions = traitRes
@@ -243,7 +246,7 @@ export class TraitRestriction {
     /**
      * @type {Set}
      */
-    restrictedBlendshapes
+    restrictedMorphs
 
     /**
      * 
@@ -256,7 +259,9 @@ export class TraitRestriction {
 
         this.restrictedTraits = new Set(this.manifestRestrictions.traitRestrictions[group.trait]?.restrictedTraits || []);
         this.restrictedTypes = new Set(this.manifestRestrictions.traitRestrictions[group.trait]?.restrictedTypes || []);
-        this.restrictedBlendshapes = new Set(this.manifestRestrictions.traitRestrictions[group.trait]?.restrictedBlendshapes || []);
+        const morphRestrictions = this.manifestRestrictions.traitRestrictions[group.trait]?.restrictedMorphs
+          ?? this.manifestRestrictions.traitRestrictions[group.trait]?.restrictedBlendshapes;
+        this.restrictedMorphs = new Set(morphRestrictions || []);
 
         /**
          * Check if the current trait is restricting another trait, if so add the current trait to the restrictedTraits list of the other trait
@@ -400,8 +405,8 @@ export class TraitRestriction {
      * @param {string} traitId 
      * @returns 
      */
-    isBlendshapeOfTraitAllowed = (traitId) => {
-        return !this.restrictedBlendshapes.has(traitId);
+    isMorphOfTraitAllowed = (traitId) => {
+        return !this.restrictedMorphs.has(traitId);
     }
     
     /**
@@ -409,10 +414,10 @@ export class TraitRestriction {
      * @param {string} targetTrait
      * @returns {TraitRestrictionResult}
      */
-    isReverseBlendshapeTraitAllowed = (targetTrait) => {
+    isReverseMorphTraitAllowed = (targetTrait) => {
         const restriction = this.manifestRestrictions.restrictionMaps[targetTrait];
         if (restriction) {
-            const isAllowed = restriction.isBlendshapeOfTraitAllowed(this.traitId)
+            const isAllowed = restriction.isMorphOfTraitAllowed(this.traitId)
             return {allowed:isAllowed, blockingTrait: isAllowed?undefined:this.traitId};
         }
 

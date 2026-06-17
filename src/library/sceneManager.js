@@ -51,7 +51,6 @@ import {
   ensureSceneRoots,
   loadWorldEnvironmentSplat,
   loadWorldPackage as loadWorldPackageIntoScene,
-  normalizeSceneLayerRoots,
 } from './worldSceneLoader.js';
 import { createSceneManagerXrInteraction } from './sceneManagerXrInteraction.js';
 import { ensureXrLocomotionRig } from './sceneManagerXrLocomotion.js';
@@ -1814,28 +1813,6 @@ export class SceneManager {
     console.log('[XR] Re-applied floor alignment after world load:', floorAlignmentY);
   }
 
-  /** Normalize layer roots and end stale sessions before requesting WebXR again. */
-  async _prepareForXrSessionRequest() {
-    ensureSceneRoots(this);
-    normalizeSceneLayerRoots(this);
-
-    if (this.renderer?.xr?.isPresenting) {
-      try {
-        const sess = this.renderer.xr.getSession?.() || this.xrSession;
-        if (sess) {
-          await sess.end();
-        }
-      } catch (err) {
-        console.warn('[XR] Could not end stale session before re-entry:', err?.message || err);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 80));
-    }
-
-    if (this.xrLocomotionRig && !this.xrLocomotionRig.parent) {
-      this.xrLocomotionRig = null;
-    }
-  }
-
   async loadWorldFromManifestUrl(manifestUrl, options = {}) {
     const { fetchWorldPackage } = await import('./worldPackage.js');
     const apiEndpoint = options.apiEndpoint || '';
@@ -2226,8 +2203,6 @@ export class SceneManager {
       }
 
       this._logViewportCommit(managedViewport ? 'aigc-model' : 'model');
-      normalizeSceneLayerRoots(this);
-      this._applyXrFloorAlignmentIfActive();
       this.emit('modelLoaded', { model: this.currentModel });
       return this.currentModel;
     } catch (error) {
@@ -7394,8 +7369,6 @@ export class SceneManager {
         await unlockFaceRecordingAudioPlayback();
 
         try {
-          await this._prepareForXrSessionRequest();
-
           // Check if VR is supported
           if (!navigator.xr) {
             console.error('❌ WebXR not available');
@@ -7624,8 +7597,6 @@ export class SceneManager {
       }
       this.vrSceneWrapper = null;
       
-      ensureSceneRoots(this);
-      normalizeSceneLayerRoots(this);
       console.log('✅ Scene structure restored');
     }
 

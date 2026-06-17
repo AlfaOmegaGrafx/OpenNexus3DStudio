@@ -308,9 +308,9 @@ export async function combineNoAtlas(model,avatar, options) {
     const meshes = findChildrenByType(model, "SkinnedMesh");
     // Get VRM-bound morphTargets so we don't remove or merge them.
     const VRMBoundMorphs = getVRMBoundExpressionMorphs(avatar)
-    const blendShapeTraits = getAllBlendShapeTraits(avatar);
-    const blendShapesFromManifest = Array.isArray(blendShapeTraits) ? 
-      blendShapeTraits.map((trait) => trait?.id).filter(Boolean) : [];
+    const morphTraits = getAllMorphTraits(avatar);
+    const morphsFromManifest = Array.isArray(morphTraits) ? 
+      morphTraits.map((trait) => trait?.id).filter(Boolean) : [];
 
     meshes.forEach(originalMesh => {
         const clonedMesh = originalMesh.clone(); // Clone the original mesh
@@ -336,7 +336,7 @@ export async function combineNoAtlas(model,avatar, options) {
             attributes[attributeName] = attribute.clone();
         }
         /**
-         * Object to keep track of morphTargets we want merged vs morphTargets we want to keep as blendshapes;
+         * Object to keep track of morphTargets we want merged vs morphTargets we want to keep as morphs;
          * If merge has content, we remove all other morphTargets
          */
         const morphTargetsProcess = {
@@ -352,7 +352,7 @@ export async function combineNoAtlas(model,avatar, options) {
         if(mergeAppliedMorphs){
             if(!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
 
-            blendShapesFromManifest.forEach((key)=>{
+            morphsFromManifest.forEach((key)=>{
                 const influenceIndex = mesh.morphTargetDictionary[key];
                 if(influenceIndex !== undefined && mesh.morphTargetInfluences[influenceIndex] > 0) {
                     morphTargetsProcess.merge.add(key)
@@ -604,7 +604,7 @@ export async function combine(model,avatar, options) {
     
     // Get VRM-bound morphTargets so we don't remove or merge them.
     const VRMBoundMorphs = getVRMBoundExpressionMorphs(avatar)
-    const blendShapesFromManifest = getAllBlendShapeTraits(avatar).map((trait) => trait.id);
+    const morphsFromManifest = getAllMorphTraits(avatar).map((trait) => trait.id);
 
     for (const prop in meshArrayData){
         const meshData = meshArrayData[prop];
@@ -617,7 +617,7 @@ export async function combine(model,avatar, options) {
 
             const skinnedMeshes = [];
             /**
-             * Object to keep track of morphTargets we want merged vs morphTargets we want to keep as blendshapes;
+             * Object to keep track of morphTargets we want merged vs morphTargets we want to keep as morphs;
              * If merge has content, we remove all other morphTargets
              */
             const morphTargetsProcess = {
@@ -639,7 +639,7 @@ export async function combine(model,avatar, options) {
                 if(mergeAppliedMorphs){
                     if(!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
 
-                    blendShapesFromManifest.forEach((key)=>{
+                    morphsFromManifest.forEach((key)=>{
                         const influenceIndex = mesh.morphTargetDictionary[key];
                         if(influenceIndex !== undefined && mesh.morphTargetInfluences[influenceIndex] > 0) {
                             morphTargetsProcess.merge.add(key)
@@ -743,31 +743,31 @@ export async function combine(model,avatar, options) {
  * @param {Object} avatar 
  * @returns {Array} Array of blendshapeTraits
  */
-function getAllBlendShapeTraits(avatar){
+function getAllMorphTraits(avatar){
     try{
         // Check if avatar is valid and has the expected structure
         if (!avatar || typeof avatar !== 'object') {
-            console.warn('merge-geometry:getAllBlendShapeTraits - avatar is not a valid object');
+            console.warn('merge-geometry:getAllMorphTraits - avatar is not a valid object');
             return [];
         }
         
-        // Find any trait that exposes manifestData.getAllBlendShapeTraits
-        const source = Object.values(avatar).find((a)=>a?.traitInfo?.manifestData?.getAllBlendShapeTraits);
+        // Find any trait that exposes manifestData.getAllMorphTraits
+        const source = Object.values(avatar).find((a)=>a?.traitInfo?.manifestData?.getAllMorphTraits);
         if(!source) {
-            console.warn('merge-geometry:getAllBlendShapeTraits - no source found with getAllBlendShapeTraits method');
+            console.warn('merge-geometry:getAllMorphTraits - no source found with getAllMorphTraits method');
             return [];
         }
         
-        const getter = source.traitInfo.manifestData.getAllBlendShapeTraits;
+        const getter = source.traitInfo.manifestData.getAllMorphTraits;
         if (typeof getter !== 'function') {
-            console.warn('merge-geometry:getAllBlendShapeTraits - getAllBlendShapeTraits is not a function');
+            console.warn('merge-geometry:getAllMorphTraits - getAllMorphTraits is not a function');
             return [];
         }
         
         const traits = getter.call(source.traitInfo.manifestData);
         return Array.isArray(traits) ? traits : [];
     }catch(err){
-        console.warn('merge-geometry:getAllBlendShapeTraits missing manifest, continuing without manifest blendshapes', err);
+        console.warn('merge-geometry:getAllMorphTraits missing manifest, continuing without manifest morphs', err);
         return [];
     }
 }

@@ -4,7 +4,8 @@ import {
   clearNativeFaceWeights,
   getNativeFaceWeightsIfFresh,
   initNativeFaceBridge,
-  isAndroidXrWebView
+  isAndroidXrWebView,
+  OPENXR_WEB_ENABLED,
 } from '../library/nativeFaceBridge.js';
 
 describe('nativeFaceBridge', () => {
@@ -72,13 +73,18 @@ describe('nativeFaceBridge', () => {
     expect(window.__characterStudioNativeFace.getFresh(400)).not.toBeNull();
   });
 
-  it('push maps openxrParameters to WebXR keys (jaw_drop)', () => {
+  it('push maps openxrParameters to WebXR keys (jaw_drop) when OPENXR_WEB_ENABLED', () => {
     initNativeFaceBridge();
     const arr = new Array(68).fill(0);
     arr[24] = 0.9;
     window.__characterStudioNativeFace.push({ openxrParameters: arr });
     const rec = getNativeFaceWeightsIfFresh(400);
-    expect(rec?.jaw_drop).toBeCloseTo(0.9);
+    if (OPENXR_WEB_ENABLED) {
+      expect(rec?.jaw_drop).toBeCloseTo(0.9);
+    } else {
+      expect(rec).toEqual({});
+      expect(rec?.jaw_drop).toBeUndefined();
+    }
   });
 
   it('window.onNativeFaceData forwards into native face store', () => {

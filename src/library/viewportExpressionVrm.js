@@ -120,6 +120,8 @@ export function syncAnimationPrimaryTarget(sceneManager, characterManager) {
   const csVisible = characterManager?.isCharacterVisible?.() === true;
   const primary = uploaded ?? (csVisible ? pickPrimaryExpressionVrm(sceneManager, characterManager) : null);
 
+  am.setPrimaryAnimationVrm(primary ?? null);
+
   const vrmControls = am.animationControls.filter((c) => c.vrm);
   if (primary) {
     vrmControls
@@ -127,13 +129,26 @@ export function syncAnimationPrimaryTarget(sceneManager, characterManager) {
       .slice()
       .forEach((c) => am.removeVRM(c.vrm));
 
-    const control = am.animationControls.find((c) => c.vrm === primary);
+    let control = am.animationControls.find((c) => c.vrm === primary);
     if (!control) {
       am.addVRM(primary);
+      control = am.animationControls.find((c) => c.vrm === primary);
     }
 
     if (primary.humanoid?.autoUpdateHumanBones === false) {
       primary.humanoid.autoUpdateHumanBones = true;
+    }
+
+    if (control && am.mixamoModel && am.mixamoAnimations) {
+      control.setAnimations(
+        am.mixamoAnimations,
+        am.mixamoModel,
+        am.mouseLookEnabled,
+        true,
+      );
+      control.syncPlaybackActions(am.curAnimID, am.lastAnimID);
+      control.from = null;
+      control.fadeOutActions = null;
     }
   } else {
     vrmControls.slice().forEach((c) => am.removeVRM(c.vrm));

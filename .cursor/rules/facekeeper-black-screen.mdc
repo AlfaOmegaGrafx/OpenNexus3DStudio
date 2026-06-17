@@ -1,0 +1,55 @@
+---
+description: Prevent FaceKeeperActivity black-screen regression in the Android XR Face Bridge APK
+globs:
+  - native/android-xr-face-bridge/**/*.kt
+  - native/android-xr-face-bridge/**/themes.xml
+  - native/android-xr-face-bridge/**/AndroidManifest.xml
+alwaysApply: false
+---
+
+# FaceKeeper Black-Screen Fix — DO NOT REVERT
+
+The `FaceKeeperActivity` is a transparent 1×1 activity that keeps the Jetpack XR
+session host alive while Chrome runs WebXR.  If any of the safeguards below are
+removed, the user sees a **black screen flash** when tapping
+"Open in Chrome for WebXR (+ face)."
+
+## Mandatory theme attributes (`Theme.FaceKeeper` in `themes.xml`)
+
+All of these MUST remain present:
+
+| Attribute                        | Value                       | Why                                         |
+|----------------------------------|-----------------------------|---------------------------------------------|
+| `windowIsTranslucent`            | `true`                      | Transparent window                          |
+| `windowBackground`              | `@android:color/transparent`| No opaque fill behind content               |
+| `colorBackground`               | `@android:color/transparent`| Prevents system-default grey/black bg       |
+| `windowNoTitle`                  | `true`                      | No title bar                                |
+| `windowContentOverlay`          | `@null`                     | No content overlay shadow                   |
+| `backgroundDimEnabled`          | `false`                     | No dim behind the activity                  |
+| `windowDisablePreview`          | `true`                      | No "starting window" snapshot (black flash) |
+| `windowAnimationStyle`          | `@null`                     | No enter/exit activity transition           |
+
+## Mandatory code guards (`FaceKeeperActivity.kt`)
+
+- `onCreate()` and `onResume()` MUST call `finish()` + `overridePendingTransition(0,0)`
+  if `!FaceHandoffState.isChromeHandoff()`.
+- `FaceKeeperActivity` MUST NEVER call `FaceHandoffState.setChromeHandoff(true)`.
+  Handoff is set only from `MainActivity` / PiP / Chrome flow.
+
+## Mandatory intent flags (`FaceKeeper.kt`)
+
+- `acquire()` and `release()` MUST add `Intent.FLAG_ACTIVITY_NO_ANIMATION`.
+- After `startActivity()`, caller MUST call `overridePendingTransition(0, 0)`.
+
+## Mandatory handoff logic (`FaceHandoffState.kt`, `MainActivity.kt`)
+
+- `recordRelayPostSuccess()` is called only on successful HTTP ingest in
+  `FaceHttpRelay`, never on handoff toggle.
+- Cold launcher start (`ACTION_MAIN` + `CATEGORY_LAUNCHER` + no saved state)
+  MUST call `clearChromeHandoff()`.
+- `canRestoreHandoffSession(inPiP, pausingForChrome)` gates keeper restore —
+  returns true only when handoff is active AND app is in PiP or transitioning.
+
+## AndroidManifest.xml
+
+`FaceKeeperActivity` MUST use `android:theme="@style/Theme.FaceKeeper"`.

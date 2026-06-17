@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useScene } from '../context/SceneContext';
 import { useCore3D } from '../context/Core3DContext';
+import { bootstrapLootCharacter, LOOT_MODELS_MANIFEST_URL } from '../library/lootAssetsConfig';
 import styles from './Tools.module.css';
 
 const ToolsSimple = ({ onNavigate }) => {
@@ -159,7 +160,7 @@ const ToolsSimple = ({ onNavigate }) => {
   const [availableTraits, setAvailableTraits] = useState([]);
   const [currentLootCharacter, setCurrentLootCharacter] = useState(null);
 
-  // Button handlers for CharacterStudio features
+  // Button handlers for OpenNexus3DStudio avatar tools
   const handleVRMExport = async () => {
     if (!currentModel) {
       alert('No model loaded to export');
@@ -220,67 +221,69 @@ const ToolsSimple = ({ onNavigate }) => {
     }
   };
 
-  // Loot Assets functionality
+  // Loot Assets functionality (public/loot-assets/)
   const handleLoadLootAssets = async () => {
+    if (!characterManager) {
+      alert('3D scene is not ready yet');
+      return;
+    }
     try {
-      const response = await fetch('/loot-assets/loot/models/manifest.json');
+      if (sceneManager?.scene && !characterManager.parentModel) {
+        characterManager.setParentModel(sceneManager.scene);
+      }
+      if (sceneManager?.camera) {
+        characterManager.setRenderCamera(sceneManager.camera);
+      }
+
+      const response = await fetch(LOOT_MODELS_MANIFEST_URL);
       const manifest = await response.json();
-      
-      const traits = manifest.traits.map(trait => ({
+
+      const traits = manifest.traits.map((trait) => ({
         name: trait.name,
         trait: trait.trait,
         icon: trait.iconSvg,
-        collection: trait.collection
+        collection: trait.collection,
       }));
-      
+
       setAvailableTraits(traits);
       setLootAssetsLoaded(true);
-      alert(`Loaded ${traits.length} loot asset traits!`);
+      alert(`Loaded ${traits.length} loot asset traits from public/loot-assets`);
     } catch (error) {
       alert(`Failed to load loot assets: ${error.message}`);
     }
   };
 
   const handleLoadLootCharacter = async () => {
-    if (!lootAssetsLoaded) {
-      alert('Please load loot assets first');
+    if (!characterManager) {
+      alert('3D scene is not ready yet');
       return;
     }
-    
+
     try {
-      const characterData = {
-        body: 'orion',
-        head: 'leather_cap',
-        hands: 'gloves',
-        shoes: 'leather_boots',
-        chest: 'leather_armor',
-        neck: 'amulet',
-        waist: 'leather_belt'
-      };
-      
-      setCurrentLootCharacter(characterData);
-      alert('Loot character loaded! Use trait buttons to customize.');
+      if (!lootAssetsLoaded) {
+        await handleLoadLootAssets();
+      }
+      await bootstrapLootCharacter(characterManager);
+      setCurrentLootCharacter(characterManager.avatar);
+      alert('Loot character loaded in the viewport. Use the animation bar to cycle clips.');
     } catch (error) {
       alert(`Failed to load loot character: ${error.message}`);
     }
   };
 
-  const handleRandomizeLootCharacter = () => {
-    if (!lootAssetsLoaded) {
-      alert('Please load loot assets first');
+  const handleRandomizeLootCharacter = async () => {
+    if (!characterManager) {
+      alert('3D scene is not ready yet');
       return;
     }
-    
+
     try {
-      const randomCharacter = {};
-      availableTraits.forEach(trait => {
-        if (trait.collection && trait.collection.length > 0) {
-          const randomIndex = Math.floor(Math.random() * trait.collection.length);
-          randomCharacter[trait.trait.toLowerCase()] = trait.collection[randomIndex].id;
-        }
-      });
-      
-      setCurrentLootCharacter(randomCharacter);
+      if (!characterManager.manifestDataManager?.hasExistingManifest?.()) {
+        await bootstrapLootCharacter(characterManager);
+        setLootAssetsLoaded(true);
+      }
+      await characterManager.loadRandomTraits();
+      setCurrentLootCharacter(characterManager.avatar);
       alert('Random loot character generated!');
     } catch (error) {
       alert(`Failed to randomize character: ${error.message}`);
@@ -318,7 +321,7 @@ const ToolsSimple = ({ onNavigate }) => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h2 className={styles.title}>3D Tools & Export</h2>
-        <p className={styles.subtitle}>Enhanced 3D viewing with CharacterStudio features</p>
+        <p className={styles.subtitle}>Enhanced 3D viewing with OpenNexus3DStudio features</p>
       </div>
 
       <div className={styles.content}>
@@ -491,9 +494,9 @@ const ToolsSimple = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* CharacterStudio Features */}
+        {/* OpenNexus3DStudio Features */}
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>CharacterStudio Features</h3>
+          <h3 className={styles.sectionTitle}>OpenNexus3DStudio Features</h3>
           <div className={styles.buttonGrid}>
             <button 
               onClick={handleMaterialEditor}

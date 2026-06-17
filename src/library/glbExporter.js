@@ -1,10 +1,16 @@
 /**
- * GLBExporter - Exports 3D models to GLB format compatible with CharacterStudio
+ * GLBExporter - Exports 3D models to GLB format for OpenNexus3DStudio
  * Handles model optimization and VRM compatibility preparation
  */
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getOptimizedTextureOptions } from './textureOptimizer.js';
+import {
+  cloneModelForGltfExport,
+  modelHasVrmRoot,
+  sanitizeForGltfExport,
+} from './glbExportUtils.js';
 
 export class GLBExporter {
   constructor() {
@@ -18,27 +24,32 @@ export class GLBExporter {
    * @param {Object} options - Export options
    */
   async exportToGLB(model, options = {}) {
-    const {
+    let {
       filename = 'exported_model.glb',
       optimize = true,
       includeTextures = true,
       includeAnimations = true,
+      animationClips = null,
       metadata = {},
-      vrmCompatible = true
+      vrmCompatible = modelHasVrmRoot(model),
+      compressGlb = false,
+      compressQuality = 50,
+      compressPreset,
     } = options;
+
+    const useVrmExtensions = vrmCompatible && modelHasVrmRoot(model);
 
     try {
       this.emit('exportStart', { model, options });
 
-      // Clone the model to avoid modifying the original
-      const clonedModel = model.clone();
-      
+      const clonedModel = cloneModelForGltfExport(model);
+
       // Prepare model for export
       const preparedModel = await this.prepareModelForExport(clonedModel, {
         optimize,
         includeTextures,
         includeAnimations,
-        vrmCompatible
+        vrmCompatible: useVrmExtensions,
       });
 
       // Create scene for export
@@ -58,15 +69,33 @@ export class GLBExporter {
         forcePowerOfTwoTextures: options.forcePowerOfTwoTextures,
       });
       
-      const glbData = await this.exporter.parseAsync(exportScene, {
+      let glbData = await this.exporter.parseAsync(exportScene, {
         binary: true,
-        includeCustomExtensions: vrmCompatible,
-        animations: includeAnimations ? this.extractAnimations(model) : [],
+        includeCustomExtensions: useVrmExtensions,
+        animations: includeAnimations
+          ? (animationClips?.length ? animationClips : this.extractAnimations(model))
+          : [],
         // OPTIMIZED: Add texture optimization options (ported from CharacterStudioRedux)
         truncateDrawRange: true,
         forcePowerOfTwoTextures: optimizedTextureOptions.forcePowerOfTwoTextures,  // false = allows exact sizes
         maxTextureSize: optimizedTextureOptions.maxTextureSize,  // 1024 = 16x size reduction vs 4096
       });
+
+      let compressStats = null;
+      if (compressGlb) {
+        const { compressGlbBuffer } = await import('./glbCompress.js');
+        const compressed = await compressGlbBuffer(glbData, {
+          quality: compressQuality,
+          preset: compressPreset,
+          includeTextures,
+        });
+        glbData = compressed.buffer;
+        compressStats = compressed.stats;
+        if (!/-draco\.glb$/i.test(filename)) {
+          filename = filename.replace(/\.glb$/i, '-draco.glb');
+        }
+        this.emit('compressComplete', compressStats);
+      }
 
       // Create blob and download
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
@@ -79,7 +108,7 @@ export class GLBExporter {
       // Clean up
       URL.revokeObjectURL(url);
       
-      return { blob, filename, url };
+      return { blob, filename, url, compressStats };
     } catch (error) {
       console.error('GLB export failed:', error);
       this.emit('exportError', { error, model });
@@ -110,12 +139,11 @@ export class GLBExporter {
       await this.prepareMaterials(model);
     }
 
-    // Prepare for VRM compatibility
     if (vrmCompatible) {
       this.prepareForVRM(model);
     }
 
-    // Clean up and optimize
+    sanitizeForGltfExport(model);
     this.cleanupModel(model);
 
     return model;
@@ -128,17 +156,22 @@ export class GLBExporter {
   optimizeGeometry(model) {
     model.traverse((child) => {
       if (child.isMesh && child.geometry) {
-        // Merge vertices
-        child.geometry.mergeVertices();
-        
-        // Compute normals if missing
-        if (!child.geometry.attributes.normal) {
+        if (typeof child.geometry.mergeVertices === 'function') {
+          child.geometry.mergeVertices();
+        } else if (typeof BufferGeometryUtils.mergeVertices === 'function') {
+          child.geometry = BufferGeometryUtils.mergeVertices(child.geometry);
+        }
+
+        if (!child.geometry.attributes.normal && typeof child.geometry.computeVertexNormals === 'function') {
           child.geometry.computeVertexNormals();
         }
-        
-        // Compute bounding box
-        child.geometry.computeBoundingBox();
-        child.geometry.computeBoundingSphere();
+
+        if (typeof child.geometry.computeBoundingBox === 'function') {
+          child.geometry.computeBoundingBox();
+        }
+        if (typeof child.geometry.computeBoundingSphere === 'function') {
+          child.geometry.computeBoundingSphere();
+        }
       }
     });
   }
@@ -282,13 +315,13 @@ export class GLBExporter {
   async exportForCharacterStudio(model, options = {}) {
     const characterStudioOptions = {
       ...options,
-      vrmCompatible: true,
+      vrmCompatible: options.vrmCompatible ?? modelHasVrmRoot(model),
       optimize: true,
       includeTextures: true,
       includeAnimations: true,
       metadata: {
         source: 'OpenNexus3DStudio',
-        target: 'CharacterStudio',
+        target: 'OpenNexus3DStudio',
         compatibility: 'VRM',
         exportDate: new Date().toISOString()
       }

@@ -17,7 +17,7 @@ const Core3DDesigner = () => {
 
   const [designOptions, setDesignOptions] = useState({
     quality: 'high',
-    lighting: 'studio',
+    lighting: 'soft',
     background: 'transparent',
     resolution: '1024x1024'
   });

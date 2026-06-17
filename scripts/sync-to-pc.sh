@@ -6,7 +6,7 @@
 # Usage:
 #   bash scripts/sync-to-pc.sh
 #   bash scripts/sync-to-pc.sh --include-src
-#   SURFACE_ROOT='C:/Users/alfao/Documents/GitHub/CharacterStudio' bash scripts/sync-to-pc.sh
+#   SURFACE_ROOT='C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio' bash scripts/sync-to-pc.sh
 #
 # Default Surface path — override SURFACE_ROOT if your clone lives elsewhere.
 
@@ -25,7 +25,7 @@ cd "$ROOT"
 SURFACE_SSH="${SURFACE_SSH:-Surface-PC-Tailscale}"
 SURFACE_HOST="${SURFACE_HOST:-100.94.108.18}"
 SURFACE_USER="${SURFACE_USER:-alfao}"
-SURFACE_ROOT="${SURFACE_ROOT:-C:/Users/alfao/Documents/GitHub/CharacterStudio}"
+SURFACE_ROOT="${SURFACE_ROOT:-C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio}"
 REMOTE="${SURFACE_SSH}:${SURFACE_ROOT}"
 
 echo "=== DGX -> Surface (DGX-owned only) ==="
@@ -76,11 +76,22 @@ unlock_dgx_src() {
   bash "${ROOT}/scripts/sync-lock-utils.sh" unlock 2>/dev/null || true
 }
 
-push_dir 'Pitch Deck'
+push_dir_if_exists() {
+  local rel="$1"
+  if [[ -d "${ROOT}/${rel}" ]]; then
+    push_dir "$rel"
+  else
+    echo "  skip (missing): $rel" >&2
+  fi
+}
+
+push_dir_if_exists 'Pitch Deck'
 
 for f in \
   README.md \
   package.json \
+  vite.config.js \
+  index.html \
   docs/package.json \
   docs/jsconfig.json \
   docs/docusaurus.config.js \
@@ -114,7 +125,7 @@ fi
 
 echo ""
 echo "Pushing public/worlds/ (static world index + packaged worlds) ..."
-push_dir 'public/worlds'
+push_dir_if_exists 'public/worlds'
 
 echo ""
 echo "NOT pushed: src/ unless --include-src (PC-owned by default)"

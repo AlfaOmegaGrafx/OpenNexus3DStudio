@@ -6,16 +6,6 @@ export const LOOT_ASSETS_ROOT = '/loot-assets';
 export const LOOT_MODELS_MANIFEST_URL = `${LOOT_ASSETS_ROOT}/models/manifest.json`;
 export const LOOT_MAIN_MANIFEST_URL = `${LOOT_ASSETS_ROOT}/manifest.json`;
 
-/** @param {string} name SVG filename under `public/loot-assets/icons/` */
-export function lootIconUrl(name) {
-  return `${LOOT_ASSETS_ROOT}/icons/${name}`;
-}
-
-/** @param {string} category @param {string} file PNG under `public/loot-assets/thumbnails/` */
-export function lootThumbnailUrl(category, file) {
-  return `${LOOT_ASSETS_ROOT}/thumbnails/${category}/${file}`;
-}
-
 /** Mixamo FBX clips used by the bottom animation bar. */
 export const LOOT_DEFAULT_ANIMATIONS = [
   { name: 'T-Pose', description: 'T-Pose', location: `${LOOT_ASSETS_ROOT}/animations/1_T-Pose.fbx` },

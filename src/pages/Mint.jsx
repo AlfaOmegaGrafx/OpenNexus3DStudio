@@ -7,11 +7,10 @@ import { SoundContext } from "../context/SoundContext"
 import { AudioContext } from "../context/AudioContext"
 import { mintAsset } from "../library/mint-utils"
 
-import { lootIconUrl } from '../library/lootAssetsConfig';
-
-const specialIcon = lootIconUrl('Special.svg');
-const sigilIcon = lootIconUrl('SIGIL.svg');
-const typeIcon = lootIconUrl('TYPE.svg');
+// Import loot-assets icons
+import specialIcon from "/loot-assets/icons/Special.svg";
+import sigilIcon from "/loot-assets/icons/SIGIL.svg";
+import typeIcon from "/loot-assets/icons/TYPE.svg";
 
 function MintComponent({ onNavigate }) {
   const { model, avatar } = React.useContext(SceneContext)

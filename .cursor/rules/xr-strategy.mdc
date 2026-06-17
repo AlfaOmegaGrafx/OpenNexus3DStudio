@@ -1,0 +1,99 @@
+---
+description: XR architecture strategy for the Android Face Bridge APK and Character Studio WebXR
+globs:
+  - native/android-xr-face-bridge/**
+  - src/library/sceneManager.js
+  - src/components/SceneControlsCompact.*
+alwaysApply: false
+---
+
+# Character Studio XR Strategy
+
+## Android XR Face Bridge APK
+
+### Architecture: Jetpack XR is the sole active face-tracking path
+
+The APK has two face-tracking engines, but only Jetpack XR is enabled:
+
+| Engine | Status | Flag | Why |
+|--------|--------|------|-----|
+| **Jetpack XR** (`XrFaceTrackingEngine`) | **Active** | always on | Works on Galaxy XR; produces named blend shapes; feeds WebView + HTTP relay |
+| **OpenXR** (`OpenXrFaceEngine`) | **Dormant** | `FaceTrackingCoordinator.OPENXR_ENABLED = false` | `XR_ANDROID_face_tracking` session creation fails on Galaxy XR (-2 / -38); retry loop wastes GPU/XR resources |
+
+DO NOT enable `OPENXR_ENABLED` until Samsung or Google ships a runtime that
+supports `XR_ANDROID_face_tracking` on consumer hardware.  When that day comes,
+flip the flag to `true` and rebuild.
+
+### Face data flow (current, OpenXR off)
+
+```
+Jetpack XR Session (FaceKeeperActivity or MainActivity host)
+  └─> Face.getUserFace().state.collect { blendShapes }
+        ├─> WebView evaluateJavascript (APK-hosted Character Studio)
+        └─> FaceHttpRelay POST /__native_face_ingest
+              └─> Chrome SSE /__native_face_sse (Chrome WebXR sessions)
+```
+
+### Chrome WebXR handoff
+
+When the user taps "Open in Chrome for WebXR":
+
+1. `MainActivity` enters PiP and sets `chromeHandoff = true`
+2. `FaceKeeperActivity` launches (transparent, 1x1, no animation) as a backup session host
+3. Jetpack XR face collection continues, posting to the HTTP relay
+4. Chrome picks up face data via same-origin SSE on the dev server
+
+See `.cursor/rules/facekeeper-black-screen.mdc` for the FaceKeeper visibility
+safeguards that MUST NOT be removed.
+
+### What OpenXR was supposed to do (and might do later)
+
+OpenXR `XR_ANDROID_face_tracking` runs via a headless session with a GLES
+surface, independent of activity lifecycle.  If it worked, it would:
+
+- Survive activity pause/stop without needing FaceKeeper or PiP
+- Work in Full Space mode where Jetpack XR sessions are restricted
+- Provide 68 raw face parameters (vs Jetpack's named blend shapes)
+
+The code is fully written (`OpenXrFaceEngine.kt`, native `cs_openxr_face` C++
+library) and preserved behind the flag.  The `TextureView` in `activity_main.xml`
+is set to GONE when the flag is off.
+
+---
+
+## Broader Character Studio WebXR Strategy
+
+### Current capabilities (web side)
+
+- **VR mode**: Three.js `VRButton` → `immersive-vr` session (works on PC + Galaxy XR Chrome + Quest)
+- **AR mode**: Three.js `ARButton` → `immersive-ar` session (works on Galaxy XR Chrome; limited on mobile)
+- **Face tracking in WebXR**: `nativeFaceRelay.js` subscribes to SSE from the APK relay; no browser-native face tracking yet
+- **Floor anchoring**: `bounded-floor` / `local-floor` reference spaces with model repositioning
+
+### Target platforms
+
+| Platform | XR mode | Face tracking source |
+|----------|---------|---------------------|
+| Galaxy XR (APK WebView) | None (no WebXR in WebView) | Jetpack XR direct inject |
+| Galaxy XR (Chrome) | AR / VR | APK HTTP relay via SSE |
+| Quest / standalone HMD | VR | None yet (future: WebXR face tracking API) |
+| PC Chrome | VR (with SteamVR / WMR) | None yet |
+| Mobile Chrome | AR (limited) | None |
+
+### Roadmap considerations
+
+1. **WebXR Face Tracking API**: Chrome is shipping `XRFace` behind flags.
+   When available, Character Studio should detect it and use it directly,
+   bypassing the relay for devices that support it natively.
+
+2. **moeChat / AIRI integration**: VRM export + personality config handoff
+   for "talk to your VRM" companion experiences.  These are separate products
+   that consume Character Studio output — do not merge their code in.
+
+3. **AR pass-through quality**: Galaxy XR Chrome AR works but the APK WebView
+   cannot do WebXR.  The relay bridge is the workaround.  If Google adds
+   WebXR support to Android WebView, the APK could do AR directly.
+
+4. **Multi-user / spectator**: HTTP relay architecture already supports
+   multiple SSE subscribers.  Future: multiple Chrome tabs or devices
+   receiving the same face data stream.

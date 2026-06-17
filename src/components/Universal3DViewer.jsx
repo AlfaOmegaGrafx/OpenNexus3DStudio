@@ -7,7 +7,7 @@ import './Shared3DViewer.css';
 /**
  * Universal 3D Viewer Component
  * Automatically detects the application mode and provides appropriate 3D viewing capabilities
- * Works seamlessly with both CharacterStudio and OpenNexus3DStudio
+ * Works seamlessly with OpenNexus3DStudio (3D AIGC + avatar/VRM workflows)
  */
 const Universal3DViewer = ({
   // Viewer configuration
@@ -46,20 +46,20 @@ const Universal3DViewer = ({
     if (autoDetectMode && !mode) {
       // Detect based on available contexts and features
       const hasCore3D = core3dContext && core3dContext.isInitialized;
-      const hasCharacterStudio = sceneContext && sceneContext.characterManager;
+      const hasAvatarPanel = sceneContext && sceneContext.characterManager;
       
-      if (hasCore3D && hasCharacterStudio) {
+      if (hasCore3D && hasAvatarPanel) {
         // Both available - determine based on current state
-        setDetectedMode(core3dContext.currentDesign ? 'opennexus3dstudio' : 'characterstudio');
+        setDetectedMode(core3dContext.currentDesign ? 'opennexus3dstudio' : 'opennexus3dstudio');
       } else if (hasCore3D) {
         setDetectedMode('opennexus3dstudio');
-      } else if (hasCharacterStudio) {
-        setDetectedMode('characterstudio');
+      } else if (hasAvatarPanel) {
+        setDetectedMode('opennexus3dstudio');
       } else {
-        setDetectedMode('characterstudio'); // Default fallback
+        setDetectedMode('opennexus3dstudio'); // Default fallback
       }
     } else {
-      setDetectedMode(mode || 'characterstudio');
+      setDetectedMode(mode || 'opennexus3dstudio');
     }
   }, [autoDetectMode, mode, core3dContext, sceneContext]);
 
@@ -71,7 +71,7 @@ const Universal3DViewer = ({
       // For OpenNexus3DStudio, use Core3D design or selected model
       return core3dContext?.currentDesign || core3dContext?.selectedModel;
     } else {
-      // For CharacterStudio, use scene model
+      // OpenNexus3DStudio avatar viewport model
       return sceneContext?.currentModel;
     }
   };
@@ -82,7 +82,7 @@ const Universal3DViewer = ({
       onViewerReady?.({
         mode: detectedMode,
         hasCore3D: core3dContext?.isInitialized || false,
-        hasCharacterStudio: sceneContext?.isInitialized || false
+        hasOpenNexusAvatar: sceneContext?.isInitialized || false
       });
     }
   }, [detectedMode, isReady, onViewerReady, core3dContext, sceneContext]);
@@ -128,7 +128,7 @@ const Universal3DViewer = ({
         ...baseConfig,
         enableVRM,
         enableExport,
-        // CharacterStudio specific options
+        // OpenNexus3DStudio avatar panel options
         characterMode: true,
         blendShapes: true
       };
@@ -141,10 +141,10 @@ const Universal3DViewer = ({
 
     const controls = [];
     
-    if (detectedMode === 'characterstudio') {
+    if (detectedMode === 'opennexus3dstudio' && sceneContext?.characterManager) {
       controls.push(
         <div key="character-controls" className="mode-specific-controls">
-          <h4>CharacterStudio Controls</h4>
+          <h4>OpenNexus3DStudio Avatar Controls</h4>
           <div className="control-group">
             <button 
               onClick={() => sceneContext?.exportModel?.('vrm')}

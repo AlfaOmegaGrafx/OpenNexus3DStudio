@@ -1,0 +1,31 @@
+---
+description: Side panels must always stack behind the app header (z-index invariant)
+globs: src/App.css,src/App.jsx,src/pages/Appearance*.css,src/pages/Appearance*.jsx,src/components/BottomDisplayMenu.jsx
+alwaysApply: true
+---
+
+# Side panel z-index (always behind header)
+
+When adjusting **any** side panel (Character Studio right rail, left tool sidebar, collapsed icon strip, or future panels):
+
+## Invariant
+
+**Side panels must always render behind `.app-header` in z-index.** They must never overlap or cover the header band.
+
+## Stacking order (low → high)
+
+| Layer | Token / class | z-index |
+|-------|----------------|---------|
+| Side panels | `--z-side-panel` / `.character-studio-sidebar`, `.sidebar` overlays | **998** |
+| App header | `--z-app-header` / `.app-header` | **1001** |
+| Scene controls row | `--z-scene-controls` / `.scene-controls-row` | **1002** |
+
+- Side panel `z-index` must stay **strictly below 1001** (use `var(--z-side-panel)`).
+- Do **not** raise side panels to 1003+ to fix overlap — fix `top` / layout instead.
+- Character Studio sidebar is `position: fixed` with `top: var(--app-chrome-top-height)`; if it visually touches the header, it should tuck **under** it, not above it.
+
+## Checklist when changing side panel layout
+
+1. Confirm side panel z-index ≤ `--z-side-panel` (998).
+2. Confirm `.app-header` remains at `--z-app-header` (1001) or higher.
+3. Never set side panel or its children above the header unless the element is intentionally part of the header chrome (e.g. tooltips with their own stacking).

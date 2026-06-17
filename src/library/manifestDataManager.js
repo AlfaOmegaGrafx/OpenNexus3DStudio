@@ -93,8 +93,12 @@ export class ManifestDataManager{
     
     isGroupTraitRestrictedInAnyManifest(trait, groupTraitID){
       for (const manifestData of this.manifestDataCollection){
-        const p = manifestData.manifestRestrictions.restrictionMaps[trait]?.isReverseBlendsh
+        const reverseCheck = manifestData.manifestRestrictions.restrictionMaps[trait]?.isReverseMorphTraitAllowed?.(groupTraitID);
+        if (reverseCheck && !reverseCheck.allowed) {
+          return true;
+        }
       }
+      return false;
     }
 
 
@@ -266,11 +270,11 @@ export class ManifestDataManager{
       }
     }
   
-    getAllBlendShapeTraits(optionalIdentifier){
+    getAllMorphTraits(optionalIdentifier){
       if (optionalIdentifier != null){
         const manifestData = this.manifestDataByIdentifier[optionalIdentifier];
         if (manifestData != null){
-          return manifestData.getAllBlendShapeTraits();
+          return manifestData.getAllMorphTraits();
         }
         else{
           console.warn(`No manifest data with name ${optionalIdentifier} was found.`)
@@ -278,11 +282,11 @@ export class ManifestDataManager{
         }
       }
       else{
-        const allBlendshapes = [];
+        const allMorphs = [];
         this.manifestDataCollection.forEach(manifestData => {
-          allBlendshapes.push(...getAsArray(manifestData.getAllBlendShapeTraits()))
+          allMorphs.push(...getAsArray(manifestData.getAllMorphTraits()))
         });
-        return allBlendshapes;
+        return allMorphs;
       }
     }
   
@@ -376,14 +380,11 @@ export class ManifestDataManager{
   
     // only for the main manifest
     isTraitGroupRequired(groupTraitID){
-      let result = false;
-      const groupTrait = this.mainManifestData.getModelGroup(groupTraitID);
-
-      if (groupTrait?.isRequired) {
-        result = true;
+      if (!this.mainManifestData) {
+        return false;
       }
-  
-      return result;
+      const groupTrait = this.mainManifestData.getModelGroup(groupTraitID);
+      return groupTrait?.isRequired === true;
     }
   
     getModelTraits(groupTraitID, optionalIdentifier){
@@ -533,13 +534,13 @@ export class ManifestDataManager{
       return result;
     }
   
-    getBlendShapeGroupTraits(traitGroupId, traitId, identifier){
+    getMorphGroupTraits(traitGroupId, traitId, identifier){
       if (identifier == null){
         console.log(`Identifier was not provided. Using main manifest`)
       }
       const manifestData = identifier == null ? this.mainManifestData : this.manifestDataByIdentifier[identifier];
 
-      return getAsArray(manifestData?.getModelTrait(traitGroupId, traitId)?.getGroupBlendShapeTraits());
+      return getAsArray(manifestData?.getModelTrait(traitGroupId, traitId)?.getGroupMorphTraits());
     }
   
     getExportOptions(){
@@ -591,7 +592,7 @@ export class ManifestDataManager{
     }
     _fetchManifest(location) {
       return new Promise((resolve,reject)=>{
-        fetch(location)
+        fetch(location, { cache: 'no-store' })
           .then(response=>{
             response.json().then((data)=>{
               resolve(data);

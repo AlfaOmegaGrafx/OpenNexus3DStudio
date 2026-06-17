@@ -2209,7 +2209,7 @@ const VRMExport = () => {
                   {vrmExportDbg('🔍 Thumbnail exists:', !!vrmMetadata.thumbnail)}
                   {vrmExportDbg('🔍 Thumbnail type:', typeof vrmMetadata.thumbnail)}
                   {vrmMetadata.thumbnail && (
-                    <div style={{ marginTop: '20px', padding: '16px', background: '#2a2a2a', borderRadius: '8px', border: '1px solid #444' }}>
+                    <div style={{ marginTop: '20px', padding: '16px', background: '#2a2a2a', borderRadius: '8px', border: '1px solid #444', borderRadius: '8px' }}>
                       <h5 className="text-md font-semibold mb-2 text-purple-600">🖼️ VRM Thumbnail/Preview</h5>
                       <div style={{ position: 'relative', width: '100%', maxWidth: '300px', margin: '0 auto' }}>
                         <img 

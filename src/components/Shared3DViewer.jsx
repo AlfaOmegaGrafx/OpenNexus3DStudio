@@ -5,7 +5,7 @@ import { useCore3D } from '../context/Core3DContext';
 
 /**
  * Shared 3D Viewer Component
- * Works for both CharacterStudio and OpenNexus3DStudio applications
+ * Works for OpenNexus3DStudio (avatar panels + 3D AIGC viewport)
  * Supports both traditional 3D models and Core3D designs
  */
 const Shared3DViewer = ({ 
@@ -397,7 +397,7 @@ const Shared3DViewer = ({
       {/* Mode indicator */}
       <div className="viewer-mode-indicator">
         <span className={`mode-badge ${mode}`}>
-          {mode === 'characterstudio' ? '🎭 CharacterStudio' : '🎨 OpenNexus3DStudio'}
+          {'🎭 OpenNexus3DStudio'}
         </span>
       </div>
     </div>

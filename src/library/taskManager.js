@@ -10,6 +10,38 @@ import { logger } from './logger.js';
 import { performanceMonitor } from './performanceMonitor.js';
 import { rollbackManager } from './rollbackManager.js';
 import avatarSdkService from '../services/avatarSdkService.js';
+import {
+  buildJobDownloadUrl,
+  enrichCompletedJobPayload,
+  extractJobProgress,
+  getTaskResultModelUrl,
+  resolveTaskModelUrl,
+} from './taskModelUrl.js';
+import {
+  getDefaultAutoRigOutputFormat,
+  getDefaultModelForFeature,
+  resolveAutoRigModelForTask,
+  resolveMeshModelForAvatarFromImage,
+  AVATAR_MESH_DECIMATION_TARGET,
+} from './aiModelsCatalog.js';
+import {
+  AUTO_RIG_MODES,
+  buildTemplateAutoRigOptions,
+  DEFAULT_HUMANOID_TEMPLATE_ID,
+  normalizeHumanoidTemplateId,
+  TEMPLATE_RIG_MODEL_ID,
+} from './avatarPipelineCatalog.js';
+import {
+  applyJobTimestampsToTask,
+  isJobDeletedLocally,
+  loadPersistedTasks,
+  mapApiJobStatusToTaskStatus,
+  markJobDeletedLocally,
+  resolveTaskJobId,
+  sortTasksForDisplay,
+  taskFromApiJob,
+  writeTaskStorageSnapshot,
+} from './taskPersistence.js';
 
 export function ensureAbsoluteUrl(url) {
   let s = (url || '').trim();
@@ -26,6 +58,28 @@ export function ensureAbsoluteUrl(url) {
   // Fix malformed scheme (e.g. "http/host" -> "http://host") so we never double-prepend
   const normalized = /^https?:\/[^/]/.test(s) ? s.replace(/^(https?):\//, '$1://') : s;
   return /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
+}
+
+/**
+ * Strip accidental /api/v1/... suffix from API base (common mis-set VITE_API_ENDPOINT).
+ * @param {string} url
+ * @returns {string}
+ */
+export function normalizeApiBaseUrl(url) {
+  const raw = (url || '').trim();
+  if (!raw) return '';
+  const pathOnly = raw.startsWith('/');
+  const abs = ensureAbsoluteUrl(raw);
+  const stripped = abs.replace(/\/api\/v\d+(?:\/.*)?$/i, '').replace(/\/$/, '');
+  if (pathOnly && typeof window !== 'undefined' && window.location?.origin) {
+    try {
+      const pathname = new URL(stripped).pathname.replace(/\/$/, '') || '';
+      return pathname || '/';
+    } catch {
+      return raw.replace(/\/api\/v\d+(?:\/.*)?$/i, '').replace(/\/$/, '') || '/';
+    }
+  }
+  return stripped;
 }
 
 /**
@@ -104,25 +158,32 @@ export function get3daigcAuthHeaders() {
 
 export class TaskManager {
   constructor(apiEndpoint = null) {
-    this.apiEndpoint = ensureAbsoluteUrl(apiEndpoint ?? import.meta.env.VITE_API_ENDPOINT ?? '');
+    this.apiEndpoint = normalizeApiBaseUrl(apiEndpoint ?? import.meta.env.VITE_API_ENDPOINT ?? '');
     this.tasks = new Map();
+    this.activeTaskId = null;
     this.isConnected = false;
     this.eventListeners = new Map();
+    this._persistTimer = null;
+    this._resumingJobs = new Set();
+    this._hydrateFromStorage();
     
     // Supported task types
     this.supportedTypes = [
       'text-to-3d',
       'image-to-3d',
+      'image-to-raw-mesh',
       'mesh-painting',
       'mesh-painting-text',
       'mesh-segmentation',
-      'part-completion',
       'auto-rigging',
       'mesh-retopology',
       'mesh-uv-unwrapping',
       'mesh-editing-text',
       'mesh-editing-image',
-      'avatar-from-photo'
+      'image-to-splat',
+      'avatar-from-image',
+      'avatar-from-photo',
+      'image-to-world',
     ];
   }
 
@@ -265,7 +326,7 @@ export class TaskManager {
    * @param {string} endpoint - New API endpoint
    */
   setApiEndpoint(endpoint) {
-    this.apiEndpoint = ensureAbsoluteUrl(endpoint);
+    this.apiEndpoint = normalizeApiBaseUrl(endpoint);
     this.emit('apiEndpointChanged', { endpoint: this.apiEndpoint });
   }
 
@@ -309,6 +370,7 @@ export class TaskManager {
     };
 
     this.tasks.set(taskId, task);
+    this.schedulePersist();
     console.log('TaskManager: Task created and stored:', task);
     console.log('TaskManager: About to emit taskCreated event');
     this.emit('taskCreated', { task });
@@ -379,6 +441,7 @@ export class TaskManager {
       tasks: Array.from(this.tasks.entries())
     });
 
+    this.activeTaskId = taskId;
     try {
       this.updateTaskStatus(taskId, 'running', 0);
       this.emit('taskStarted', { task });
@@ -392,23 +455,52 @@ export class TaskManager {
         console.log('Job queued, polling for job_id:', result.job_id);
         this.tasks.get(taskId).job_id = result.job_id;
 
-        const finalResult = await this.pollJobStatus(result.job_id, taskId);
+        const pollOptions =
+          task.type === 'image-to-3d' ||
+          task.type === 'image-to-splat' ||
+          task.type === 'avatar-from-image' ||
+          task.type === 'image-to-world'
+            ? { maxAttempts: 600, pollInterval: 3000 }
+            : {};
+        const pollIntervalMs = pollOptions.pollInterval ?? 3000;
+        const maxPollAttempts = pollOptions.maxAttempts ?? 200;
+        const finalResult = await this.pollJobStatus(
+          result.job_id,
+          taskId,
+          pollIntervalMs,
+          maxPollAttempts
+        );
         console.log('Job polling completed:', finalResult);
 
         if (finalResult && finalResult.statusPollingUnavailable) {
           this.updateTaskStatus(taskId, 'running', 10, finalResult, null);
           this.emit('taskUpdated', { task: this.tasks.get(taskId) });
         } else {
-          this.updateTaskStatus(taskId, 'completed', 100, finalResult);
-          this.emit('taskCompleted', { task: this.tasks.get(taskId), result: finalResult });
-          const modelUrl =
-            finalResult.modelUrl ||
-            finalResult.downloadUrl ||
-            finalResult.mesh_url ||
-            finalResult.result?.mesh_url;
-          if (modelUrl) {
-            console.log('Auto-loading generated model:', modelUrl);
-            window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId, result: { modelUrl } } }));
+          const completedResult = this._buildCompletedTaskResult(
+            finalResult,
+            result.job_id,
+            task.type,
+          );
+          this.updateTaskStatus(taskId, 'completed', 100, completedResult);
+          this.emit('taskCompleted', { task: this.tasks.get(taskId), result: completedResult });
+          const modelUrl = getTaskResultModelUrl(completedResult);
+          const isWorldTask =
+            task.type === 'image-to-world' ||
+            completedResult.pipelineStage === 'world_package' ||
+            completedResult.feature === 'image_to_world';
+          if (modelUrl || isWorldTask) {
+            const taskRow = this.tasks.get(taskId);
+            console.log('Auto-loading task result:', {
+              modelUrl,
+              isWorldTask,
+              taskType: taskRow?.type,
+              manifest: completedResult?.world_manifest_url,
+            });
+            window.dispatchEvent(
+              new CustomEvent('taskCompleted', {
+                detail: { taskId, task: taskRow, result: completedResult },
+              }),
+            );
           }
         }
         return finalResult;
@@ -417,9 +509,13 @@ export class TaskManager {
       // Direct result (no async job)
       this.updateTaskStatus(taskId, 'completed', 100, result);
       this.emit('taskCompleted', { task: this.tasks.get(taskId), result });
-      const directUrl = result?.modelUrl || result?.downloadUrl || result?.mesh_url;
-      if (directUrl) {
-        window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { taskId, result: { modelUrl: directUrl } } }));
+      const modelUrl = getTaskResultModelUrl(result);
+      if (modelUrl) {
+        window.dispatchEvent(
+          new CustomEvent('taskCompleted', {
+            detail: { taskId, task: this.tasks.get(taskId), result },
+          }),
+        );
       }
       return result;
     } catch (error) {
@@ -439,15 +535,106 @@ export class TaskManager {
         logger.warn('Rollback failed (this is non-critical)', rollbackError, { taskId });
       }
       
-      // Extract user-friendly error message
-      const errorMessage = error.message || 
-                          (error.originalError?.message) || 
-                          'Unknown error occurred';
+      const errorMessage =
+        TaskManager.formatApiError(error) ||
+        error.originalError?.message ||
+        'Unknown error occurred';
+      console.error(`Task ${taskId} failed:`, errorMessage);
       
       this.updateTaskStatus(taskId, 'failed', task.progress, null, errorMessage);
       this.emit('taskFailed', { task, error });
       throw error;
+    } finally {
+      this.activeTaskId = null;
     }
+  }
+
+  emitTaskProgress(payload = {}) {
+    const data = { ...payload };
+    if (this.activeTaskId && !data.taskId) {
+      data.taskId = this.activeTaskId;
+    }
+    if (data.taskId) {
+      const t = this.tasks.get(data.taskId);
+      if (t) {
+        if (data.indeterminate != null) {
+          t.progressIndeterminate = data.indeterminate;
+        }
+        if (data.progress != null) {
+          t.progress = data.progress;
+          t.progressIndeterminate = false;
+        } else if (data.indeterminate) {
+          t.progress = null;
+        }
+        if (data.status) t.statusMessage = data.status;
+        data.task = t;
+      }
+    }
+    this.emit('taskProgress', data);
+  }
+
+  /**
+   * Upload mesh for JSON-body API tasks (returns mesh_file_id).
+   * @param {Blob} modelData
+   * @param {string} [filename]
+   */
+  async uploadMeshFile(modelData, filename = 'model.glb') {
+    const endpoint = `${this.apiEndpoint}/api/v1/file-upload/mesh`;
+    const formData = new FormData();
+    formData.append('file', modelData, filename);
+    const response = await axios.post(endpoint, formData, {
+      headers: { ...get3daigcAuthHeaders() },
+      timeout: 300000,
+      onUploadProgress: (e) => {
+        if (e.total) {
+          const uploadPct = Math.min(15, Math.round((e.loaded * 15) / e.total));
+          this.emitTaskProgress({
+            progress: uploadPct,
+            status: 'Uploading mesh…',
+            indeterminate: false,
+          });
+        }
+      },
+    });
+    const fileId =
+      response.data?.file_id ||
+      response.data?.mesh_file_id ||
+      response.data?.id;
+    if (!fileId) {
+      throw new Error(
+        `Mesh upload succeeded but no file_id in response: ${JSON.stringify(response.data)}`,
+      );
+    }
+    return fileId;
+  }
+
+  static formatApiError(error) {
+    const data = error?.response?.data;
+    if (typeof data === 'string' && data.length > 0) {
+      return [error?.message, data].filter(Boolean).join(' — ');
+    }
+    if (data && typeof data === 'object') {
+      const detail = data.detail;
+      if (Array.isArray(detail)) {
+        const validation = detail
+          .map((item) => {
+            const loc = Array.isArray(item?.loc) ? item.loc.join('.') : '';
+            return loc ? `${loc}: ${item?.msg || item}` : String(item?.msg || item);
+          })
+          .join('; ');
+        if (validation) {
+          return [error?.message, validation].filter(Boolean).join(' — ');
+        }
+      }
+      if (typeof detail === 'string' && detail.length > 0) {
+        return [error?.message, detail].filter(Boolean).join(' — ');
+      }
+      if (data.message) {
+        return [error?.message, data.message].filter(Boolean).join(' — ');
+      }
+      return [error?.message, JSON.stringify(data)].filter(Boolean).join(' — ');
+    }
+    return error?.message || 'Unknown error occurred';
   }
 
   /**
@@ -463,14 +650,16 @@ export class TaskManager {
         return await this.executeTextTo3D(prompt, options);
       case 'image-to-3d':
         return await this.executeImageTo3D(prompt, imageFile, options);
+      case 'image-to-raw-mesh':
+        return await this.executeImageToRawMesh(prompt, imageFile, options);
+      case 'image-to-splat':
+        return await this.executeImageToSplat(prompt, imageFile, options);
       case 'mesh-painting':
         return await this.executeMeshPainting(prompt, imageFile, options, modelData);
       case 'mesh-painting-text':
         return await this.executeTextMeshPainting(prompt, options, modelData);
       case 'mesh-segmentation':
         return await this.executeMeshSegmentation(options, modelData);
-      case 'part-completion':
-        return await this.executePartCompletion(prompt, options, modelData);
       case 'mesh-retopology':
         return await this.executeMeshRetopology(options, modelData);
       case 'mesh-uv-unwrapping':
@@ -483,6 +672,10 @@ export class TaskManager {
         return await this.executeAutoRigging(options, modelData);
       case 'avatar-from-photo':
         return await this.executeAvatarFromPhoto(prompt, imageFile, options);
+      case 'avatar-from-image':
+        return await this.executeAvatarFromImage(prompt, imageFile, options);
+      case 'image-to-world':
+        return await this.executeImageToWorld(prompt, imageFile, options);
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
@@ -497,16 +690,22 @@ export class TaskManager {
       text_prompt: prompt,
       texture_prompt: options?.texture_prompt ?? prompt,
       texture_resolution: options?.texture_resolution ?? 1024,
-      output_format: options?.output_format ?? 'glb',
-      model_preference: options?.model_preference ?? 'trellis_text_to_textured_mesh'
+      output_format: 'glb',
+      model_preference: options?.model_preference ?? 'trellis_text_to_textured_mesh',
     };
+    if (options?.mesh_simplify != null) {
+      requestData.mesh_simplify = options.mesh_simplify;
+    }
+    if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
+      requestData.model_parameters = options.model_parameters;
+    }
     const startTime = Date.now();
     try {
       const response = await axios.post(endpoint, requestData, {
         headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
         timeout: 300000,
         onUploadProgress: (e) => {
-          if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) });
+          if (e.total) this.emitTaskProgress( { progress: Math.round((e.loaded * 100) / e.total) });
         }
       });
       performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, response.status);
@@ -562,7 +761,7 @@ export class TaskManager {
         headers: { ...get3daigcAuthHeaders() },
         timeout: 120000,
         onUploadProgress: (e) => {
-          if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 50) / e.total) });
+          if (e.total) this.emitTaskProgress( { progress: Math.round((e.loaded * 50) / e.total) });
         }
       });
       const id = response.data?.file_id;
@@ -606,11 +805,20 @@ export class TaskManager {
     }
 
     const basePayload = {
-      output_format: options?.output_format ?? 'glb',
-      model_preference: options?.model_preference ?? 'hunyuan3dv20_image_to_textured_mesh'
+      output_format: 'glb',
+      model_preference:
+        options?.model_preference ??
+        import.meta.env.VITE_DEFAULT_IMAGE_TO_3D_MODEL ??
+        getDefaultModelForFeature('image-to-3d'),
     };
     if (options?.texture_resolution != null) {
       basePayload.texture_resolution = options.texture_resolution;
+    }
+    if (options?.mesh_simplify != null) {
+      basePayload.mesh_simplify = options.mesh_simplify;
+    }
+    if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
+      basePayload.model_parameters = options.model_parameters;
     }
 
     const payload = imageFileId
@@ -624,7 +832,7 @@ export class TaskManager {
       const response = await axios.post(endpoint, payload, {
         headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
         timeout: 300000,
-        onUploadProgress: () => this.emit('taskProgress', { progress: imageFileId ? 55 : 10 })
+        onUploadProgress: () => this.emitTaskProgress( { progress: imageFileId ? 55 : 10 })
       });
       const data = response.data;
       if (data?.job_id) {
@@ -659,19 +867,199 @@ export class TaskManager {
     }
   }
 
-  async executeMeshPainting(prompt, imageFile, options, modelData = null) {
-    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`;
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (imageFile) formData.append('image', imageFile);
-    if (modelData) formData.append('model', modelData, 'model.glb');
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
+  /**
+   * Execute image-to-Gaussian-splat generation (TripoSplat → .ply / .splat for Spark.js).
+   */
+  async executeImageToSplat(prompt, imageFile, options) {
+    if (!imageFile) {
+      throw new Error('image-to-splat requires an input image');
+    }
+
+    const maxSide =
+      Number(options?.max_image_side ?? import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
+    const preparedImage = await resizeImageFor3daigc(imageFile, maxSide);
+    const endpoint = `${this.apiEndpoint}/api/v1/splat-generation/image-to-splat`;
+
+    let imageFileId = null;
+    try {
+      imageFileId = await this.uploadImageFileForApi(preparedImage);
+    } catch (uploadErr) {
+      const st = uploadErr?.response?.status;
+      if (st === 400 || st === 413 || st === 422) {
+        logger.warn('Image file upload rejected; falling back to image_base64', {
+          status: st,
+          detail: uploadErr?.response?.data,
+        });
+      } else {
+        throw uploadErr;
+      }
+    }
+
+    const outputFormat = options?.output_format === 'splat' ? 'splat' : 'ply';
+    const basePayload = {
+      output_format: outputFormat,
+      model_preference:
+        options?.model_preference ??
+        import.meta.env.VITE_DEFAULT_IMAGE_TO_SPLAT_MODEL ??
+        'triposplat_image_to_splat',
+    };
+    if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
+      basePayload.model_parameters = options.model_parameters;
+    }
+
+    const payload = imageFileId
+      ? { ...basePayload, image_file_id: imageFileId }
+      : {
+          ...basePayload,
+          image_base64: await this.fileToBase64(preparedImage),
+        };
+
+    try {
+      const response = await axios.post(endpoint, payload, {
+        headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+        timeout: 300000,
+        onUploadProgress: () => this.emitTaskProgress({ progress: imageFileId ? 55 : 10 }),
+      });
+      const data = response.data;
+      if (data?.job_id) {
+        return { job_id: data.job_id, status: 'queued', message: 'Splat job queued. Processing...', ...data };
+      }
+      return data;
+    } catch (error) {
+      if (error.response) {
+        const body = error.response.data;
+        let detail = body?.message ?? body?.error ?? body?.detail;
+        if (detail == null && body && typeof body === 'object') {
+          try {
+            detail = JSON.stringify(body);
+          } catch {
+            detail = error.message;
+          }
+        }
+        if (detail == null) detail = error.message;
+        const e = new Error(
+          `API request failed: ${error.response.status} ${error.response.statusText}. ${detail}. Endpoint: ${endpoint}`,
+        );
+        e.originalError = error;
+        e.status = error.response.status;
+        throw e;
+      }
+      if (error.request) {
+        const e = new Error(`Network error: No response from server at ${endpoint}. Ensure the API server is running.`);
+        e.originalError = error;
+        throw e;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * POST JSON job with standard headers.
+   * @param {string} endpoint
+   * @param {object} body
+   * @param {string} [statusMessage]
+   */
+  async postJsonJob(endpoint, body, statusMessage = 'Queued on server…') {
+    this.emitTaskProgress({ indeterminate: true, status: statusMessage });
+    const response = await axios.post(endpoint, body, {
+      headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
       timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
     });
     return response.data;
+  }
+
+  /**
+   * @param {Blob} modelData
+   * @param {object} [options]
+   */
+  async buildMeshJobBody(modelData, options = {}) {
+    if (!modelData) {
+      throw new Error('This task requires a mesh loaded in the viewport.');
+    }
+    this.emitTaskProgress({ indeterminate: true, status: 'Uploading mesh…' });
+    const meshFileId = await this.uploadMeshFile(modelData, 'model.glb');
+    const body = {
+      mesh_file_id: meshFileId,
+      output_format: options.output_format ?? 'glb',
+      model_preference: options.model_preference,
+    };
+    if (options.model_parameters && Object.keys(options.model_parameters).length > 0) {
+      body.model_parameters = options.model_parameters;
+    }
+    return body;
+  }
+
+  async executeImageToRawMesh(prompt, imageFile, options) {
+    if (!imageFile) {
+      throw new Error('image-to-raw-mesh requires an input image');
+    }
+    const maxSide =
+      Number(options?.max_image_side ?? import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
+    const preparedImage = await resizeImageFor3daigc(imageFile, maxSide);
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/image-to-raw-mesh`;
+
+    let imageFileId = null;
+    try {
+      imageFileId = await this.uploadImageFileForApi(preparedImage);
+    } catch (uploadErr) {
+      const st = uploadErr?.response?.status;
+      if (st === 400 || st === 413 || st === 422) {
+        logger.warn('Image upload rejected; falling back to image_base64', { status: st });
+      } else {
+        throw uploadErr;
+      }
+    }
+
+    const payload = {
+      output_format: 'glb',
+      model_preference:
+        options?.model_preference ??
+        import.meta.env.VITE_DEFAULT_IMAGE_TO_RAW_MESH_MODEL ??
+        'hunyuan3dv21_image_to_raw_mesh',
+      ...(imageFileId
+        ? { image_file_id: imageFileId }
+        : { image_base64: await this.fileToBase64(preparedImage) }),
+    };
+    if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
+      payload.model_parameters = options.model_parameters;
+    }
+
+    return this.postJsonJob(endpoint, payload, 'Queued raw mesh job…');
+  }
+
+  async executeMeshPainting(prompt, imageFile, options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Mesh painting (image) requires a mesh loaded in the viewport.');
+    }
+    if (!imageFile) {
+      throw new Error('Mesh painting (image) requires a reference image.');
+    }
+    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/image-mesh-painting`;
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: 'glb',
+      model_preference: options?.model_preference ?? getDefaultModelForFeature('image_mesh_painting'),
+      model_parameters: options?.model_parameters,
+    });
+    body.texture_resolution = options?.texture_resolution ?? 1024;
+
+    let imageFileId = null;
+    try {
+      imageFileId = await this.uploadImageFileForApi(imageFile);
+    } catch (uploadErr) {
+      const st = uploadErr?.response?.status;
+      if (st === 400 || st === 413 || st === 422) {
+        logger.warn('Image upload rejected for mesh painting; falling back to base64', { status: st });
+      } else {
+        throw uploadErr;
+      }
+    }
+    if (imageFileId) {
+      body.image_file_id = imageFileId;
+    } else {
+      body.image_base64 = await this.fileToBase64(imageFile);
+    }
+
+    return this.postJsonJob(endpoint, body, 'Queued mesh painting job…');
   }
 
   /**
@@ -698,122 +1086,335 @@ export class TaskManager {
 
   async executeMeshSegmentation(options, modelData = null) {
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-segmentation/segment-mesh`;
-    const config = { timeout: 300000 };
-    if (modelData) {
-      const formData = new FormData();
-      formData.append('model', modelData, 'model.glb');
-      if (options) formData.append('options', JSON.stringify(options));
-      const response = await axios.post(endpoint, formData, {
-        headers: { ...get3daigcAuthHeaders() },
-        ...config,
-        onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
-      });
-      return response.data;
-    }
-    const response = await axios.post(endpoint, { options }, { headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() }, ...config });
-    return response.data;
-  }
-
-  async executePartCompletion(prompt, options, modelData = null) {
-    const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/part-completion`;
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (modelData) formData.append('model', modelData, 'model.glb');
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
-      timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: options?.output_format ?? 'glb',
+      model_preference: options?.model_preference ?? 'p3sam_mesh_segmentation',
+      model_parameters: options?.model_parameters,
     });
-    return response.data;
+    if (options?.num_parts != null) {
+      body.num_parts = options.num_parts;
+    }
+    return this.postJsonJob(endpoint, body, 'Queued segmentation job…');
   }
 
   async executeMeshRetopology(options, modelData = null) {
-    if (!modelData) {
-      throw new Error('Mesh retopology requires a mesh (load a model in the viewport first).');
-    }
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-retopology/retopologize-mesh`;
-    const formData = new FormData();
-    formData.append('model', modelData, 'model.glb');
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
-      timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: options?.output_format ?? 'obj',
+      model_preference: options?.model_preference ?? 'instant_meshes_retopology',
+      model_parameters: options?.model_parameters,
     });
-    return response.data;
+    if (options?.target_vertex_count != null) {
+      body.target_vertex_count = options.target_vertex_count;
+    }
+    if (options?.poly_type) {
+      body.poly_type = options.poly_type;
+    }
+    return this.postJsonJob(endpoint, body, 'Queued retopology job…');
   }
 
   async executeMeshUVUnwrapping(options, modelData = null) {
-    if (!modelData) {
-      throw new Error('UV unwrapping requires a mesh (load a model in the viewport first).');
-    }
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-uv-unwrapping/unwrap-mesh`;
-    const formData = new FormData();
-    formData.append('model', modelData, 'model.glb');
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
-      timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: options?.output_format ?? 'glb',
+      model_preference: options?.model_preference ?? 'xatlas_uv_unwrapping',
+      model_parameters: options?.model_parameters,
     });
-    return response.data;
+    return this.postJsonJob(endpoint, body, 'Queued UV unwrap job…');
   }
 
   async executeMeshEditingText(prompt, options, modelData = null) {
-    if (!modelData) {
-      throw new Error('Mesh editing (text) requires a mesh (load a model in the viewport first).');
-    }
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-editing/text-mesh-editing`;
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    formData.append('model', modelData, 'model.glb');
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
-      timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: 'glb',
+      model_preference: options?.model_preference ?? 'voxhammer_text_mesh_editing',
+      model_parameters: options?.model_parameters,
     });
-    return response.data;
+    body.source_prompt = options?.source_prompt || prompt || 'original region';
+    body.target_prompt = options?.target_prompt || prompt || 'edited region';
+    const mask = options?.mask_bbox;
+    if (!mask?.center || !mask?.dimensions) {
+      throw new Error('Text mesh editing requires a 3D mask (bounding box center + dimensions).');
+    }
+    body.mask_bbox = {
+      center: mask.center,
+      dimensions: mask.dimensions,
+    };
+    if (options?.num_views != null) body.num_views = options.num_views;
+    if (options?.resolution != null) body.resolution = options.resolution;
+    return this.postJsonJob(endpoint, body, 'Queued text mesh editing job…');
   }
 
   async executeMeshEditingImage(prompt, imageFile, options, modelData = null) {
-    if (!modelData) {
-      throw new Error('Mesh editing (image) requires a mesh (load a model in the viewport first).');
+    const sourceImage = options?.source_image_file || imageFile;
+    const targetImage = options?.target_image_file || imageFile;
+    const maskImage = options?.mask_image_file;
+    if (!sourceImage || !targetImage || !maskImage) {
+      throw new Error(
+        'Image mesh editing requires source, target, and mask images (upload target + mask; source defaults to target).',
+      );
     }
-    if (!imageFile) {
-      throw new Error('Mesh editing (image) requires a reference image.');
-    }
+
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-editing/image-mesh-editing`;
-    const formData = new FormData();
-    formData.append('prompt', prompt || 'Apply reference to mesh');
-    formData.append('model', modelData, 'model.glb');
-    formData.append('image', imageFile);
-    if (options) formData.append('options', JSON.stringify(options));
-    const response = await axios.post(endpoint, formData, {
-      headers: { ...get3daigcAuthHeaders() },
-      timeout: 300000,
-      onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
+    const body = await this.buildMeshJobBody(modelData, {
+      output_format: 'glb',
+      model_preference: options?.model_preference ?? 'voxhammer_image_mesh_editing',
+      model_parameters: options?.model_parameters,
+    });
+
+    const uploadImage = async (file, field) => {
+      const fileId = await this.uploadImageFileForApi(file);
+      if (fileId) {
+        body[`${field}_file_id`] = fileId;
+      } else {
+        body[`${field}_base64`] = await this.fileToBase64(file);
+      }
+    };
+
+    await uploadImage(sourceImage, 'source_image');
+    await uploadImage(targetImage, 'target_image');
+    await uploadImage(maskImage, 'mask_image');
+
+    const mask = options?.mask_bbox;
+    if (!mask?.center || !mask?.dimensions) {
+      throw new Error('Image mesh editing requires a 3D mask (bounding box center + dimensions).');
+    }
+    body.mask_bbox = {
+      center: mask.center,
+      dimensions: mask.dimensions,
+    };
+    if (options?.num_views != null) body.num_views = options.num_views;
+    if (options?.resolution != null) body.resolution = options.resolution;
+    return this.postJsonJob(endpoint, body, 'Queued image mesh editing job…');
+  }
+
+  async executeAutoRigging(options, modelData = null) {
+    if (!modelData) {
+      throw new Error('Auto-rigging requires a mesh (load a model in the viewport first).');
+    }
+
+    const endpoint = `${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`;
+    const config = { timeout: 300000 };
+
+    this.emitTaskProgress({ indeterminate: true, status: 'Uploading mesh…' });
+    const meshFileId = await this.uploadMeshFile(modelData, 'model.glb');
+
+    // Rig job must request fbx (supported-formats); completed jobs download as GLB for the viewport.
+    const rigMode = options?.rig_mode ?? AUTO_RIG_MODES.FULL;
+    const modelPreference = resolveAutoRigModelForTask(rigMode, options?.model_preference);
+    const outputFormat =
+      options?.output_format ?? getDefaultAutoRigOutputFormat(modelPreference, rigMode);
+    const rigBody = {
+      mesh_file_id: meshFileId,
+      rig_mode: rigMode,
+      output_format: outputFormat,
+      model_preference: modelPreference,
+    };
+
+    if (rigMode === AUTO_RIG_MODES.TEMPLATE) {
+      rigBody.humanoid_template_id = normalizeHumanoidTemplateId(
+        options?.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID,
+      );
+      if (modelPreference !== TEMPLATE_RIG_MODEL_ID) {
+        logger.warn('Template rig requires UniRig; overriding model_preference', {
+          requested: modelPreference,
+          using: TEMPLATE_RIG_MODEL_ID,
+        });
+        rigBody.model_preference = TEMPLATE_RIG_MODEL_ID;
+      }
+    }
+
+    const modelParams = options?.model_parameters;
+    if (modelParams && typeof modelParams === 'object' && Object.keys(modelParams).length > 0) {
+      const { with_skinning, ...rest } = modelParams;
+      const rigModelParams =
+        rigMode === 'full' && with_skinning === false
+          ? { ...rest, with_skinning: false }
+          : rest;
+      if (Object.keys(rigModelParams).length > 0) {
+        rigBody.model_parameters = rigModelParams;
+      }
+    }
+
+    console.log('Auto-rigging: submitting generate-rig', rigBody);
+
+    this.emitTaskProgress({ indeterminate: true, status: 'Queued on server…' });
+    const response = await axios.post(endpoint, rigBody, {
+      headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+      ...config,
     });
     return response.data;
   }
 
-  async executeAutoRigging(options, modelData = null) {
-    const endpoint = `${this.apiEndpoint}/api/v1/auto-rigging/generate-rig`;
-    const config = { timeout: 300000 };
-    if (modelData) {
-      const formData = new FormData();
-      formData.append('model', modelData, 'model.glb');
-      if (options) formData.append('options', JSON.stringify(options));
-      const response = await axios.post(endpoint, formData, {
-        headers: { ...get3daigcAuthHeaders() },
-        ...config,
-        onUploadProgress: (e) => { if (e.total) this.emit('taskProgress', { progress: Math.round((e.loaded * 100) / e.total) }); }
-      });
-      return response.data;
+  /**
+   * Download completed job output as a File (for chained avatar pipeline steps).
+   * @param {string} downloadUrl
+   * @param {string} [filename]
+   * @returns {Promise<File>}
+   */
+  async fetchJobDownloadBlob(downloadUrl, filename = 'generated.glb') {
+    const resolved = resolveTaskModelUrl(downloadUrl, this.apiEndpoint);
+    const response = await axios.get(resolved, {
+      responseType: 'blob',
+      headers: get3daigcAuthHeaders(),
+      timeout: 300000,
+    });
+    const type = response.headers?.['content-type'] || 'application/octet-stream';
+    return new File([response.data], filename, { type });
+  }
+
+  /**
+   * Image → World Package (TripoSplat environment + optional TRELLIS.2 props on DGX).
+   */
+  async executeImageToWorld(prompt, imageFile, options = {}) {
+    if (!imageFile) {
+      throw new Error('Image to World requires a reference photo');
     }
-    const response = await axios.post(endpoint, { options }, { headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() }, ...config });
-    return response.data;
+
+    const maxSide =
+      Number(options?.max_image_side ?? import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
+    const preparedImage = await resizeImageFor3daigc(imageFile, maxSide);
+    const endpoint = `${this.apiEndpoint}/api/v1/world-generation/image-to-world`;
+
+    let imageFileId = null;
+    try {
+      imageFileId = await this.uploadImageFileForApi(preparedImage);
+    } catch (uploadErr) {
+      const st = uploadErr?.response?.status;
+      if (st === 400 || st === 413 || st === 422) {
+        logger.warn('Image upload rejected for image-to-world; falling back to base64', { status: st });
+      } else {
+        throw uploadErr;
+      }
+    }
+
+    const payload = {
+      model_preference: options?.model_preference ?? 'opennexus_image_to_world',
+      world_id: options?.world_id,
+      world_name: options?.world_name || prompt || 'Generated World',
+      prop_regions: options?.prop_regions ?? [],
+      prop_mesh_model_preference:
+        options?.prop_mesh_model_preference ?? 'trellis2_image_to_textured_mesh',
+      splat_parameters: options?.splat_parameters,
+      prop_mesh_parameters: options?.prop_mesh_parameters,
+      spawn: options?.spawn,
+      ...(imageFileId
+        ? { image_file_id: imageFileId }
+        : { image_base64: await this.fileToBase64(preparedImage) }),
+    };
+
+    const response = await axios.post(endpoint, payload, {
+      headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+      timeout: 300000,
+    });
+    const data = response.data;
+    if (!data?.job_id) {
+      throw new Error('Image-to-world did not return a job_id');
+    }
+    return { job_id: data.job_id, status: 'queued', pipeline: 'image-to-world', ...data };
+  }
+
+  /**
+   * Full local avatar pipeline: image → textured mesh → template VRM rig (GLB).
+   * Optionally queues TripoSplat preview in parallel when include_splat_preview is set.
+   */
+  async executeAvatarFromImage(prompt, imageFile, options = {}) {
+    if (!imageFile) {
+      throw new Error('Avatar from image requires an input photo');
+    }
+
+    const meshModel = resolveMeshModelForAvatarFromImage(
+      options?.mesh_model_preference ?? options?.model_preference,
+    );
+
+    let splatJobPromise = null;
+    if (options?.include_splat_preview) {
+      splatJobPromise = this.executeImageToSplat(prompt, imageFile, {
+        model_preference:
+          options?.splat_model_preference ?? 'triposplat_image_to_splat',
+        output_format: options?.splat_output_format ?? 'ply',
+        model_parameters: options?.splat_model_parameters,
+      }).catch((err) => {
+        logger.warn('Parallel splat preview failed (mesh+rig continues)', {
+          message: err?.message,
+        });
+        return null;
+      });
+    }
+
+    this.emitTaskProgress({ indeterminate: true, status: 'Generating textured mesh…' });
+    const meshJob = await this.executeImageTo3D(prompt, imageFile, {
+      ...options,
+      model_preference: meshModel,
+      model_parameters: {
+        decimation_target:
+          options?.model_parameters?.decimation_target ?? AVATAR_MESH_DECIMATION_TARGET,
+        ...(options?.model_parameters || {}),
+      },
+    });
+    if (!meshJob?.job_id) {
+      throw new Error('Image-to-3D did not return a job_id');
+    }
+
+    const meshResult = await this.pollJobStatus(
+      meshJob.job_id,
+      this.activeTaskId,
+      3000,
+      600,
+    );
+    const meshDownloadUrl = buildJobDownloadUrl(meshResult, meshJob.job_id, this.apiEndpoint);
+    if (!meshDownloadUrl) {
+      throw new Error('Could not resolve mesh download URL after image-to-3D');
+    }
+
+    this.emitTaskProgress({ indeterminate: true, status: 'Applying template VRM rig…' });
+    const meshFile = await this.fetchJobDownloadBlob(meshDownloadUrl, 'avatar_mesh.glb');
+    const templateRig = buildTemplateAutoRigOptions({
+      humanoid_template_id: options?.humanoid_template_id,
+    });
+    const rigJob = await this.executeAutoRigging(
+      {
+        ...templateRig,
+        model_parameters: options?.rig_model_parameters,
+      },
+      meshFile,
+    );
+
+    if (splatJobPromise) {
+      void splatJobPromise.then((splatJob) => {
+        if (!splatJob?.job_id) return;
+        void this.pollJobStatus(splatJob.job_id, this.activeTaskId, 3000, 600)
+          .then((splatResult) => {
+            const splatUrl = buildJobDownloadUrl(splatResult, splatJob.job_id, this.apiEndpoint);
+            if (splatUrl) {
+              window.dispatchEvent(
+                new CustomEvent('taskCompleted', {
+                  detail: {
+                    taskId: this.activeTaskId,
+                    result: {
+                      ...splatResult,
+                      modelUrl: splatUrl,
+                      downloadUrl: splatUrl,
+                      feature: 'image_to_splat',
+                      pipelineStage: 'splat_preview',
+                    },
+                  },
+                }),
+              );
+            }
+          })
+          .catch((err) => {
+            logger.warn('Splat preview polling failed', { message: err?.message });
+          });
+      });
+    }
+
+    return {
+      ...rigJob,
+      pipeline: 'avatar-from-image',
+      mesh_job_id: meshJob.job_id,
+      humanoid_template_id: templateRig.humanoid_template_id,
+    };
   }
 
   async executeAvatarFromPhoto(prompt, imageFile, options = {}) {
@@ -828,7 +1429,7 @@ export class TaskManager {
       pipeline: options?.pipeline,
       pipelineSubtype: options?.pipeline_subtype,
       onProgress: ({ stage, status, progress }) => {
-        this.emit('taskProgress', { stage, status, progress });
+        this.emitTaskProgress( { stage, status, progress });
       }
     });
   }
@@ -839,27 +1440,29 @@ export class TaskManager {
    * @returns {string[]} URLs to try
    */
   _getJobStatusEndpoints(jobId) {
-    // Always use an absolute base URL so requests go to the API host, not the page origin.
     const fromEnv = (import.meta.env.VITE_API_ENDPOINT || '').trim().replace(/\/$/, '');
     const fromInstance = (this.apiEndpoint || '').trim().replace(/\/$/, '');
-    const base = ensureAbsoluteUrl(fromEnv || fromInstance);
+    const base = ensureAbsoluteUrl(normalizeApiBaseUrl(fromEnv || fromInstance));
     if (!base) return [];
+
     const customPath = import.meta.env.VITE_JOB_STATUS_PATH;
     if (customPath && typeof customPath === 'string' && customPath.trim()) {
       const path = customPath.trim().replace(/^\/|\/$/g, '');
       const pathPart = [path, jobId].filter(Boolean).join('/').replace(/\/+/g, '/');
-      const pathPartStatus = [path, jobId, 'status'].filter(Boolean).join('/').replace(/\/+/g, '/');
-      return [`${base}/${pathPart}`, `${base}/${pathPartStatus}`];
+      return [`${base}/${pathPart}`];
     }
-    // 3DAIGC-API / DGX Spark default: GET /api/v1/system/jobs/{job_id}
-    return [
-      `${base}/api/v1/system/jobs/${jobId}`,
-      `${base}/api/v1/jobs/${jobId}`,
-      `${base}/api/v1/job/${jobId}`,
-      `${base}/api/v1/status/${jobId}`,
-      `${base}/jobs/${jobId}`,
-      `${base}/job/${jobId}/status`
-    ];
+
+    const endpoints = [`${base}/api/v1/system/jobs/${jobId}`];
+    if (import.meta.env.VITE_JOB_STATUS_TRY_LEGACY_PATHS === '1') {
+      endpoints.push(
+        `${base}/api/v1/jobs/${jobId}`,
+        `${base}/api/v1/job/${jobId}`,
+        `${base}/api/v1/status/${jobId}`,
+        `${base}/jobs/${jobId}`,
+        `${base}/job/${jobId}/status`,
+      );
+    }
+    return endpoints;
   }
 
   /**
@@ -899,6 +1502,15 @@ export class TaskManager {
       }
     }
     if (lastError) {
+      const canonicalOnly = possibleEndpoints.length === 1;
+      if (canonicalOnly) {
+        const err = new Error(
+          `Job not found on API (expired or deleted on DGX): ${jobId}`,
+        );
+        err.code = 'JOB_NOT_FOUND';
+        err.jobNotFound = true;
+        throw err;
+      }
       const err = new Error(`Job status endpoint not found. Tried: ${possibleEndpoints.join(', ')}`);
       err.code = 'JOB_STATUS_404';
       err.all404 = true;
@@ -918,7 +1530,7 @@ export class TaskManager {
   async pollJobStatus(jobId, taskId, pollInterval = 3000, maxAttempts = 200) {
     let attempts = 0;
     let lastStatus = 'queued';
-    let lastProgress = 0;
+    let lastPercent = -1;
     let consecutive404 = 0;
     const maxConsecutive404 = 3;
 
@@ -936,51 +1548,68 @@ export class TaskManager {
                       jobStatus.state ||
                       'unknown';
 
-        // Extract progress (0-100)
-        let progress = jobStatus.progress;
-        if (progress === undefined || progress === null) {
-          if (status === 'queued' || status === 'pending') {
-            progress = 5;
-          } else if (status === 'processing' || status === 'running') {
-            progress = Math.min(10 + (attempts / maxAttempts * 80), 90);
-          } else if (status === 'completed' || status === 'success' || status === 'succeeded') {
-            progress = 100;
-          } else {
-            progress = lastProgress || 10;
-          }
-        }
-
-        progress = Math.max(0, Math.min(100, Number(progress) || 0));
+        const { percent, indeterminate, statusLabel, failed } = extractJobProgress(jobStatus);
 
         if (status !== lastStatus) {
           console.log(`Job status: ${lastStatus} -> ${status}`);
           lastStatus = status;
         }
-        if (Math.abs(progress - lastProgress) >= 5 || attempts === 0) {
-          this.updateTaskStatus(taskId, 'running', progress);
-          this.emit('taskProgress', { taskId, progress, status });
-          lastProgress = progress;
+
+        if (failed) {
+          const errorMessage =
+            jobStatus.error ||
+            jobStatus.error_message ||
+            jobStatus.message ||
+            'Job failed';
+          throw new Error(errorMessage);
+        }
+
+        const isActiveJob =
+          status === 'processing' ||
+          status === 'running' ||
+          status === 'queued' ||
+          status === 'pending';
+        const percentChanged =
+          percent != null && (lastPercent < 0 || Math.abs(percent - lastPercent) >= 1);
+        if (attempts === 0 || isActiveJob || percentChanged) {
+          const task = this.tasks.get(taskId);
+          if (task) {
+            task.progress = percent;
+            task.progressIndeterminate = indeterminate;
+            task.statusMessage = statusLabel;
+            task.status = 'running';
+          }
+          const progressForStore = percent ?? 0;
+          this.updateTaskStatus(taskId, 'running', progressForStore);
+          this.emitTaskProgress({
+            taskId,
+            progress: percent,
+            indeterminate,
+            status: statusLabel,
+          });
+          if (percent != null) lastPercent = percent;
+          const progressLog = indeterminate
+            ? 'indeterminate'
+            : `${percent}%`;
+          console.log(`Task ${taskId}: ${progressLog} — ${statusLabel} (job progress=${jobStatus.progress})`);
         }
 
         if (status === 'completed' || status === 'success' || status === 'done' || status === 'succeeded') {
-          const r = jobStatus.result || {};
-          const modelUrl =
-            r.mesh_url ||
-            r.model_url ||
-            r.output_mesh_path ||
-            jobStatus.model_url ||
-            jobStatus.result_url ||
-            jobStatus.download_url ||
-            r.download_url;
+          const downloadUrl = buildJobDownloadUrl(jobStatus, jobId, this.apiEndpoint);
           const result = {
             ...jobStatus,
             job_id: jobId,
             status: 'completed',
-            modelUrl,
-            downloadUrl: r.download_url || jobStatus.download_url || jobStatus.result_url || modelUrl,
-            fileUrl: r.file_url || jobStatus.file_url,
-            metadata: r.metadata || jobStatus.metadata || {}
+            modelUrl: downloadUrl,
+            downloadUrl,
+            fileUrl: jobStatus.result?.file_url || jobStatus.file_url,
+            metadata: jobStatus.result?.metadata || jobStatus.metadata || {},
           };
+          const task = this.tasks.get(taskId);
+          if (task) {
+            task.progress = 100;
+            task.statusMessage = statusLabel;
+          }
           this.updateTaskStatus(taskId, 'running', 100);
           return result;
         }
@@ -1002,6 +1631,10 @@ export class TaskManager {
           throw error;
         }
 
+        if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
+          throw error;
+        }
+
         if (error.code === 'JOB_STATUS_404' || error.all404) {
           consecutive404++;
           if (consecutive404 >= maxConsecutive404) {
@@ -1019,8 +1652,17 @@ export class TaskManager {
           console.warn(`Error polling job status (attempt ${attempts + 1}/${maxAttempts}):`, error.message);
         }
 
-        if (attempts > 20 && (error.code === 'ERR_NETWORK' || error.response?.status >= 500)) {
-          throw new Error(`Network error while polling job status after ${attempts} attempts: ${error.message}`);
+        const isNetworkDown =
+          error.code === 'ERR_NETWORK' ||
+          error.code === 'ECONNABORTED' ||
+          error.message?.includes('Network Error') ||
+          error.response?.status >= 500;
+        if (attempts > 5 && isNetworkDown) {
+          throw new Error(
+            'Lost connection to the API while the job was running. ' +
+              'The server may have restarted — check that the API and scheduler are online, then retry. ' +
+              `(job_id: ${jobId})`
+          );
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval * (error.code === 'JOB_STATUS_404' || error.all404 ? 2 : 1.5)));
@@ -1046,18 +1688,266 @@ export class TaskManager {
 
     task.status = status;
     task.updatedAt = new Date();
+
+    if (status === 'running' && !task.startedAt) {
+      task.startedAt = new Date();
+    }
+    if ((status === 'completed' || status === 'failed') && !task.completedAt) {
+      task.completedAt = new Date();
+    }
     
     if (progress !== null) {
       task.progress = progress;
     }
     if (result !== null) {
       task.result = result;
+      applyJobTimestampsToTask(task, result);
     }
     if (error !== null) {
       task.error = error;
     }
 
     this.emit('taskUpdated', { task });
+    this.schedulePersist();
+  }
+
+  _hydrateFromStorage() {
+    const restored = loadPersistedTasks(this.apiEndpoint);
+    if (!restored.length) return;
+    for (const task of restored) {
+      if (!task?.id || this.tasks.has(task.id)) continue;
+      this.tasks.set(task.id, task);
+    }
+    if (this.tasks.size > 0) {
+      this.emit('tasksRestored', { tasks: this.getAllTasks() });
+    }
+  }
+
+  schedulePersist() {
+    if (typeof window === 'undefined') return;
+    if (this._persistTimer) clearTimeout(this._persistTimer);
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      this.persistTasks();
+    }, 250);
+  }
+
+  persistTasks() {
+    writeTaskStorageSnapshot(this.getAllTasks(), this.apiEndpoint);
+  }
+
+  _buildCompletedTaskResult(finalResult, jobId, taskType) {
+    const enriched = enrichCompletedJobPayload(finalResult, jobId, taskType);
+    const downloadUrl = buildJobDownloadUrl(finalResult, jobId, this.apiEndpoint);
+    const pipeline =
+      taskType === 'avatar-from-image'
+        ? 'avatar-from-image'
+        : enriched?.pipeline || finalResult?.pipeline || null;
+    return {
+      ...enriched,
+      pipeline,
+      mesh_job_id: finalResult?.mesh_job_id || enriched?.mesh_job_id || null,
+      modelUrl: downloadUrl || enriched?.modelUrl || null,
+      downloadUrl: downloadUrl || enriched?.downloadUrl || null,
+    };
+  }
+
+  _indexTasksByJobId() {
+    const byJobId = new Map();
+    for (const task of this.getAllTasks()) {
+      const jobId = resolveTaskJobId(task);
+      if (jobId) byJobId.set(jobId, task);
+    }
+    return byJobId;
+  }
+
+  async deleteJobOnApi(jobId) {
+    if (!jobId || !this.apiEndpoint) {
+      throw new Error('Missing job id or API endpoint');
+    }
+    const base = this.apiEndpoint.replace(/\/$/, '');
+    const headers = {
+      Accept: 'application/json',
+      ...get3daigcAuthHeaders(),
+    };
+    try {
+      await axios.delete(`${base}/api/v1/system/jobs/${jobId}/result`, {
+        headers,
+        timeout: 20000,
+        validateStatus: (status) => status === 200 || status === 404,
+      });
+    } catch (error) {
+      console.warn(`[TaskManager] Result cleanup failed for ${jobId}:`, error?.message || error);
+    }
+    const response = await axios.delete(`${base}/api/v1/system/jobs/${jobId}`, {
+      headers,
+      timeout: 20000,
+      validateStatus: (status) => status === 200 || status === 404,
+    });
+    return response.data;
+  }
+
+  /**
+   * Delete a task locally and on DGX when it has a backend job id.
+   * @param {string} taskId
+   */
+  async deleteTask(taskId) {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return { deletedLocally: false, deletedRemotely: false, jobId: null };
+    }
+
+    const jobId = resolveTaskJobId(task);
+    let deletedRemotely = false;
+
+    if (jobId && this.isConnected && this.apiEndpoint) {
+      try {
+        await this.deleteJobOnApi(jobId);
+        deletedRemotely = true;
+      } catch (error) {
+        if (error.response?.status === 404) {
+          deletedRemotely = true;
+        } else {
+          throw new Error(
+            error.response?.data?.detail ||
+              error.message ||
+              'Failed to delete job on DGX Spark',
+          );
+        }
+      }
+    }
+
+    if (jobId) {
+      markJobDeletedLocally(jobId);
+    }
+
+    this.removeTask(taskId);
+    return { deletedLocally: true, deletedRemotely, jobId };
+  }
+
+  async syncTasksWithApiHistory(limit = 100) {
+    if (!this.isConnected || !this.apiEndpoint) return [];
+    const base = this.apiEndpoint.replace(/\/$/, '');
+    const response = await axios.get(`${base}/api/v1/system/jobs/history`, {
+      params: { limit },
+      headers: {
+        Accept: 'application/json',
+        ...get3daigcAuthHeaders(),
+      },
+      timeout: 15000,
+    });
+    const jobs = Array.isArray(response.data?.jobs) ? response.data.jobs : [];
+    const byJobId = this._indexTasksByJobId();
+
+    const updated = [];
+    for (const job of jobs) {
+      const jobId = job?.job_id;
+      if (!jobId || isJobDeletedLocally(jobId)) continue;
+      const existing = byJobId.get(jobId) || null;
+      let jobStatus = job;
+      if (
+        (job.status === 'completed' || job.status === 'failed') &&
+        (!job.result || typeof job.result !== 'object')
+      ) {
+        try {
+          jobStatus = await this.checkJobStatus(jobId);
+        } catch {
+          // Keep history row when detail fetch fails.
+        }
+      }
+      const mapped = taskFromApiJob(jobStatus, existing);
+      if (!mapped) continue;
+      const loadUrl = getTaskResultModelUrl(mapped.result);
+      console.log(
+        `[TaskManager] Synced job ${jobId} (${mapped.type}): loadUrl=${loadUrl || 'none'}`,
+      );
+      if (existing) {
+        Object.assign(existing, mapped);
+        this.tasks.set(existing.id, existing);
+      } else {
+        this.tasks.set(mapped.id, mapped);
+        byJobId.set(jobId, mapped);
+        this.emit('taskCreated', { task: mapped });
+      }
+      updated.push(mapped);
+    }
+
+    this.schedulePersist();
+    this.emit('tasksSynced', { tasks: sortTasksForDisplay(this.getAllTasks()) });
+    return updated;
+  }
+
+  async resumeInterruptedJobs() {
+    if (!this.isConnected) return;
+    for (const task of this.getAllTasks()) {
+      if (!task.job_id) continue;
+      if (task.status !== 'running' && task.status !== 'pending') continue;
+      if (this._resumingJobs.has(task.job_id)) continue;
+      this._resumingJobs.add(task.job_id);
+      void this._resumeTaskPolling(task).finally(() => {
+        this._resumingJobs.delete(task.job_id);
+      });
+    }
+  }
+
+  async _resumeTaskPolling(task) {
+    try {
+      const status = await this.checkJobStatus(task.job_id);
+      const mappedStatus = mapApiJobStatusToTaskStatus(status?.status);
+      if (mappedStatus === 'completed') {
+        const completedResult = this._buildCompletedTaskResult(status, task.job_id, task.type);
+        this.updateTaskStatus(task.id, 'completed', 100, completedResult);
+        this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+        return;
+      }
+      if (mappedStatus === 'failed') {
+        this.updateTaskStatus(
+          task.id,
+          'failed',
+          task.progress,
+          status,
+          status?.error || status?.message || 'Job failed',
+        );
+        this.emit('taskFailed', { task: this.getTask(task.id) });
+        return;
+      }
+
+      const pollOptions =
+        task.type === 'image-to-3d' ||
+        task.type === 'image-to-splat' ||
+        task.type === 'avatar-from-image' ||
+        task.type === 'image-to-world'
+          ? { maxAttempts: 600, pollInterval: 3000 }
+          : {};
+      const finalResult = await this.pollJobStatus(
+        task.job_id,
+        task.id,
+        pollOptions.pollInterval ?? 3000,
+        pollOptions.maxAttempts ?? 200,
+      );
+      if (finalResult?.statusPollingUnavailable) {
+        this.updateTaskStatus(task.id, 'running', 10, finalResult, null);
+        this.emit('taskUpdated', { task: this.getTask(task.id) });
+        return;
+      }
+      const completedResult = this._buildCompletedTaskResult(finalResult, task.job_id, task.type);
+      this.updateTaskStatus(task.id, 'completed', 100, completedResult);
+      this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+    } catch (error) {
+      if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
+        this.updateTaskStatus(
+          task.id,
+          'failed',
+          task.progress ?? 0,
+          null,
+          error.message ||
+            'Job not found on API (expired or deleted on DGX). Submit a new task or clear this entry.',
+        );
+        this.emit('taskFailed', { task: this.getTask(task.id) });
+        return;
+      }
+      console.warn(`[TaskManager] Failed to resume job ${task.job_id}:`, error?.message || error);
+    }
   }
 
   /**
@@ -1100,6 +1990,7 @@ export class TaskManager {
     if (task) {
       this.tasks.delete(taskId);
       this.emit('taskRemoved', { task });
+      this.schedulePersist();
     }
   }
 
@@ -1112,6 +2003,7 @@ export class TaskManager {
       this.tasks.delete(task.id);
     });
     this.emit('tasksCleared', { count: completedTasks.length });
+    this.schedulePersist();
   }
 
   /**
@@ -1121,6 +2013,7 @@ export class TaskManager {
     const taskCount = this.tasks.size;
     this.tasks.clear();
     this.emit('allTasksCleared', { count: taskCount });
+    this.schedulePersist();
   }
 
   /**
@@ -1171,7 +2064,11 @@ export class TaskManager {
    * Cleanup
    */
   dispose() {
-    this.tasks.clear();
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    this.persistTasks();
     this.eventListeners.clear();
   }
 }

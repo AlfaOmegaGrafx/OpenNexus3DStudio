@@ -1,5 +1,5 @@
 /**
- * Security Configuration for CharacterStudio
+ * Security Configuration for OpenNexus3DStudio
  * Centralized security settings and validation functions
  */
 

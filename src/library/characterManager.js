@@ -6,6 +6,7 @@ import { BlinkManager } from "./blinkManager";
 import { EmotionManager } from "./EmotionManager";
 import { VRMLoaderPlugin, VRMSpringBoneCollider } from "@pixiv/three-vrm";
 import { getAsArray, disposeVRM, renameVRMBones, addModelData } from "./utils";
+import { normalizeLootAssetUrl } from "./lootAssetsConfig";
 import { downloadGLB, downloadVRMWithAvatar } from "../library/download-utils"
 import { getNodesWithColliders, saveVRMCollidersToUserData, renameMorphTargets} from "./load-utils";
 import { cullHiddenMeshes, setTextureToChildMeshes, addChildAtFirst } from "./utils";
@@ -22,7 +23,19 @@ import { OwnedNFTTraitIDs } from "./ownedNFTTraitIDs";
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const localVector3 = new THREE.Vector3(); 
+const localVector3 = new THREE.Vector3();
+
+/** Store wireframe defaults on trait meshes (used by SceneManager render modes). */
+function setupWireframeMaterialOnMesh(child) {
+  if (!child?.isMesh || !child.material) return;
+  const materials = Array.isArray(child.material) ? child.material : [child.material];
+  if (!child.userData.originalWireframe) {
+    child.userData.originalWireframe = materials.map((m) => !!m?.wireframe);
+  }
+  for (const m of materials) {
+    if (m) m.wireframe = false;
+  }
+}
 
 
 /**
@@ -552,14 +565,14 @@ export class CharacterManager {
       return this.manifestDataManager.getGroupModelTraits();
     }
       /**
-     * Gets blend shape group traits for a specific trait.
+     * Gets morph group traits for a specific trait.
      * @param {string} traitGroupId - ID of the trait group
      * @param {string} traitId - ID of the trait
      * @param {string} identifier - Identifier of target manifest
-     * @returns {Array} Array of blend shape traits
+     * @returns {Array} Array of morph traits
      */
-    getBlendShapeGroupTraits(traitGroupId, traitId, identifier){
-      this.manifestDataManager.getGroupBlendShapeTraits(traitGroupId, traitId, identifier);
+    getMorphGroupTraits(traitGroupId, traitId, identifier){
+      return this.manifestDataManager.getMorphGroupTraits(traitGroupId, traitId, identifier);
     }
     /**
      * Checks if any manifest has NFT lock.
@@ -611,12 +624,13 @@ export class CharacterManager {
       return this.avatar[groupTraitID]?.traitInfo;
     }
     /**
-     * Gets the current blend shape trait data for a group.
+     * Gets the current morph trait data for a group.
      * @param {string} groupTraitID - ID of the trait group
-     * @returns {Object} Current blend shape trait data
+     * @returns {Object} Current morph trait data
      */
-    getCurrentBlendShapeTraitData(groupTraitID){
-      return this.avatar[groupTraitID]?.blendShapeTraitsInfo||{};
+    getCurrentMorphTraitData(groupTraitID){
+      const avatarEntry = this.avatar[groupTraitID];
+      return avatarEntry?.morphTraitsInfo ?? avatarEntry?.blendShapeTraitsInfo ?? {};
     }
     /**
      * Gets the current trait VRM for a group.
@@ -635,6 +649,17 @@ export class CharacterManager {
       this.parentModel = model;
       if (this.screenshotManager)
         this.screenshotManager.setScene(this.parentModel);
+    }
+
+    /** Show or hide the modular character in the 3D viewport (traits stay loaded). */
+    setCharacterVisible(visible) {
+      if (this.rootModel) {
+        this.rootModel.visible = visible;
+      }
+    }
+
+    isCharacterVisible() {
+      return this.rootModel?.visible !== false;
     }
     /**
      * Sets the render camera for the character.
@@ -793,12 +818,12 @@ export class CharacterManager {
       });
     }
     /**
-     * Loads and activates a blend shape trait.
+     * Loads and activates a morph trait.
      * @param {string} traitGroupID - ID of the trait group
-     * @param {string} blendshapeGroupId - ID of the blend shape group
-     * @param {string|null} blendshapeTraitId - ID of the blend shape trait
+     * @param {string} morphGroupId - ID of the morph group
+     * @param {string|null} morphTraitId - ID of the morph trait
      */
-    loadBlendShapeTrait(traitGroupID, blendshapeGroupId, blendshapeTraitId){
+    loadMorphTrait(traitGroupID, morphGroupId, morphTraitId){
       const currentTrait = this.avatar[traitGroupID];
       if(!currentTrait){
         console.warn(`Trait with name: ${traitGroupID} was not found or not selected.`)
@@ -810,20 +835,20 @@ export class CharacterManager {
       }
 
       try{
-        this._loadBlendShapeTrait(traitGroupID, blendshapeGroupId, blendshapeTraitId);
+        this._loadMorphTrait(traitGroupID, morphGroupId, morphTraitId);
       }catch{ 
-        console.error("Error loading blendshape trait "+traitGroupID, blendshapeGroupId, blendshapeTraitId);
+        console.error("Error loading morph trait "+traitGroupID, morphGroupId, morphTraitId);
       }
     }
     /**
-     * Removes a blend shape trait.
+     * Removes a morph trait.
      * @param {string} groupTraitID - ID of the trait group
-     * @param {string} blendShapeGroupId - ID of the blend shape group
+     * @param {string} morphGroupId - ID of the morph group
      */
-    removeBlendShapeTrait(groupTraitID, blendShapeGroupId){
+    removeMorphTrait(groupTraitID, morphGroupId){
       const currentTrait = this.avatar[groupTraitID];
       if (currentTrait){
-        this._loadBlendShapeTrait(groupTraitID,blendShapeGroupId,null);
+        this._loadMorphTrait(groupTraitID, morphGroupId, null);
       }
       else{
         console.warn(`No trait with name: ${ groupTraitID } was found.`)
@@ -851,15 +876,15 @@ export class CharacterManager {
     }
 
     /**
-     * Checks Blendshape restrictions;
+     * Checks morph restrictions;
      * @private
      * @param {} groupTraitID 
      */
-    _checkBlendshapeRestrictions(groupTraitID){
+    _checkMorphRestrictions(groupTraitID){
       for( const trait in this.avatar){
         if (this.manifestDataManager.isGroupTraitRestrictedInAnyManifest(trait, groupTraitID)){
-          console.warn(`Trait with name: Blendshapes of ${trait} is not allowed to be loaded with ${groupTraitID}`)
-          this.removeBlendShapeTrait(trait,null)
+          console.warn(`Trait with name: Morphs of ${trait} is not allowed to be loaded with ${groupTraitID}`)
+          this.removeMorphTrait(trait, null)
         }
       }
     }
@@ -873,8 +898,8 @@ export class CharacterManager {
     _checkRestrictionsBeforeLoad(groupTraitID,traitID){
       const isAllowed = this._getTraitAllowedRules(groupTraitID,traitID)
       if(isAllowed[0].allowed){
-        // check if blendshape restrictions are met
-        this._checkBlendshapeRestrictions(groupTraitID)
+        // check if morph restrictions are met
+        this._checkMorphRestrictions(groupTraitID)
         return
       }
       for(const rule of isAllowed){
@@ -1095,7 +1120,16 @@ export class CharacterManager {
       return this.manifestDataManager.setManifest(manifest, identifier);
     }
     loadManifest(url, identifier){
-      return this.manifestDataManager.loadManifest(url, identifier);
+      return this.manifestDataManager.loadManifest(url, identifier).then(() => {
+        const data = this.manifestDataManager.mainManifestData;
+        if (data?.animationPath?.length) {
+          return this._animationManagerSetup(
+            data.animationPath,
+            data.getAssetsDirectory(),
+            this.manifestDataManager.getDisplayScale(),
+          );
+        }
+      });
     }
     /**
      * Gets the current optimizer character model.
@@ -1177,68 +1211,65 @@ export class CharacterManager {
     }
 
     /**
-     * Loads a blend shape trait.
+     * Loads a morph trait.
      * @private
      * @param {string} traitGroupID - ID of the trait group
-     * @param {string} blendshapeGroupId - ID of the blend shape group
-     * @param {string|null} blendshapeTraitId - ID of the blend shape trait
+     * @param {string} morphGroupId - ID of the morph group
+     * @param {string|null} morphTraitId - ID of the morph trait
      */
-    async _loadBlendShapeTrait(traitGroupID, blendshapeGroupId, blendshapeTraitId){
+    async _loadMorphTrait(traitGroupID, morphGroupId, morphTraitId){
       const currentTrait = this.avatar[traitGroupID];
       if(!currentTrait){
         console.warn(`Trait with name: ${traitGroupID} was not found or not selected.`)
         return;
       }
-      if(!currentTrait.blendShapeTraitsInfo){
-        currentTrait.blendShapeTraitsInfo = {};
+      if(!currentTrait.morphTraitsInfo){
+        currentTrait.morphTraitsInfo = currentTrait.blendShapeTraitsInfo ?? {};
+        currentTrait.blendShapeTraitsInfo = currentTrait.morphTraitsInfo;
       }
 
-      if(!blendshapeGroupId){
-        for(const k in currentTrait.blendShapeTraitsInfo){
-          // Deactivate the current blendshape trait
-          this.toggleBinaryBlendShape(currentTrait.model, currentTrait.blendShapeTraitsInfo[k], false);
+      if(!morphGroupId){
+        for(const k in currentTrait.morphTraitsInfo){
+          this.toggleBinaryMorph(currentTrait.model, currentTrait.morphTraitsInfo[k], false);
         }
         return
       }
 
-      if(currentTrait.blendShapeTraitsInfo[blendshapeGroupId]){
-        // Deactivate the current blendshape trait
-        this.toggleBinaryBlendShape(currentTrait.model, currentTrait.blendShapeTraitsInfo[blendshapeGroupId], false);
+      if(currentTrait.morphTraitsInfo[morphGroupId]){
+        this.toggleBinaryMorph(currentTrait.model, currentTrait.morphTraitsInfo[morphGroupId], false);
       }
-      if(blendshapeTraitId == null){
-        // Deactivated the blendshape trait; dont do anything else
-        delete this.avatar[traitGroupID].blendShapeTraitsInfo[blendshapeGroupId]
+      if(morphTraitId == null){
+        delete this.avatar[traitGroupID].morphTraitsInfo[morphGroupId]
         return
       }
 
-      const blendShape = currentTrait.traitInfo.getBlendShape(blendshapeGroupId, blendshapeTraitId);
-      if(!blendShape){
-        console.warn(`Blendshape with name: ${blendshapeTraitId} was not found.`)
+      const morphTrait = currentTrait.traitInfo.getMorph(morphGroupId, morphTraitId);
+      if(!morphTrait){
+        console.warn(`Morph with name: ${morphTraitId} was not found.`)
         return;
       }
 
-      // Apply blendshape to the model
-      this.toggleBinaryBlendShape(currentTrait.model, blendShape, true);
+      this.toggleBinaryMorph(currentTrait.model, morphTrait, true);
 
-      this.avatar[traitGroupID].blendShapeTraitsInfo[blendShape.getGroupId()] = blendShape;
+      this.avatar[traitGroupID].morphTraitsInfo[morphTrait.getGroupId()] = morphTrait;
 
     }
     /**
-     * Toggles a binary blend shape on a model.
+     * Toggles a binary morph on a model.
      * @private
      * @param {THREE.Object3D} model - Model to modify
-     * @param {Object} blendshape - Blend shape to toggle
-     * @param {boolean} enable - Whether to enable or disable the blend shape
+     * @param {Object} morphTrait - Morph trait to toggle
+     * @param {boolean} enable - Whether to enable or disable the morph
      */
-    toggleBinaryBlendShape = (model,blendshape,enable)=>{
+    toggleBinaryMorph = (model, morphTrait, enable)=>{
       model.traverse((child)=>{
         if(child.isMesh || child.isSkinnedMesh){
 
           const mesh = child;
           if(!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return
-          const blendShapeIndex = mesh.morphTargetDictionary[blendshape.id];
-          if (blendShapeIndex != undefined){
-            mesh.morphTargetInfluences[blendShapeIndex] = enable?1:0;
+          const morphIndex = mesh.morphTargetDictionary[morphTrait.id];
+          if (morphIndex != undefined){
+            mesh.morphTargetInfluences[morphIndex] = enable?1:0;
           }
         }
       })
@@ -1410,13 +1441,22 @@ export class CharacterManager {
           return;
         }
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
           video: false,
         });
         this.lipSync.start(stream);
       } catch (e) {
         console.warn('[CharacterManager] Microphone not available for lip sync:', e?.message || e);
       }
+    }
+
+    /** Suspend trait-avatar mic lip-sync (webcam face tracking takes over). */
+    setLipSyncSuspended(suspended) {
+      this.lipSync?.setSuspended(suspended);
     }
 
     /**
@@ -1451,8 +1491,8 @@ export class CharacterManager {
       renameMorphTargets(m);
 
       /**
-       * unregister the Blendshapes from the manifest -if any.
-       * This is to avoid BlendshapeTraits being affected by the vrm.ExpressionManager
+       * unregister manifest morphs from the VRM expression manager when present,
+       * so morph traits are not driven by vrm.ExpressionManager
        */
       //this._unregisterMorphTargetsFromManifest(vrm, collectionID);
       
@@ -1587,13 +1627,13 @@ export class CharacterManager {
      * @param {string} identifier - Manifest identifier
      */
     _unregisterMorphTargetsFromManifest(vrm, identifier){
-      const manifestBlendShapes = this.manifestDataManager.getAllBlendShapeTraits(identifier)
+      const manifestMorphs = this.manifestDataManager.getAllMorphTraits(identifier)
       const expressions = vrm.expressionManager?.expressions
-      if(manifestBlendShapes.length == 0) return
+      if(manifestMorphs.length == 0) return
       if(!expressions) return
       const expressionToRemove = []
       for(const expression of expressions){
-        if(manifestBlendShapes.map((b)=>b.id).includes(expression.expressionName)){
+        if(manifestMorphs.map((b)=>b.id).includes(expression.expressionName)){
           expressionToRemove.push(expression)
         }
       }
@@ -1639,7 +1679,7 @@ export class CharacterManager {
 
           // XXX Setup MToonMaterial for shader
 
-          this._setupWireframeMaterial(child);
+          setupWireframeMaterialOnMesh(child);
 
           // if (child.material.length){
           //   effectManager.setCustomShader(child.material[0]);
@@ -1712,9 +1752,11 @@ export class CharacterManager {
         if (this.lookAtManager)
           this.lookAtManager.addVRM(vrm);
 
-        // Animate this VRM 
-        if (this.animationManager)
-          this.animationManager.addVRM(vrm)
+        // Animate only visible trait VRMs; primary target sync drops accessory mixers.
+        if (this.animationManager && this.isCharacterVisible()) {
+          this.animationManager.addVRM(vrm);
+          this.animationManager.triggerPrimarySync?.();
+        }
     }
     /**
      * Displays a model.
@@ -1812,6 +1854,11 @@ export class CharacterManager {
               delete this.avatar[traitGroupID]
               // XXX restore effects without setTimeout
           }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('characterstudio-viewport-vrm-changed'),
+            );
+          }
           return;
       }
 
@@ -1849,12 +1896,16 @@ export class CharacterManager {
       // to do, we are now able to load multiple vrm models per options, set the options to include vrm arrays
       this.avatar[traitGroupID] = {
         traitInfo: traitModel,
-        blendShapeTraitsInfo:{},
+        morphTraitsInfo:{},
         textureInfo: textureTrait,
         colorInfo: colorTrait,
         name: traitModel.name,
         model: vrm && vrm.scene,
         vrm: vrm
+      }
+
+      if (typeof window !== 'undefined' && (vrm?.expressionManager || vrm?.blendShapeProxy)) {
+        window.dispatchEvent(new CustomEvent('characterstudio-viewport-vrm-changed'));
       }
     }
 }
@@ -1906,7 +1957,8 @@ class TraitLoadingManager{
                 const loadedModels = await Promise.all(
                     getAsArray(option?.traitModel?.fullDirectory).map(async (modelDir) => {
                         try {
-                            return await this.gltfLoader.loadAsync(modelDir)
+                            const url = normalizeLootAssetUrl(modelDir);
+                            return await this.gltfLoader.loadAsync(url)
                         } catch (error) {
                             console.error(`Error loading modelsss ${modelDir}:`, error);
                             return null;
@@ -1918,7 +1970,7 @@ class TraitLoadingManager{
                   getAsArray(option?.traitTexture?.fullDirectory).map(
                       (textureDir) =>
                           new Promise((resolve) => {
-                              this.textureLoader.load(textureDir, (txt) => {
+                              this.textureLoader.load(normalizeLootAssetUrl(textureDir), (txt) => {
                                   txt.flipY = false;
                                   txt.colorSpace = THREE.SRGBColorSpace;
                                   resolve(txt);

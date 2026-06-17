@@ -1796,12 +1796,19 @@ function applyVisemePresetFill(em, index, record, goalByExpr, usedSplitBlink, vr
  * @param {import('@pixiv/three-vrm').VRM[]} vrms
  * @param {Record<string, number>} record
  * @param {number} lerp
+ * @param {{ skipNeutralPreprocess?: boolean }} [driveOptions]
  */
-function driveFromWeightRecord(vrms, record, lerp) {
+function driveFromWeightRecord(vrms, record, lerp, driveOptions = {}) {
   if (!vrms?.length || !record || typeof record !== 'object') return;
   if (Object.keys(record).length === 0) return;
 
-  const processed = preprocessFaceWeightRecord(record);
+  const processed = driveOptions.skipNeutralPreprocess
+    ? { ...mirrorFaceWeightRecordLateral(record) }
+    : preprocessFaceWeightRecord(record);
+  for (const k of Object.keys(processed)) {
+    if (PUSH_SKIP.has(k)) continue;
+    processed[k] = clamp01(processed[k]);
+  }
 
   for (const vrm of vrms) {
     if (!vrm?.expressionManager) continue;
@@ -1849,11 +1856,13 @@ function driveFromWeightRecord(vrms, record, lerp) {
  *
  * @param {import('@pixiv/three-vrm').VRM[]} vrms
  * @param {Record<string, number>} record
- * @param {{ lerpFactor?: number }} options
+ * @param {{ lerpFactor?: number, skipNeutralPreprocess?: boolean }} options
  */
 export function applyExpressionWeightRecordToVRMS(vrms, record, options = {}) {
   const lerp = typeof options.lerpFactor === 'number' ? options.lerpFactor : 0.28;
-  driveFromWeightRecord(vrms, record, lerp);
+  driveFromWeightRecord(vrms, record, lerp, {
+    skipNeutralPreprocess: options.skipNeutralPreprocess === true,
+  });
 }
 
 /**

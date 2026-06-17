@@ -1,5 +1,5 @@
 /**
- * CharacterStudioBridge - Bridge for importing OpenNexus3DStudio GLB exports into CharacterStudio
+ * CharacterStudioBridge - Bridge for importing Core3D / GLB exports into OpenNexus3DStudio avatar workflows
  * Handles format conversion and VRM compatibility
  */
 import * as THREE from 'three';

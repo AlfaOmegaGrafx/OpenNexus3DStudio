@@ -643,100 +643,17 @@ export function getBoneDisplayWorldPosition(bone, modelRoot, target = new THREE.
 }
 
 /**
- * Whether mesh and bones are misaligned enough to run client-side skinned-mesh repair.
- * @param {import('three').Object3D|null|undefined} root
- */
-export function needsSkinnedMeshRigRepair(root) {
-  if (!root) return false;
-
-  const contract = root.userData?.aigcRigContract;
-  if (contract?.status === 'fail') return true;
-
-  if (!modelHasSkinnedMesh(root)) return false;
-
-  const meshBox = getMeshLayoutBounds(root);
-  const boneBox = getBoneWorldBounds(root);
-  if (meshBox.isEmpty() || boneBox.isEmpty()) return false;
-
-  const meshSize = meshBox.getSize(new THREE.Vector3());
-  const meshCenter = meshBox.getCenter(new THREE.Vector3());
-  const boneCenter = boneBox.getCenter(new THREE.Vector3());
-  const centerDeltaY = Math.abs(boneCenter.y - meshCenter.y);
-  const feetDeltaY = Math.abs(boneBox.min.y - meshBox.min.y);
-
-  if (centerDeltaY > meshSize.y * 0.2) return true;
-  if (feetDeltaY > Math.max(meshSize.y * 0.08, 0.05)) return true;
-  return false;
-}
-
-/**
- * Shift root so visible mesh feet sit on y=0 without scaling or yaw (safe for skin bind).
- * @param {import('three').Object3D|null|undefined} root
- * @returns {number} vertical lift applied (meters)
- */
-export function anchorModelMeshFeetToGround(root) {
-  if (!root) return 0;
-
-  root.updateMatrixWorld(true);
-  const box = getMeshLayoutBounds(root);
-  if (box.isEmpty()) return 0;
-
-  const lift = -box.min.y;
-  if (Math.abs(lift) > 0.001) {
-    root.position.y += lift;
-    root.updateMatrixWorld(true);
-  }
-
-  if (modelHasSkinnedMesh(root)) {
-    rebindSkinnedMeshes(root);
-  }
-  return lift;
-}
-
-/**
- * Rotate root only when the model faces away from the default camera (-Z).
- * Rebinds skinned meshes so vertices stay on bones.
- * @param {import('three').Object3D|null|undefined} root
- */
-export function orientSkinnedRootTowardCamera(root) {
-  if (!root) return;
-
-  root.updateMatrixWorld(true);
-  const forward = new THREE.Vector3();
-  root.getWorldDirection(forward);
-
-  if (forward.z > 0.1) {
-    root.rotation.y += Math.PI;
-    root.updateMatrixWorld(true);
-    rebindSkinnedMeshes(root);
-  }
-}
-
-/**
  * @param {import('three').Object3D|null|undefined} root
  * @param {object} [options]
  */
 export function normalizeRiggedModelTransforms(root, options = {}) {
   if (!root) return;
 
-  // VRM has its own loader — never run AIGC contract repair on it.
-  if (root.userData?.vrm || options.vrm === true) {
-    rebindSkinnedMeshes(root);
-    logRigAlignmentDiagnostics(root, options.label || 'vrm');
-    return;
-  }
-
   const preserveExport =
     options.preserveExportedOrientation === true ||
     Boolean(root.userData?.preserveExportedOrientation);
 
   if (preserveExport) {
-    if (needsSkinnedMeshRigRepair(root)) {
-      alignSkinnedMeshToRig(root);
-      console.warn(
-        '[Rig] Repaired skinned mesh vs rig (API-Contract mismatch or DGX export offset)',
-      );
-    }
     rebindSkinnedMeshes(root);
     logRigAlignmentDiagnostics(root, options.label || 'viewport');
     return;

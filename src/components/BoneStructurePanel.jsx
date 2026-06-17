@@ -1,131 +1,119 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { collectModelBones, buildBoneStructureTree, mergeModelBones } from '../library/rigBoneUtils.js';
+import { pickPrimaryViewportModelRoot } from '../library/viewportExpressionVrm.js';
 
-const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, isExpanded: externalIsExpanded }) => {
+const BoneStructurePanel = ({
+  sceneManager,
+  characterManager,
+  currentModel,
+  viewportModelRevision = 0,
+  isVisible,
+  onClose,
+  isExpanded: externalIsExpanded,
+  autoScrollOnExpand = false,
+}) => {
   const [boneStructures, setBoneStructures] = useState([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedBone, setSelectedBone] = useState(null);
   const headerRef = useRef(null);
 
-  // Sync with external expansion state
+  const viewportModelRoot = useMemo(() => {
+    if (currentModel) return currentModel;
+    return pickPrimaryViewportModelRoot(sceneManager, characterManager);
+  }, [currentModel, sceneManager, characterManager, viewportModelRevision]);
+
+  // Sync with external expansion state (no scroll — avoids jumping the left sidebar on trait load)
   useEffect(() => {
     if (externalIsExpanded !== undefined) {
       setIsExpanded(externalIsExpanded);
-      // Auto-scroll header into view when externally expanded
-      if (externalIsExpanded && headerRef.current) {
-        setTimeout(() => {
-          headerRef.current?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start',
-            inline: 'nearest'
-          });
-        }, 0);
-      }
     }
   }, [externalIsExpanded]);
 
   useEffect(() => {
-    if (currentModel && currentModel.userData && currentModel.userData.vrm) {
-      const bones = extractBoneStructures(currentModel);
-      setBoneStructures(bones);
-    } else {
+    if (!viewportModelRoot) {
       setBoneStructures([]);
+      return;
     }
-  }, [currentModel]);
+    setBoneStructures(extractBoneStructures(viewportModelRoot));
+  }, [viewportModelRoot]);
 
   const extractBoneStructures = (model) => {
-    console.log('extractBoneStructures called with model:', model);
-    const bones = [];
-    const boneMap = new Map();
-    
-    if (model.userData && model.userData.vrm) {
-      const vrm = model.userData.vrm;
-      console.log('VRM found, checking for bones...');
-      
-      // Extract humanoid bones if available
-      if (vrm.humanoid && vrm.humanoid.humanBones) {
-        const humanBones = vrm.humanoid.humanBones;
-        Object.keys(humanBones).forEach(boneName => {
-          const bone = humanBones[boneName];
-          if (bone && bone.node) {
-            const boneData = {
-              name: boneName,
-              type: 'Humanoid',
-              position: bone.node.position,
-              rotation: bone.node.rotation,
-              scale: bone.node.scale,
-              parent: bone.node.parent ? bone.node.parent.name : null,
-              children: [],
-              level: 0
-            };
-            bones.push(boneData);
-            boneMap.set(boneName, boneData);
-          }
-        });
-      }
-      
-      // Extract all bones from the scene
-      model.traverse((child) => {
-        if (child.isBone) {
+    const vrm = model.userData?.vrm;
+    if (vrm?.humanoid?.humanBones) {
+      const bones = [];
+      const boneMap = new Map();
+      const humanBones = vrm.humanoid.humanBones;
+      Object.keys(humanBones).forEach((boneName) => {
+        const bone = humanBones[boneName];
+        if (bone?.node) {
           const boneData = {
-            name: child.name || 'Unnamed Bone',
-            type: 'Bone',
-            position: child.position,
-            rotation: child.rotation,
-            scale: child.scale,
-            parent: child.parent ? child.parent.name : null,
+            name: boneName,
+            type: 'Humanoid',
+            position: bone.node.position,
+            rotation: bone.node.rotation,
+            scale: bone.node.scale,
+            parent: bone.node.parent ? bone.node.parent.name : null,
             children: [],
-            level: 0
+            level: 0,
           };
           bones.push(boneData);
-          boneMap.set(child.name || 'Unnamed Bone', boneData);
+          boneMap.set(boneName, boneData);
         }
       });
-      
-      // Build parent-child relationships
-      bones.forEach(bone => {
+      collectModelBones(model).forEach((child) => {
+        const name = child.name || 'Unnamed Bone';
+        if (boneMap.has(name)) return;
+        const boneData = {
+          name,
+          type: 'Bone',
+          position: child.position,
+          rotation: child.rotation,
+          scale: child.scale,
+          parent: child.parent?.isBone ? child.parent.name : null,
+          children: [],
+          level: 0,
+        };
+        bones.push(boneData);
+        boneMap.set(name, boneData);
+      });
+      bones.forEach((bone) => {
         if (bone.parent && boneMap.has(bone.parent)) {
           const parent = boneMap.get(bone.parent);
           parent.children.push(bone);
           bone.level = parent.level + 1;
         }
       });
-      
-      // Find root bones (no parent or parent not in our list)
-      const rootBones = bones.filter(bone => 
-        !bone.parent || !boneMap.has(bone.parent)
-      );
-      
-      return rootBones;
+      return bones.filter((bone) => !bone.parent || !boneMap.has(bone.parent));
     }
-    
-    console.log('extractBoneStructures returning', bones.length, 'bones');
-    return bones;
+
+    const rigBones = mergeModelBones(
+      collectModelBones(model),
+      model.userData?.collectedRigBones || [],
+    );
+    return buildBoneStructureTree(rigBones);
   };
 
   // Recursive component to render bone tree
   const BoneTreeNode = ({ bone, level = 0 }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [nodeExpanded, setNodeExpanded] = useState(true);
     const hasChildren = bone.children && bone.children.length > 0;
-    
+
     return (
       <div className="bone-tree-node" style={{ marginLeft: `${level * 8}px` }}>
-        <div 
+        <div
           className={`bone-item ${selectedBone === bone.name ? 'selected' : ''}`}
           onClick={() => {
-            // Toggle selection state
             if (selectedBone === bone.name) {
               setSelectedBone(null);
-              if (sceneManager && sceneManager.highlightBone) {
-                sceneManager.highlightBone(null); // This will deselect
+              if (sceneManager?.highlightBone) {
+                sceneManager.highlightBone(null);
               }
             } else {
               setSelectedBone(bone.name);
-              if (sceneManager && sceneManager.highlightBone) {
-                // First ensure we're in skeleton mode
+              if (sceneManager?.highlightBone) {
                 if (sceneManager.setRenderMode) {
                   sceneManager.setRenderMode('skeleton');
                 }
-                // Then highlight the bone
                 sceneManager.highlightBone(bone.name);
               }
             }
@@ -134,14 +122,14 @@ const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, is
         >
           <div className="bone-tree-header">
             {hasChildren && (
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsExpanded(!isExpanded);
+                  setNodeExpanded(!nodeExpanded);
                 }}
                 className="tree-expand-button"
               >
-                {isExpanded ? '▼' : '▶'}
+                {nodeExpanded ? '▼' : '▶'}
               </button>
             )}
             {!hasChildren && <span className="tree-spacer"></span>}
@@ -149,19 +137,20 @@ const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, is
               <span className="bone-name">{bone.name}</span>
               <span className="bone-type-badge">{bone.type}</span>
             </div>
-            <div className="bone-info">
-              Info
-            </div>
+            <div className="bone-info">Info</div>
             <div className="bone-position">
               ({bone.position.x.toFixed(0)}, {bone.position.y.toFixed(0)}, {bone.position.z.toFixed(0)})
             </div>
             <div className="bone-rotation">
-              R: {bone.rotation ? `${bone.rotation.x.toFixed(1)}, ${bone.rotation.y.toFixed(1)}, ${bone.rotation.z.toFixed(1)}` : 'N/A'}
+              R:{' '}
+              {bone.rotation
+                ? `${bone.rotation.x.toFixed(1)}, ${bone.rotation.y.toFixed(1)}, ${bone.rotation.z.toFixed(1)}`
+                : 'N/A'}
             </div>
           </div>
         </div>
-        
-        {hasChildren && isExpanded && (
+
+        {hasChildren && nodeExpanded && (
           <div className="bone-children">
             {bone.children.map((child, index) => (
               <BoneTreeNode key={`${child.name}-${index}`} bone={child} level={level + 1} />
@@ -172,55 +161,48 @@ const BoneStructurePanel = ({ sceneManager, currentModel, isVisible, onClose, is
     );
   };
 
-  console.log('BoneStructurePanel render:', { isVisible, boneStructures: boneStructures.length, currentModel: !!currentModel });
-  
   if (!isVisible) {
-    console.log('BoneStructurePanel: not visible, returning null');
     return null;
   }
 
   return (
     <div className="bone-structure-panel">
       <div className="bone-panel-header sticky-header" ref={headerRef}>
-        <button 
+        <button
           onClick={() => {
-            console.log('Bone structure expand button clicked, current isExpanded:', isExpanded);
             const newExpanded = !isExpanded;
             setIsExpanded(newExpanded);
-            // Auto-scroll header into view when expanding
-            if (newExpanded && headerRef.current) {
+            if (autoScrollOnExpand && newExpanded && headerRef.current) {
               setTimeout(() => {
-                headerRef.current?.scrollIntoView({ 
-                  behavior: 'smooth', 
+                headerRef.current?.scrollIntoView({
+                  behavior: 'smooth',
                   block: 'start',
-                  inline: 'nearest'
+                  inline: 'nearest',
                 });
               }, 0);
             }
           }}
           className="expand-icon-button"
-          title={isExpanded ? "Collapse Bone Structure" : "Expand Bone Structure"}
+          title={isExpanded ? 'Collapse Bone Structure' : 'Expand Bone Structure'}
         >
           {isExpanded ? '▼' : '▶'}
         </button>
         <span className="skeleton-icon">🦴</span>
         <h3 className="panel-title">Bone Structure</h3>
-        <button 
-          onClick={onClose}
-          className="close-button"
-          title="Close Bone Structure Panel"
-        >
+        <button onClick={onClose} className="close-button" title="Close Bone Structure Panel">
           ✕
         </button>
       </div>
-      
+
       {isExpanded && (
         <div className="bone-structure-content">
           {boneStructures.length === 0 ? (
             <div className="no-bones">
               <p>No bone structure found</p>
               <p className="text-sm text-gray-400">
-                Load a VRM model with bone structure to see bones here
+                {viewportModelRoot?.userData?.autoRigMeta?.bone_count > 0
+                  ? 'Auto-rig finished on the server, but this GLB has no embedded skeleton. Use Skeleton view after reload, or try Full rig mode on the next run.'
+                  : 'Assemble a character in Appearance or import a rigged VRM/GLB to see bones here'}
               </p>
             </div>
           ) : (

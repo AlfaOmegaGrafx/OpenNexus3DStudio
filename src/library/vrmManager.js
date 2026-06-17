@@ -46,7 +46,7 @@ export class VRMManager {
         renameVRMBones(vrm);
         renameMorphTargets(m);
 
-        // Unregister the Blendshapes from the manifest
+        // Unregister morphs from the manifest
         this.unregisterMorphTargets(vrm, collectionID);
 
         // Handle VRM0 specific setup
@@ -167,14 +167,14 @@ export class VRMManager {
      * @param {string} identifier - Manifest identifier
      */
     unregisterMorphTargets(vrm, identifier) {
-        const manifestBlendShapes = this.manifestDataManager.getAllBlendShapeTraits(identifier);
+        const manifestMorphs = this.manifestDataManager.getAllMorphTraits(identifier);
         const expressions = vrm.expressionManager?.expressions;
-        if (manifestBlendShapes.length == 0) return;
+        if (manifestMorphs.length == 0) return;
         if (!expressions) return;
 
         const expressionToRemove = [];
         for (const expression of expressions) {
-            if (manifestBlendShapes.map((b) => b.id).includes(expression.expressionName)) {
+            if (manifestMorphs.map((b) => b.id).includes(expression.expressionName)) {
                 expressionToRemove.push(expression);
             }
         }

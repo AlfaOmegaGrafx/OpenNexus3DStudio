@@ -7,6 +7,7 @@ import { findChildrenByType } from "./utils"
 import { VRMHumanBoneName, VRMExpression, VRMExpressionPresetName, VRMExpressionManager, VRMExpressionMorphTargetBind} from "@pixiv/three-vrm";
 import { doesMeshHaveMorphTargetBoundToManager } from './utils';
 import { GetMetadataFromAvatar } from "./vrmMetaUtils"
+import { VRMRigMapMixamo } from './VRMRigMapMixamo.js';
 
 
 function cloneAvatarModel (model){
@@ -88,26 +89,39 @@ function getUnopotimizedGLB (model){
 }
 
 
-export async function getGLBBlobData(model, options){
-  const {optimized = true} = options;
-  const finalModel = await (optimized ? 
-     getOptimizedGLB(model, options) :
-     getUnopotimizedGLB(model))
+/**
+ * Export viewport model to GLB for API upload (plain GLTF/Trellis meshes — no atlas/shader pipeline).
+ * @param {import('three').Object3D} model
+ * @returns {Promise<Blob>}
+ */
+export async function exportViewportModelGlbBlob(model) {
+  const modelClone = cloneAvatarModel(model);
+  const glb = await parseGLB(modelClone);
+  return new Blob([glb], { type: 'model/gltf-binary' });
+}
+
+export async function getGLBBlobData(model, options = {}){
+  const { optimized = true, forApiUpload = false } = options;
+  if (forApiUpload || optimized === false) {
+    return exportViewportModelGlbBlob(model);
+  }
+  const finalModel = await getOptimizedGLB(model, null, options);
   const glb = await parseGLB(finalModel);
   return new Blob([glb], { type: 'model/gltf-binary' });
 }
 
-export async function getVRMBlobData(model, avatar, options){
-  const finalModel = await getOptimizedGLB(model, options)
+export async function getVRMBlobData(model, avatar, options = {}){
+  const finalModel = await getOptimizedGLB(model, avatar, options)
   const vrm = await parseVRM(finalModel, avatar, options);
   // save it as glb now
   return new Blob([vrm], { type: 'model/gltf-binary' });
 }
 
 // returns a promise with the parsed data
-async function getGLBData(model, options){
+async function getGLBData(model, options = {}){
+  const { optimized = true } = options;
   if (optimized){
-    const finalModel = await getOptimizedGLB(model, options)
+    const finalModel = await getOptimizedGLB(model, null, options)
     return parseGLB(finalModel); 
   }
   else{
@@ -225,13 +239,20 @@ async function getVRMData(model, avatar, options){
 }
 
 function getOptimizedGLB(model, avatar, options){
+  // Legacy call sites passed (model, options) — second arg is options, not avatar
+  if (options === undefined && avatar && typeof avatar === 'object' && avatar.shaderType !== undefined) {
+    options = avatar;
+    avatar = null;
+  }
+  options = options || {};
   const modelClone = cloneAvatarModel(model)
   
   // OPTIMIZED: Enable texture atlas by default (ported from CharacterStudioRedux)
   // Set default options with atlas enabled for optimization
   // IMPORTANT: createTextureAtlas must come AFTER options merge to override any false values
   // FIX: Determine shader type from options (standard supports ORM, toon does not)
-  const useStandardShader = options.shaderType === 'standard' || (options.exportStdAtlas && !options.exportMtoonAtlas);
+  const shaderType = options.shaderType ?? 'standard';
+  const useStandardShader = shaderType === 'standard' || (options.exportStdAtlas && !options.exportMtoonAtlas);
   const defaultOptions = {
     mergeAppliedMorphs: true,
     scale: 1,
@@ -285,7 +306,7 @@ export async function downloadGLB(model, fileName = "", options){
   const {optimized = true} = options;
 
   const finalModel = optimized ?
-    await getOptimizedGLB(model, options):
+    await getOptimizedGLB(model, null, options):
     getUnopotimizedGLB(model)
 
   parseGLB(finalModel)
@@ -436,21 +457,69 @@ function getRootBones (avatar) {
   return rootSpringBones;
 }
 
+/** Loot / Mixamo / UniRig scene bone names → VRM humanoid keys (camelCase). */
+const SCENE_BONE_TO_HUMANOID_KEY = {
+  J_Bip_C_Hips: 'hips',
+  J_Bip_C_Spine: 'spine',
+  J_Bip_C_Chest: 'chest',
+  J_Bip_C_UpperChest: 'upperChest',
+  J_Bip_C_Neck: 'neck',
+  J_Bip_C_Head: 'head',
+  J_Bip_L_Shoulder: 'leftShoulder',
+  J_Bip_L_UpperArm: 'leftUpperArm',
+  J_Bip_L_LowerArm: 'leftLowerArm',
+  J_Bip_L_Hand: 'leftHand',
+  J_Bip_R_Shoulder: 'rightShoulder',
+  J_Bip_R_UpperArm: 'rightUpperArm',
+  J_Bip_R_LowerArm: 'rightLowerArm',
+  J_Bip_R_Hand: 'rightHand',
+  J_Bip_L_UpperLeg: 'leftUpperLeg',
+  J_Bip_L_LowerLeg: 'leftLowerLeg',
+  J_Bip_L_Foot: 'leftFoot',
+  J_Bip_L_ToeBase: 'leftToes',
+  J_Bip_R_UpperLeg: 'rightUpperLeg',
+  J_Bip_R_LowerLeg: 'rightLowerLeg',
+  J_Bip_R_Foot: 'rightFoot',
+  J_Bip_R_ToeBase: 'rightToes',
+};
+
+function humanoidKeyFromSceneBoneName(boneName) {
+  if (!boneName) return null;
+  if (SCENE_BONE_TO_HUMANOID_KEY[boneName]) return SCENE_BONE_TO_HUMANOID_KEY[boneName];
+
+  for (const enumKey in VRMHumanBoneName) {
+    const standardName = VRMHumanBoneName[enumKey];
+    if (standardName === boneName) {
+      return enumKey.charAt(0).toLowerCase() + enumKey.slice(1);
+    }
+  }
+
+  const mixamoName = boneName.startsWith('mixamorig')
+    ? boneName
+    : `mixamorig${boneName.charAt(0).toUpperCase()}${boneName.slice(1)}`;
+  return VRMRigMapMixamo[mixamoName] ?? null;
+}
+
+function renameSkeletonBonesToHumanoidKeys(humanBones) {
+  for (const [humanoidKey, entry] of Object.entries(humanBones)) {
+    if (entry?.node?.isBone) entry.node.name = humanoidKey;
+  }
+}
+
 function getHumanoidByBoneNames(skinnedMesh){
   if (!skinnedMesh || !skinnedMesh.skeleton || !skinnedMesh.skeleton.bones) {
     console.warn('⚠️ getHumanoidByBoneNames: Invalid skinnedMesh, returning empty humanBones');
     return {};
   }
-  const humanBones = {}
-  skinnedMesh.skeleton.bones.map((bone)=>{
-    for (const boneName in VRMHumanBoneName) {
-      if (VRMHumanBoneName[boneName] === bone.name){
-        humanBones[bone.name] ={node : bone};
-        break;
-      }
+  const humanBones = {};
+  for (const bone of skinnedMesh.skeleton.bones) {
+    const humanoidKey = humanoidKeyFromSceneBoneName(bone.name);
+    if (humanoidKey && !humanBones[humanoidKey]) {
+      humanBones[humanoidKey] = { node: bone };
     }
-  })
-  return humanBones
+  }
+  renameSkeletonBonesToHumanoidKeys(humanBones);
+  return humanBones;
 }
 
 function getAvatarData (avatarModel, vrmMeta, options){
@@ -476,7 +545,7 @@ function getVRMMeta( vrmMeta){
   vrmMeta = vrmMeta||{}
 
   const defaults = {
-    authors:["CharacterStudio"],
+    authors:["OpenNexus3DStudio"],
     metaVersion:"1",
     version:"v1",
     name:"CharacterCreator",

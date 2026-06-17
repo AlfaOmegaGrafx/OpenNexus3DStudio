@@ -4,7 +4,7 @@ import bgm from "../sound/background/Gravity_of_Time.mp3"
 
 export const AudioProvider = ({ children }) => {
     const [isMute, setMute] = useState(true);
-    const [volume, setVolume] = useState(0.5);
+    const [volume, setVolume] = useState(0.85);
     const audioRef = React.useRef(null);
 
     const handleVolumeChange = (newVolume) => {
@@ -39,6 +39,31 @@ export const AudioProvider = ({ children }) => {
         audio.currentTime = 0;
         audio.volume = 0;
     }
+
+    // Pause BGM during native face replay so it does not compete with recording audio.
+    React.useEffect(() => {
+        const onPlayback = (evt) => {
+            const playing = !!evt?.detail?.playing;
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (playing) {
+                if (!isMute) {
+                    audio.pause();
+                    audio.dataset.facePlaybackDucked = '1';
+                }
+            } else if (audio.dataset.facePlaybackDucked) {
+                delete audio.dataset.facePlaybackDucked;
+                if (!isMute) {
+                    audio.volume = volume;
+                    audio.play().catch((error) => {
+                        console.error('Error resuming background audio:', error);
+                    });
+                }
+            }
+        };
+        window.addEventListener('characterstudio-native-face-playback', onPlayback);
+        return () => window.removeEventListener('characterstudio-native-face-playback', onPlayback);
+    }, [isMute, volume]);
 
     // Cleanup on unmount
     React.useEffect(() => {

@@ -28,7 +28,7 @@ import SaleIcon from "../images/sale-icon.png"
 
 export const TraitPage ={
   TRAIT:0,
-  BLEND_SHAPE:1,
+  MORPH:1,
   DECAL:2
 }
 
@@ -66,7 +66,7 @@ function Appearance() {
    * @type {[ModelTrait|null, React.Dispatch<ModelTrait|null>]} state
    */
   const [selectedTrait, setSelectedTrait] = React.useState(null)
-  const [selectedBlendshapeTraits, setSelectedBlendshapeTraits] = React.useState({})
+  const [selectedMorphTraits, setSelectedMorphTraits] = React.useState({})
   const [selectedVRM, setSelectedVRM] = React.useState(null)
   const [loadedAnimationName, setLoadedAnimationName] = React.useState("");
   const [isPickingColor, setIsPickingColor] = React.useState(false)
@@ -137,8 +137,8 @@ function Appearance() {
   const selectTrait = (trait) => {
     console.log(trait);
     if(trait.id === selectedTrait?.id && trait.collectionID === selectedTrait?.collectionID){
-      if(trait.blendshapeTraits?.length>0){
-        setTraitView(TraitPage.BLEND_SHAPE);
+      if(trait.morphTraits?.length>0){
+        setTraitView(TraitPage.MORPH);
       }
       // We already selected this trait, do nothing
       return
@@ -149,10 +149,10 @@ function Appearance() {
     characterManager.loadTrait(trait.traitGroup.trait, trait.id, trait.collectionID).then(()=>{
       setIsLoading(false);
       console.log(characterManager.getCurrentTotalPrice());
-      if(trait.blendshapeTraits?.length>0){
-        const selectedBlendshapeTrait = characterManager.getCurrentBlendShapeTraitData(trait.traitGroup.trait);
-        setSelectedBlendshapeTraits(Object.entries(selectedBlendshapeTrait).reduce((acc,[key,value])=>{acc[key]=value.id;return acc},{}))
-        setTraitView(TraitPage.BLEND_SHAPE);
+      if(trait.morphTraits?.length>0){
+        const selectedMorphTrait = characterManager.getCurrentMorphTraitData(trait.traitGroup.trait);
+        setSelectedMorphTraits(Object.entries(selectedMorphTrait).reduce((acc,[key,value])=>{acc[key]=value.id;return acc},{}))
+        setTraitView(TraitPage.MORPH);
       }
       setSelectedTrait(trait);
     })
@@ -246,10 +246,10 @@ function Appearance() {
       setSelectedTraitGroup(traitGroup);
 
       const selectedT = characterManager.getCurrentTraitData(traitGroup.trait)
-      const selectedBlendshapeTraits = characterManager.getCurrentBlendShapeTraitData(traitGroup.trait);
+      const selectedMorphTraits = characterManager.getCurrentMorphTraitData(traitGroup.trait);
 
       setSelectedTrait(selectedT);
-      setSelectedBlendshapeTraits(Object.entries(selectedBlendshapeTraits).reduce((acc,[key,value])=>{acc[key]=value.id;return acc},{}))
+      setSelectedMorphTraits(Object.entries(selectedMorphTraits).reduce((acc,[key,value])=>{acc[key]=value.id;return acc},{}))
 
       setSelectedVRM(characterManager.getCurrentTraitVRM(traitGroup.trait))
       moveCamera({ targetY: traitGroup.cameraTarget.height, distance: traitGroup.cameraTarget.distance})
@@ -258,7 +258,7 @@ function Appearance() {
       setTraits(null);
       setSelectedTraitGroup(null)
       setSelectedTrait(null);
-      setSelectedBlendshapeTraits({})
+      setSelectedMorphTraits({})
       moveCamera({ targetY: 0.8, distance: 3.2 })
     }
   }
@@ -408,8 +408,8 @@ function Appearance() {
                 )
               })}
             </div>)}
-            {traitView == TraitPage.BLEND_SHAPE && (
-              <BlendShapeTraitView selectedTrait={selectedTrait} onBack={()=>{setTraitView(TraitPage.TRAIT)}} selectedBlendShapeTrait={selectedBlendshapeTraits} setSelectedBlendshapeTrait={setSelectedBlendshapeTraits} />
+            {traitView == TraitPage.MORPH && (
+              <MorphTraitView selectedTrait={selectedTrait} onBack={()=>{setTraitView(TraitPage.TRAIT)}} selectedMorphTrait={selectedMorphTraits} setSelectedMorphTrait={setSelectedMorphTraits} />
             )}
             {traitView == TraitPage.DECAL && (
               <DecalGridView selectedTraitGroup={selectedTraitGroup} onBack={()=>{setTraitView(TraitPage.TRAIT)}} />
@@ -475,34 +475,34 @@ function Appearance() {
 export default Appearance
 
 /**
- * @param {{selectedTrait:ModelTrait|null,selectedBlendShapeTrait:Record<string,string>,onBack:()=>void,setSelectedBlendshapeTrait:(x:Record<string,string>)=>void}} param0 
+ * @param {{selectedTrait:ModelTrait|null,selectedMorphTrait:Record<string,string>,onBack:()=>void,setSelectedMorphTrait:(x:Record<string,string>)=>void}} param0 
  */
-const BlendShapeTraitView = ({selectedTrait,onBack,selectedBlendShapeTrait,setSelectedBlendshapeTrait})=>{
+const MorphTraitView = ({selectedTrait,onBack,selectedMorphTrait,setSelectedMorphTrait})=>{
   const {characterManager,moveCamera} = useContext(SceneContext);
 
-  const groups = characterManager.getBlendShapeGroupTraits(selectedTrait?.traitGroup.trait||"",selectedTrait?.id||"");
+  const groups = characterManager.getMorphGroupTraits(selectedTrait?.traitGroup.trait||"",selectedTrait?.id||"");
 
   /**
    *
    * @param {string} traitGroup
-   * @param {import('../library/CharacterManifestData').BlendShapeGroup} blendShapeGroupTrait 
+   * @param {import('../library/CharacterManifestData').MorphGroup} morphGroupTrait 
     */
-  const removeBlendShapeTrait = (traitGroup,blendShapeGroupTrait)=>{
-    characterManager.removeBlendShapeTrait(traitGroup,blendShapeGroupTrait.trait);
-    const blendShapeTraitCopy = {...selectedBlendShapeTrait};
-    delete blendShapeTraitCopy[blendShapeGroupTrait.trait]
-    setSelectedBlendshapeTrait(blendShapeTraitCopy);
+  const removeMorphTrait = (traitGroup,morphGroupTrait)=>{
+    characterManager.removeMorphTrait(traitGroup,morphGroupTrait.trait);
+    const morphTraitCopy = {...selectedMorphTrait};
+    delete morphTraitCopy[morphGroupTrait.trait]
+    setSelectedMorphTrait(morphTraitCopy);
   }
   /**
-   * @param {import('../library/CharacterManifestData').BlendShapeTrait} newBlendShape 
+   * @param {import('../library/CharacterManifestData').MorphTrait} newMorph 
    */
-  const selectBlendShapeTrait = (newBlendShape)=>{
-    const parent = newBlendShape.parentGroup;
-    characterManager.loadBlendShapeTrait(selectedTrait?.traitGroup.trait||"",parent.trait||"",newBlendShape?.id||'');
+  const selectMorphTrait = (newMorph)=>{
+    const parent = newMorph.parentGroup;
+    characterManager.loadMorphTrait(selectedTrait?.traitGroup.trait||"",parent.trait||"",newMorph?.id||'');
     moveCamera({ targetY: parent.cameraTarget.height, distance: parent.cameraTarget.distance})
-    const blendShapeTraitCopy = {...selectedBlendShapeTrait};
-    blendShapeTraitCopy[parent.trait||''] = newBlendShape.id;
-    setSelectedBlendshapeTrait(blendShapeTraitCopy);
+    const morphTraitCopy = {...selectedMorphTrait};
+    morphTraitCopy[parent.trait||''] = newMorph.id;
+    setSelectedMorphTrait(morphTraitCopy);
   }
 
   return (
@@ -516,19 +516,19 @@ const BlendShapeTraitView = ({selectedTrait,onBack,selectedBlendShapeTrait,setSe
         />
         {groups && groups.length > 0 && groups.map((group)=>{
           return (
-            <div key={group.trait} className={styles.blendshapeGroup}> 
+            <div key={group.trait} className={styles.morphGroup}> 
               <div>{group.name}</div>
               <div className={styles["selector-container"]} >
-                <BlendShapeItem key={"empty"}
+                <MorphItem key={"empty"}
                     src={cancel}
-                    active={!selectedBlendShapeTrait[group.trait]}
-                    blendshapeID="cancel"
-                    select={()=>removeBlendShapeTrait(selectedTrait.traitGroup.trait,group)}
+                    active={!selectedMorphTrait[group.trait]}
+                    morphID="cancel"
+                    select={()=>removeMorphTrait(selectedTrait.traitGroup.trait,group)}
                     />
-                {group.collection.map((blendShapeTrait)=>{
-                  let active = blendShapeTrait.id === selectedBlendShapeTrait[group.trait]
+                {group.collection.map((morphTrait)=>{
+                  let active = morphTrait.id === selectedMorphTrait[group.trait]
                   return (
-                    <BlendShapeItem key={blendShapeTrait.id} src={blendShapeTrait.fullThumbnail||''} active={active} blendshapeID={blendShapeTrait.id} select={()=>selectBlendShapeTrait(blendShapeTrait)}/>
+                    <MorphItem key={morphTrait.id} src={morphTrait.fullThumbnail||''} active={active} morphID={morphTrait.id} select={()=>selectMorphTrait(morphTrait)}/>
                   )
                 })}
               </div>
@@ -541,13 +541,13 @@ const BlendShapeTraitView = ({selectedTrait,onBack,selectedBlendShapeTrait,setSe
 }
 
 /**
- * @param {{active:boolean,blendshapeID:string,src:string,select:()=>void}} param0 
+ * @param {{active:boolean,morphID:string,src:string,select:()=>void}} param0 
  */
-const BlendShapeItem = ({active,blendshapeID,src,select})=>{
+const MorphItem = ({active,morphID,src,select})=>{
 
   return (
     <div
-      key={blendshapeID}
+      key={morphID}
       className={`${styles["selectorButton"]}`}
       onClick={select}
     >

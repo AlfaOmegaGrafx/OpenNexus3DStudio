@@ -327,11 +327,11 @@ export class CharacterManifestData{
     }
 
     /**
-     * Gets all blend shape traits
-     * @returns {Array} Array of blend shape traits
+     * Gets all morph traits
+     * @returns {Array} Array of morph traits
      */
-    getAllBlendShapeTraits(){
-      return this.modelTraits.map(traitGroup => traitGroup.getCollection()).flat().map((c)=>c.blendshapeTraits).flat().map((c)=>c?.collection).flat().filter((c)=>!!c);
+    getAllMorphTraits(){
+      return this.modelTraits.map(traitGroup => traitGroup.getCollection()).flat().map((c)=>c.morphTraits).flat().map((c)=>c?.collection).flat().filter((c)=>!!c);
     }
     /**
      * Checks if collider is required for a trait group
@@ -1154,7 +1154,7 @@ export class ModelTrait{
    */
   type
 
-  blendshapeTraits = [];
+  morphTraits = [];
   /**
    * @type {string[]}
    * */ 
@@ -1167,7 +1167,7 @@ export class ModelTrait{
    * @type {TraitModelsGroup}
    */
   traitGroup
-  blendshapeTraitsMap = new Map();
+  morphTraitsMap = new Map();
   /**
    * @type {string[]}
    */
@@ -1185,6 +1185,7 @@ export class ModelTrait{
           cullingDistance,
           cullingLayer,
           textureCollection,
+          morphTraits: morphTraitsOption,
           blendshapeTraits,
           colorCollection,
           decalCollection,
@@ -1239,15 +1240,22 @@ export class ModelTrait{
       this.targetColorCollection = colorCollection ? traitGroup.manifestData.getColorGroup(colorCollection) : null;
       this.targetDecalCollection = decalCollection ? traitGroup.manifestData.getDecalGroup(decalCollection) : null;
 
-      if(blendshapeTraits && Array.isArray(blendshapeTraits)){
+      const morphTraitsRaw = morphTraitsOption ?? blendshapeTraits;
+      if(morphTraitsRaw && Array.isArray(morphTraitsRaw)){
 
-        this.blendshapeTraits = blendshapeTraits.map((blendshapeGroup) => {
-          return new BlendShapeGroup(this, blendshapeGroup)
+        this.morphTraits = morphTraitsRaw.map((morphGroup) => {
+          return new MorphGroup(this, morphGroup)
         })
 
-        this.blendshapeTraitsMap = new Map(this.blendshapeTraits.map(item => [item.trait, item]));
+        this.morphTraitsMap = new Map(this.morphTraits.map(item => [item.trait, item]));
       }
   }
+
+  /** @deprecated Legacy manifest key; use morphTraits */
+  get blendshapeTraits() {
+    return this.morphTraits;
+  }
+
   isRestricted(targetModelTrait){
     if (targetModelTrait == null)
       return false;
@@ -1259,41 +1267,41 @@ export class ModelTrait{
     }
     return true
   }
-  getGroupBlendShapeTraits(){
-    return this.blendshapeTraits;
+  getGroupMorphTraits(){
+    return this.morphTraits;
   }
 
   /**
    * 
    * @param {string} traitGroupID 
-   * @returns {BlendShapeTrait[]}
+   * @returns {MorphTrait[]}
    */
-  getBlendShapes(traitGroupID){
-    return this.blendshapeTraitsMap?.get(traitGroupID)?.collection
+  getMorphs(traitGroupID){
+    return this.morphTraitsMap?.get(traitGroupID)?.collection
   }
 
   /**
    * 
    * @param {string} traitGroupID 
    * @param {string} traitID 
-   * @returns {BlendShapeTrait | undefined}
+   * @returns {MorphTrait | undefined}
    */
-  getBlendShape(traitGroupID,traitID){
-    return this.blendshapeTraitsMap?.get(traitGroupID)?.getTrait(traitID);
+  getMorph(traitGroupID,traitID){
+    return this.morphTraitsMap?.get(traitGroupID)?.getTrait(traitID);
   }
 }
 
 
-export class BlendShapeGroup {
+export class MorphGroup {
   trait
   name
-  isBlendShapeGroup = true
+  isMorphGroup = true
   collection=[]
   cameraTarget=null
   collectionMap= null
   /**
    * @param {ModelTrait} modelTrait 
-   * @param {BlendShapeGroupModelTraitData} options 
+   * @param {MorphGroupModelTraitData} options 
    */
   constructor( modelTrait, options){
     const {
@@ -1311,14 +1319,14 @@ export class BlendShapeGroup {
     this.createCollection(collection);
   }
   /**
-   * @param {BlendShapeTraitData[]} itemCollection 
+   * @param {MorphTraitData[]} itemCollection 
    * @param {boolean} [replaceExisting] (default false)
    */
   createCollection(itemCollection, replaceExisting = false){
     if (replaceExisting) this.collection = [];
 
     getAsArray(itemCollection).forEach(item => {
-      this.collection.push(new BlendShapeTrait(this, item))
+      this.collection.push(new MorphTrait(this, item))
     });
     this.collectionMap = new Map(this.collection.map(item => [item.id, item]));
   }
@@ -1341,14 +1349,14 @@ export class BlendShapeGroup {
   }
 }
 
-export class BlendShapeTrait{
+export class MorphTrait{
   id
   name
   fullThumbnail=undefined
-  isBlendShape = true
+  isMorph = true
   /**
-   * @param {BlendShapeGroup} parentGroup 
-   * @param {BlendShapeTraitData} options 
+   * @param {MorphGroup} parentGroup 
+   * @param {MorphTraitData} options 
    */
   constructor(parentGroup,options){
       const {
@@ -1358,10 +1366,10 @@ export class BlendShapeTrait{
       }= options;
 
       if(!id){
-        console.warn("BlendShapeTrait is missing id, parent trait: "+ parentGroup.trait)
+        console.warn("MorphTrait is missing id, parent trait: "+ parentGroup.trait)
       }
       if(!name){
-        console.warn("BlendShapeTrait is missing name, parent trait: "+ parentGroup.trait)
+        console.warn("MorphTrait is missing name, parent trait: "+ parentGroup.trait)
       }
 
       this.parentGroup = parentGroup;

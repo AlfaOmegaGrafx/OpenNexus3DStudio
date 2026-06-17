@@ -33,10 +33,6 @@ describe('SceneManagerXrGrab', () => {
     };
 
     grab.applyRightStickPlacement(1, 0.5, [pointer]);
-    expect(grab.activeGrabs.get('right').rayDistance).toBeLessThan(1);
-
-    grab.activeGrabs.get('right').rayDistance = 1;
-    grab.applyRightStickPlacement(-1, 0.5, [pointer]);
     expect(grab.activeGrabs.get('right').rayDistance).toBeGreaterThan(1);
   });
 

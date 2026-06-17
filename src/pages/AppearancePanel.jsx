@@ -98,7 +98,7 @@ function AppearancePanel({ onNavigate }) {
               onClick={() => handleTraitSelect(i)}
             >
               <div className={styles.traitPreview}>
-                <img src={`/loot-assets/loot/thumbnails/${selectedCategory}/${i + 1}.png`} 
+                <img src={`/loot-assets/thumbnails/${selectedCategory}/${i + 1}.png`}
                      alt={`${selectedCategory} ${i + 1}`} 
                      className={styles.traitImage} />
               </div>

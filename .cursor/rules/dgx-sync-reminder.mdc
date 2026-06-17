@@ -1,0 +1,84 @@
+---
+description: Remind user to sync PC ↔ DGX after any project code changes
+alwaysApply: true
+---
+
+# DGX sync reminder (after code changes)
+
+Whenever you **create, edit, or delete** files under this repo, **apply scp sync yourself** after the edit (user permission). **Never** run git push/pull/fetch/upstream unless the user explicitly asks.
+
+## Agent behavior (DGX)
+
+1. **Do the work on DGX** (edit, prune, `npm install`, restart API, etc.).
+2. **Do not** run `git push`, `git pull`, `git fetch`, or merge `upstream` unless the user explicitly asks.
+3. **After DGX-owned changes** — run automatically when Surface SSH works:
+   ```bash
+   cd /home/sifr/OpenNexus3DStudio
+   bash scripts/sync-to-pc.sh
+   ```
+   Use `--include-src` only when `src/` was edited on DGX (lock first per sync rules).
+4. **Run `bash scripts/ensure-dgx-sync-ready.sh`** after PC→DGX syncs or doc cleanup.
+5. **Do not** nag about sync if you already ran it. Only report if sync **failed**.
+
+## Ownership (which script)
+
+| Changed files | Source of truth | Run on **Surface (PC)** |
+| ------------- | --------------- | ----------------------- |
+| `src/`, scripts, roadmaps | PC | `.\scripts\sync-to-dgx.ps1` |
+| Pitch Deck, README, package.json, docs | DGX | `.\scripts\sync-from-dgx.ps1` |
+| sync-*.ps1, prune-sync-duplicates.sh | DGX | `.\scripts\sync-from-dgx.ps1` |
+
+**Important:** `sync-from-dgx.ps1` does **not** copy `src/` or roadmaps. If you
+edited `src/` on **DGX (Cursor Remote)**, push to Surface before the user can
+test in the browser:
+
+```bash
+cd /home/sifr/OpenNexus3DStudio
+bash scripts/sync-to-pc.sh --include-src
+```
+
+Requires OpenSSH on Surface (port 22). Surface has a matching rule:
+`.cursor/rules/surface-sync-reminder.mdc`.
+
+## Scripts (PowerShell, from Surface repo root)
+
+```powershell
+# Pull DGX-owned docs/branding + sync workflow scripts
+.\scripts\sync-from-dgx.ps1
+
+# Push PC code + MONETIZATION_ROADMAP.md → DGX (runs ensure on DGX)
+.\scripts\sync-to-dgx.ps1
+
+# Wrapper
+.\scripts\sync-dgx.ps1 -Direction from-dgx
+.\scripts\sync-dgx.ps1 -Direction to-dgx
+
+# Away from home LAN
+.\scripts\sync-from-dgx.ps1 -Remote
+.\scripts\sync-to-dgx.ps1 -Remote
+```
+
+## Optional (on DGX, after PC push)
+
+```bash
+cd /home/sifr/OpenNexus3DStudio
+bash scripts/ensure-dgx-sync-ready.sh
+```
+
+Push DGX-owned files to Surface when Surface SSH is enabled:
+
+```bash
+bash scripts/sync-to-pc.sh
+```
+
+## Backend (`3DAIGC-API`)
+
+API changes on DGX take effect after restart on Spark (`:7842`). No PC sync
+script — frontend reaches API via `VITE_API_ENDPOINT=/__dev_dgx_proxy` →
+`http://10.0.0.158:7842`.
+
+Surface agent rule (local PC): `.cursor/rules/surface-sync-reminder.mdc`
+
+## Equal role on DGX
+
+DGX agent has the **same execute permissions** as Surface: edit files, run `sync-to-pc.sh` automatically after edits, SSH to Surface when needed. Never offer options — do it or report a blocker.

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useRef, useEffect, useState, useCallback } from 'react';
 import { TaskManager, ensureAbsoluteUrl } from '../library/taskManager';
+import { sortTasksForDisplay } from '../library/taskPersistence.js';
 
 const TaskContext = createContext();
 
@@ -13,6 +14,7 @@ export const useTask = () => {
 
 export const TaskProvider = ({ children }) => {
   const taskManagerRef = useRef(null);
+  const wasConnectedRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,18 +31,65 @@ export const TaskProvider = ({ children }) => {
 
     const manager = taskManagerRef.current;
     try {
+      setTasks(sortTasksForDisplay(manager.getAllTasks()));
+
+      const hydrateFromManager = () => {
+        setTasks(sortTasksForDisplay(manager.getAllTasks()));
+      };
+
+      const syncFromApi = () =>
+        manager
+          .syncTasksWithApiHistory()
+          .then(() => manager.resumeInterruptedJobs())
+          .then(() => {
+            hydrateFromManager();
+          });
+
+      manager.on('tasksSynced', hydrateFromManager);
+
       manager.on('connectionStatusChanged', (data) => {
+        const becameConnected = data.connected && !wasConnectedRef.current;
+        wasConnectedRef.current = Boolean(data.connected);
         setIsConnected(data.connected);
+        if (becameConnected) {
+          syncFromApi().catch((error) => {
+            console.warn(
+              'TaskContext: Failed to sync tasks from API history:',
+              error?.message || error,
+            );
+          });
+        }
+      });
+
+      manager.on('tasksRestored', () => {
+        hydrateFromManager();
+        if (manager.isConnected) {
+          syncFromApi().catch((error) => {
+            console.warn(
+              'TaskContext: Failed to sync restored tasks with API:',
+              error?.message || error,
+            );
+          });
+        }
       });
 
       manager.checkConnection().then((connected) => {
+        wasConnectedRef.current = Boolean(connected);
         setIsConnected(connected);
+        if (connected) {
+          syncFromApi().catch((error) => {
+            console.warn(
+              'TaskContext: Failed to sync tasks after connect:',
+              error?.message || error,
+            );
+          });
+        }
       }).catch(() => {
         setIsConnected(false);
       });
 
       manager.on('taskCreated', (data) => {
-        setTasks(prev => [...prev, data.task]);
+        setTasks((prev) => sortTasksForDisplay([...prev, data.task]));
       });
 
       manager.on('taskStarted', (data) => {
@@ -51,8 +100,44 @@ export const TaskProvider = ({ children }) => {
 
       manager.on('taskUpdated', (data) => {
         setTasks(prev => prev.map(task =>
-          task.id === data.task.id ? data.task : task
+          task.id === data.task.id ? { ...data.task } : task
         ));
+      });
+
+      manager.on('taskProgress', (data) => {
+        if (
+          data?.progress == null &&
+          data?.indeterminate == null &&
+          !data?.status
+        ) {
+          return;
+        }
+        setTasks(prev =>
+          prev.map(task => {
+            if (data.taskId && task.id !== data.taskId) return task;
+            if (!data.taskId && task.status !== 'running' && task.status !== 'pending') {
+              return task;
+            }
+            if (!data.taskId) {
+              const firstRunning = prev.find(
+                (t) => t.status === 'running' || t.status === 'pending',
+              );
+              if (firstRunning && task.id !== firstRunning.id) return task;
+            }
+            return {
+              ...task,
+              ...(data.task || {}),
+              progress:
+                data.progress !== undefined ? data.progress : task.progress,
+              progressIndeterminate:
+                data.indeterminate !== undefined
+                  ? data.indeterminate
+                  : task.progressIndeterminate,
+              statusMessage: data.status ?? task.statusMessage,
+              status: 'running',
+            };
+          }),
+        );
       });
 
       manager.on('taskCompleted', (data) => {
@@ -205,7 +290,9 @@ export const TaskProvider = ({ children }) => {
   const createAndStartTask = async (taskData, modelData = null) => {
     const task = createTask(taskData);
     if (task) {
-      setTasks(prev => [...prev, task]);
+      setTasks((prev) =>
+        prev.some((t) => t.id === task.id) ? prev : [...prev, task],
+      );
       return await startTask(task.id, modelData);
     }
     return null;
@@ -242,10 +329,44 @@ export const TaskProvider = ({ children }) => {
     return [];
   };
 
-  // Remove task
+  // Remove task locally only (legacy)
   const removeTask = (taskId) => {
     if (taskManagerRef.current) {
       taskManagerRef.current.removeTask(taskId);
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    if (!taskManagerRef.current) return null;
+    try {
+      setIsLoading(true);
+      const result = await taskManagerRef.current.deleteTask(taskId);
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+      return result;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const syncTasksFromApi = async () => {
+    if (!taskManagerRef.current) return [];
+    if (!taskManagerRef.current.isConnected) {
+      const connected = await taskManagerRef.current.checkConnection();
+      setIsConnected(connected);
+      if (!connected) {
+        throw new Error('Not connected to DGX API');
+      }
+    }
+    setIsLoading(true);
+    try {
+      await taskManagerRef.current.syncTasksWithApiHistory();
+      await taskManagerRef.current.resumeInterruptedJobs();
+      const latest = sortTasksForDisplay(taskManagerRef.current.getAllTasks());
+      setTasks(latest);
+      return latest;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -277,9 +398,12 @@ export const TaskProvider = ({ children }) => {
       if (taskManagerRef.current) {
         // Remove all event listeners
         taskManagerRef.current.off('connectionStatusChanged');
+        taskManagerRef.current.off('tasksRestored');
+        taskManagerRef.current.off('tasksSynced');
         taskManagerRef.current.off('taskCreated');
         taskManagerRef.current.off('taskStarted');
         taskManagerRef.current.off('taskUpdated');
+        taskManagerRef.current.off('taskProgress');
         taskManagerRef.current.off('taskCompleted');
         taskManagerRef.current.off('taskFailed');
         taskManagerRef.current.off('taskRemoved');
@@ -310,6 +434,8 @@ export const TaskProvider = ({ children }) => {
     getTasksByStatus,
     getTasksByType,
     removeTask,
+    deleteTask,
+    syncTasksFromApi,
     clearCompletedTasks,
     clearAllTasks,
     getTaskStats,
