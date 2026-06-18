@@ -436,3 +436,14 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [TripoStudio](https://studio.tripo3d.ai/) for inspiration
 - [Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio) for the foundation
 - [M3-org](https://github.com/M3-org) for the upstream avatar-trait foundation and inspiration
+
+## Legal & Trademark Information
+
+### Software Licensing
+The underlying source code of OpenNexus3DStudio is licensed under the [MIT License](LICENSE).
+
+### Trademark & Brand Asset Reservation
+The names **"Space-Time"**, **"OpenNexus3DStudio"**, the "Space-Time" orbital clock logo artwork, and all associated apparel designs, product names, graphics, and phygital concept assets are proprietary intellectual property.
+
+* **No Trademark License:** The open-source license applied to the source code **does not** grant any rights, implied or explicit, to use the "Space-Time" brand name, logo, or trade dress for commercial or non-commercial redistributions.
+* **Modification Requirement:** If you fork this repository or modify the code to distribute your own software or services, you **must** remove all "Space-Time" branding, logos, and references, and rebrand your version entirely under a unique name.
