@@ -1,6 +1,6 @@
 {
   "name": "opennexus3dstudio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A 3D AIGC application for completely locally deployed and free 3DAIGC workflows",
   "homepage": "https://github.com/FishWoWater/OpenNexus3DStudio",
   "scripts": {
