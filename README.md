@@ -16,6 +16,16 @@ Browse the [screenshot & demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7
 
 Deploy the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend on your own machine or server (see **API Backend Setup** below). Screenshots: [demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7).
 
+### Public demo (Vercel)
+
+The repo is **Vercel deploy-ready** for a public viewport demo (VRM upload, traits, UI) without exposing LAN/DGX secrets:
+
+- Config: [`vercel.json`](vercel.json) — `VITE_PUBLIC_DEMO=1`, loot assets via CDN
+- Build guard: `npm run verify:public-env` blocks client secrets on CI/Vercel
+- Docs: [docs/PUBLIC_DEPLOY.md](docs/PUBLIC_DEPLOY.md)
+
+Import the GitHub repo in Vercel; no `VITE_API_ENDPOINT` required for the public demo. Full AI generation stays on local dev + self-hosted [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API).
+
 ## 🚀 Core Principles
 - **All Local**: No data leaves your device. 
 - **Open Source**: Apache2.0 licensed.
@@ -213,23 +223,11 @@ npm run dist-linux  # Linux
 
 ### OpenNexus3DStudio Asset Setup
 
-Avatar trait packs come from **[m3-org/loot-assets](https://github.com/m3-org/loot-assets)** — not committed in this repo (smaller git pushes, Vercel clones at build time).
+OpenNexus3DStudio requires asset packs for avatar traits. You can:
 
-1. **Local dev:** `npm run get-assets` — clones to `../loot-assets` and links `public/loot-assets` (app still uses `/loot-assets/…`)
-2. **Vercel / CI:** `npm run build` runs `get-assets` automatically (shallow clone into `public/loot-assets`)
-3. **Override clone path:** `LOOT_ASSETS_EXTERNAL_DIR` in `.env`
-4. **Remote CDN (optional):** `VITE_ASSET_PATH=https://m3-org.github.io/loot-assets/`
-
-See [docs/LOOT_ASSETS_SETUP.md](docs/LOOT_ASSETS_SETUP.md).
-
-### Public deploy (Vercel / GitHub Pages)
-
-Public demo: character studio + loot CDN **without** a private AI backend.
-
-- **Vercel:** `vercel.json` sets `VITE_ASSET_PATH`; connect repo and deploy. See [docs/PUBLIC_DEPLOY.md](docs/PUBLIC_DEPLOY.md).
-- **GitHub Pages:** `.github/workflows/main.yml` builds with the same CDN env.
-- **Never** set API keys or `VITE_AVATARSDK_CLIENT_SECRET` on public hosting — `npm run build` runs `verify-public-env` to block mistakes.
-- **Local dev:** copy `.env.example` → `.env` (gitignored); full DGX proxy and keys stay on your machine only.
+1. **Use default assets**: Run `npm run get-assets` to clone required loot-assets from GitHub
+2. **Add custom assets**: Copy your asset packs to the `public/` folder
+3. **Configure asset path**: Set `VITE_ASSET_PATH` in `.env` to point to your assets (local path or remote URL)
 
 ## 🏗️ Architecture
 

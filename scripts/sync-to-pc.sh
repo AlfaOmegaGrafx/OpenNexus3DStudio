@@ -95,7 +95,11 @@ for f in \
   README.md \
   package.json \
   vite.config.js \
+  vercel.json \
   index.html \
+  .env.example \
+  .env.production.example \
+  docs/PUBLIC_DEPLOY.md \
   docs/package.json \
   docs/jsconfig.json \
   docs/docusaurus.config.js \
@@ -111,6 +115,8 @@ for f in \
   scripts/ensure-dgx-sync-ready.sh \
   scripts/sync-to-pc.sh \
   scripts/sync-lock-utils.sh \
+  scripts/verify-public-build-env.mjs \
+  scripts/pre-commit-block-secrets.sh \
   .cursor/rules/surface-sync-reminder.mdc \
   .cursor/rules/dgx-sync-reminder.mdc
 do

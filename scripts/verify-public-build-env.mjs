@@ -21,6 +21,8 @@ export const FORBIDDEN_PUBLIC_CLIENT_SECRETS = [
   'VITE_ALCHEMY_API_KEY',
   'VITE_BASE_X402_API_KEY',
   'VITE_VANA_API_KEY',
+  'VITE_HELIUS_KEY',
+  'VITE_OPENSEA_KEY',
 ];
 
 /** Public client IDs are OK on Vercel; listed for documentation only. */
@@ -87,16 +89,18 @@ function collectViolations(env) {
 
 function main() {
   const mode = 'production';
-  const loaded = loadEnv(mode, repoRoot, '');
-  const env = { ...process.env, ...loaded };
-  const { errors, warnings } = collectViolations(env);
-
   const isStrict =
     process.argv.includes('--strict') ||
-    env.CI === 'true' ||
-    env.CI === '1' ||
-    env.VERCEL === '1' ||
-    Boolean(env.VERCEL_ENV);
+    process.env.CI === 'true' ||
+    process.env.CI === '1' ||
+    process.env.VERCEL === '1' ||
+    Boolean(process.env.VERCEL_ENV);
+
+  // On Vercel/CI there is no local .env — only dashboard + vercel.json env.
+  // Loading .env here would false-fail builds when developers have secrets locally.
+  const loaded = isStrict ? {} : loadEnv(mode, repoRoot, '');
+  const env = { ...loaded, ...process.env };
+  const { errors, warnings } = collectViolations(env);
 
   for (const w of warnings) {
     console.warn(`[verify-public-env] warning: ${w}`);

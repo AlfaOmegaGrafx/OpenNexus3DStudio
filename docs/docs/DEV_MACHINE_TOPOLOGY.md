@@ -65,7 +65,7 @@ Same git repo, two Cursor entry points. Keep them in sync with **commit / push /
 | Workspace | Typical path | Cursor connection |
 |-----------|--------------|-------------------|
 | **Surface (local dev + Galaxy XR)** | `C:\Users\alfao\Documents\GitHub\CharacterStudio` | Local folder |
-| **DGX Spark (SSH agent)** | `/home/sifr/OpenNexus3DStudio` | **`DGX-Local`** or **`DGX-Remote`** |
+| **DGX Spark (SSH agent)** | `/home/sifr/OpenNexus3DStudio/CharacterStudio` | **`DGX-Local`** or **`DGX-Remote`** |
 
 **Who runs what**
 
@@ -208,7 +208,7 @@ From the **Surface** repo root (PowerShell) — run in this order when both side
 On **DGX** (optional — `sync-to-dgx.ps1` runs this automatically after each PC push):
 
 ```bash
-cd /home/sifr/OpenNexus3DStudio
+cd /home/sifr/OpenNexus3DStudio/CharacterStudio
 bash scripts/ensure-dgx-sync-ready.sh
 ```
 

@@ -1,8 +1,8 @@
 {
   "name": "opennexus3dstudio",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A 3D AIGC application for completely locally deployed and free 3DAIGC workflows",
-  "homepage": "https://github.com/FishWoWater/OpenNexus3DStudio",
+  "homepage": "https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio",
   "scripts": {
     "dev": "vite --host",
     "dev:surface": "node node_modules/vite/bin/vite.js --host 10.0.0.32 --strictPort false",
@@ -26,7 +26,8 @@
     "get-assets": "node scripts/ensure-loot-assets.mjs",
     "link-assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/link-loot-assets.ps1",
     "verify:public-env": "node scripts/verify-public-build-env.mjs",
-    "build": "npm run verify:public-env && npm run get-assets && vite build",
+    "verify:build-deps": "node scripts/verify-build-deps.mjs",
+    "build": "npm run verify:public-env && npm run verify:build-deps && npm run get-assets && vite build",
     "serve": "vite preview",
     "dist-mac": "electron-builder --mac",
     "dist-win": "electron-builder --win",
@@ -50,6 +51,9 @@
     "update-roadmap": "node scripts/update-roadmap-date.js"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
     "@iwsdk/core": "^0.4.2",
     "@mediapipe/holistic": "^0.5.1675471629",
     "@pixiv/three-vrm": "^3.4.4",
@@ -63,6 +67,7 @@
     "classnames": "^2.5.1",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
+    "draco3dgltf": "^1.5.7",
     "electron": "^32.0.0",
     "ethers": "^6.16.0",
     "events": "^3.3.0",
@@ -72,6 +77,7 @@
     "i18next": "^25.7.4",
     "kalidokit": "^1.1.5",
     "ktx2-encoder": "^0.5.1",
+    "meshoptimizer": "^1.1.1",
     "multer": "^2.0.2",
     "react": "^19.2.3",
     "react-color": "^2.19.3",

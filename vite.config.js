@@ -615,16 +615,6 @@ function nativeFaceRelayPlugin() {
 const DEV_DGX_PROXY_PREFIX = '/__dev_dgx_proxy'
 
 export default defineConfig(({ command, mode }) => {
-  // Vercel: ensure VITE_* defaults reach the production bundle when dashboard/env omit them.
-  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) {
-    if (!process.env.VITE_ASSET_PATH) {
-      process.env.VITE_ASSET_PATH = 'https://m3-org.github.io/loot-assets/';
-    }
-    if (!process.env.VITE_PUBLIC_DEMO) {
-      process.env.VITE_PUBLIC_DEMO = '1';
-    }
-  }
-
   const env = loadEnv(mode, process.cwd(), '')
   const proxyTarget = (env.DEV_API_PROXY_TARGET || '').trim().replace(/\/$/, '')
   const devApiProxy =
