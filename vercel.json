@@ -1,6 +1,11 @@
 {
   "buildCommand": "npm run build",
+  "installCommand": "npm install",
   "outputDirectory": "build",
   "framework": "vite",
+  "env": {
+    "VITE_ASSET_PATH": "https://m3-org.github.io/loot-assets/",
+    "VITE_PUBLIC_DEMO": "1"
+  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

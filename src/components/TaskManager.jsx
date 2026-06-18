@@ -32,7 +32,7 @@ import {
   DEFAULT_HUMANOID_TEMPLATE_ID,
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
-import TaskAdvancedOptions from './TaskAdvancedOptions.jsx';
+import { AI_BACKEND_UNAVAILABLE_MSG, isLocalDev } from '../library/runtimeUi';
 
 export { ALL_MODELS, TASK_TYPE_TO_FEATURE };
 
@@ -286,7 +286,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       return;
     }
     if (newTaskType === 'avatar-from-photo' && !avatarSdkReady) {
-      alert('⚠️ AvatarSDK is not configured. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET in .env.');
+      alert(
+        isLocalDev
+          ? '⚠️ AvatarSDK is not configured. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET in .env.'
+          : '⚠️ AvatarSDK is not configured on this deployment.',
+      );
       return;
     }
     if (newTaskType === 'avatar-from-photo' && !newTaskImage) {
@@ -569,9 +573,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     setIsSyncingTasks(true);
     try {
       const synced = await syncTasksFromApi();
-      setSyncMessage(`Synced ${synced.length} task(s) from DGX Spark`);
+      setSyncMessage(`Synced ${synced.length} task(s) from API`);
     } catch (error) {
-      setSyncMessage(error?.message || 'Failed to sync from DGX Spark');
+      setSyncMessage(error?.message || 'Failed to sync tasks from API');
     } finally {
       setIsSyncingTasks(false);
     }
@@ -601,9 +605,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 className="btn btn-secondary"
                 onClick={handleSyncFromDgx}
                 disabled={!isApiConnected || isSyncingTasks}
-                title="Load recent jobs from DGX Spark and merge with local tasks"
+                title={isLocalDev ? 'Load recent jobs from DGX Spark and merge with local tasks' : 'Load recent jobs from the API'}
               >
-                {isSyncingTasks ? 'Sync…' : 'Sync DGX'}
+                {isSyncingTasks ? 'Sync…' : isLocalDev ? 'Sync DGX' : 'Sync jobs'}
               </button>
               <button 
                 className="btn btn-secondary"
@@ -652,7 +656,25 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               ⚠️ No AI Provider Available
             </div>
             <div style={{ fontSize: '0.6rem', lineHeight: '1.4' }}>
-              Configure either DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>) or AvatarSDK credentials (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_ID</code> / <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_SECRET</code>).
+              {isLocalDev ? (
+                <>
+                  Configure either DGX API (
+                  <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>
+                    VITE_API_ENDPOINT
+                  </code>
+                  ) or AvatarSDK credentials (
+                  <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>
+                    VITE_AVATARSDK_CLIENT_ID
+                  </code>{' '}
+                  /{' '}
+                  <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>
+                    VITE_AVATARSDK_CLIENT_SECRET
+                  </code>
+                  ).
+                </>
+              ) : (
+                AI_BACKEND_UNAVAILABLE_MSG
+              )}
             </div>
           </div>
         )}
@@ -1176,7 +1198,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     disabled={deletingTaskId === task.id}
                     title={
                       resolveTaskJobId(task)
-                        ? 'Delete from this browser and DGX Spark'
+                        ? isLocalDev
+                          ? 'Delete from this browser and DGX Spark'
+                          : 'Delete from this browser and API'
                         : 'Delete from this browser'
                     }
                     style={{ 

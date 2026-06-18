@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useScene } from '../context/SceneContext';
 import { useCore3D } from '../context/Core3DContext';
-import { bootstrapLootCharacter, LOOT_MODELS_MANIFEST_URL } from '../library/lootAssetsConfig';
+import { bootstrapLootCharacter, resolveLootModelsManifestUrl } from '../library/lootAssetsConfig';
 import styles from './Tools.module.css';
 
 const ToolsSimple = ({ onNavigate }) => {
@@ -235,7 +235,7 @@ const ToolsSimple = ({ onNavigate }) => {
         characterManager.setRenderCamera(sceneManager.camera);
       }
 
-      const response = await fetch(LOOT_MODELS_MANIFEST_URL);
+      const response = await fetch(resolveLootModelsManifestUrl());
       const manifest = await response.json();
 
       const traits = manifest.traits.map((trait) => ({

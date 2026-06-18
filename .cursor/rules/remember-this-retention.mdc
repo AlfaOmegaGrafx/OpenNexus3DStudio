@@ -1,0 +1,44 @@
+---
+description: When user says "remember this/that" — persist via MD, memory bank, rules, graphify, sessionmem, sync
+alwaysApply: true
+---
+
+# Remember this / remember that (retention command)
+
+When the user says **“remember this”**, **“remember that”**, or equivalent (**“don’t forget”**, **“lock this in”**):
+
+## Required workflow (do all steps — do not only reply in chat)
+
+1. **Markdown (source of truth)**  
+   - Create or update a topic file under `memory-bank/` (decisions, protected states) or `docs/` (user-facing guides).  
+   - Use a clear filename, e.g. `memory-bank/vrm-upload-protected-state.md`.
+
+2. **Memory bank**  
+   - Update `memory-bank/activeContext.md` (current focus / locked decisions).  
+   - Update `memory-bank/progress.md` if status or “what works” changed.
+
+3. **Cursor rule** (if the knowledge is an invariant agents must follow every session)  
+   - Add or update `.cursor/rules/<topic>.mdc` with `alwaysApply: true` when appropriate.
+
+4. **Graphify** (after any code change tied to the memory)  
+   - `graphify update . --no-cluster` in repo root (Surface or DGX).
+
+5. **SessionMem**  
+   - Append entry to `memory-bank/sessionmem-seeds.json` and `memory-bank/sessionmem-seeds.md`.  
+   - Run `sessionmem import memory-bank/sessionmem-seeds.json --merge`.  
+   - Run team sync: `.\scripts\sync-sessionmem-team.ps1` (Surface) or `bash scripts/sync-sessionmem-team.sh` (DGX).
+
+6. **DGX ↔ Surface scp** (after file edits)  
+   - Surface: `.\scripts\sync-to-dgx.ps1` (pushes `memory-bank/`, `.cursor/rules/` by default).  
+   - DGX: `bash scripts/sync-to-pc.sh --include-agent-context`.
+
+## Do not
+
+- Rely on chat history alone — it resets between sessions.  
+- Skip MD + memory bank because SessionMem exists (SessionMem supplements; MD is canonical).  
+- `git push` unless the user explicitly asks.
+
+## Trigger examples
+
+- “Remember this: VRM upload must not be touched by image-to-avatar debug.”  
+- “Remember that joint size is 0.012.”

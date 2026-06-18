@@ -173,7 +173,11 @@ export function initRemoteLogClient(options = {}) {
     }
   })()
 
-  const enabled = enabledByQuery || enabledByStorage || enabledByEnv
+  // Public deploys: no query/localStorage remote log (avoids accidental log exfil on Vercel).
+  const enabled =
+    import.meta.env.PROD
+      ? enabledByEnv
+      : enabledByQuery || enabledByStorage || enabledByEnv
   if (!enabled) return { enabled: false }
 
   const sessionId = getSessionId()

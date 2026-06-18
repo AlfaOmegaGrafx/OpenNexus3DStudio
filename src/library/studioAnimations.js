@@ -1,8 +1,8 @@
 import { getFileNameWithoutExtension } from './utils';
 import {
   LOOT_DEFAULT_ANIMATIONS,
+  normalizeLootAssetUrl,
   resolveMainManifestUrl,
-  toPublicAssetUrl,
 } from './lootAssetsConfig';
 
 /**
@@ -13,7 +13,7 @@ async function resolveStudioAnimationEntries() {
     rows
       .map((entry) => ({
         name: entry.name || getFileNameWithoutExtension(entry.location || ''),
-        path: toPublicAssetUrl(entry.location || ''),
+        path: normalizeLootAssetUrl(entry.location || ''),
       }))
       .filter((e) => e.path);
 

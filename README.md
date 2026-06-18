@@ -213,11 +213,23 @@ npm run dist-linux  # Linux
 
 ### OpenNexus3DStudio Asset Setup
 
-OpenNexus3DStudio requires asset packs for avatar traits. You can:
+Avatar trait packs come from **[m3-org/loot-assets](https://github.com/m3-org/loot-assets)** — not committed in this repo (smaller git pushes, Vercel clones at build time).
 
-1. **Use default assets**: Run `npm run get-assets` to clone required loot-assets from GitHub
-2. **Add custom assets**: Copy your asset packs to the `public/` folder
-3. **Configure asset path**: Set `VITE_ASSET_PATH` in `.env` to point to your assets (local path or remote URL)
+1. **Local dev:** `npm run get-assets` — clones to `../loot-assets` and links `public/loot-assets` (app still uses `/loot-assets/…`)
+2. **Vercel / CI:** `npm run build` runs `get-assets` automatically (shallow clone into `public/loot-assets`)
+3. **Override clone path:** `LOOT_ASSETS_EXTERNAL_DIR` in `.env`
+4. **Remote CDN (optional):** `VITE_ASSET_PATH=https://m3-org.github.io/loot-assets/`
+
+See [docs/LOOT_ASSETS_SETUP.md](docs/LOOT_ASSETS_SETUP.md).
+
+### Public deploy (Vercel / GitHub Pages)
+
+Public demo: character studio + loot CDN **without** a private AI backend.
+
+- **Vercel:** `vercel.json` sets `VITE_ASSET_PATH`; connect repo and deploy. See [docs/PUBLIC_DEPLOY.md](docs/PUBLIC_DEPLOY.md).
+- **GitHub Pages:** `.github/workflows/main.yml` builds with the same CDN env.
+- **Never** set API keys or `VITE_AVATARSDK_CLIENT_SECRET` on public hosting — `npm run build` runs `verify-public-env` to block mistakes.
+- **Local dev:** copy `.env.example` → `.env` (gitignored); full DGX proxy and keys stay on your machine only.
 
 ## 🏗️ Architecture
 

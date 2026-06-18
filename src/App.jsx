@@ -44,6 +44,7 @@ import BottomDisplayMenu from './components/BottomDisplayMenu';
 import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
+import { showApiStatusPanel } from './library/runtimeUi';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -1324,6 +1325,7 @@ function AppContent() {
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
+          {showApiStatusPanel() && (
           <APIStatus 
             endpoint={apiEndpoint}
             isConnected={isConnected}
@@ -1331,13 +1333,14 @@ function AppContent() {
             onEndpointChange={setApiEndpoint}
             onTestConnection={forceConnectionCheck}
           />
+          )}
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}
             isApiConnected={isConnected}
           />
           <WorldLibrary apiEndpoint={apiEndpoint} compact />
-          {/* Debug info */}
+          {import.meta.env.DEV && (
           <div style={{ background: '#333', padding: '0.5rem', margin: '0.25rem 0', borderRadius: '4px', fontSize: '0.7rem' }}>
             <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
             <div>Tasks: {tasks.length}</div>
@@ -1359,6 +1362,7 @@ function AppContent() {
               Force Check Connection
             </button>
           </div>
+          )}
             </>
           )}
         </div>

@@ -95,6 +95,10 @@ flowchart TD
     Execute --> Document[Document Changes]
 \```
 
+### Remember this / remember that
+
+When the user uses that phrase, follow `.cursor/rules/remember-this-retention.mdc` (MD + memory bank + rules + graphify + sessionmem + scp sync).
+
 ## Documentation Updates
 
 Memory Bank updates occur when:

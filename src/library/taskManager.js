@@ -7,6 +7,7 @@
  */
 import axios from 'axios';
 import { logger } from './logger.js';
+import { isLocalDev } from './runtimeUi.js';
 import { performanceMonitor } from './performanceMonitor.js';
 import { rollbackManager } from './rollbackManager.js';
 import avatarSdkService from '../services/avatarSdkService.js';
@@ -303,7 +304,11 @@ export class TaskManager {
               endpoint: this.apiEndpoint,
               wasConnected,
               errorDetails,
-              recovery: errorDetails.connectionRefused ? 'Set VITE_API_ENDPOINT to your API server URL (e.g. DGX Sparks)' : 'Check server accessibility'
+              recovery: errorDetails.connectionRefused
+                ? isLocalDev
+                  ? 'Set VITE_API_ENDPOINT to your API server URL (e.g. DGX Sparks)'
+                  : 'Connect a backend API in your hosted instance'
+                : 'Check server accessibility',
             }
           );
         } catch (logErr) {
@@ -1638,7 +1643,9 @@ export class TaskManager {
         if (error.code === 'JOB_STATUS_404' || error.all404) {
           consecutive404++;
           if (consecutive404 >= maxConsecutive404) {
-            const msg = 'Job submitted; status endpoint not available. Set VITE_JOB_STATUS_PATH in .env if your API supports job status polling.';
+            const msg = isLocalDev
+              ? 'Job submitted; status endpoint not available. Set VITE_JOB_STATUS_PATH in .env if your API supports job status polling.'
+              : 'Job submitted; status polling is not available on this deployment.';
             console.warn(msg);
             this.updateTaskStatus(taskId, 'running', 10, { job_id: jobId, statusPollingUnavailable: true, message: msg }, null);
             return { job_id: jobId, status: 'submitted', statusPollingUnavailable: true, message: msg };
@@ -1811,7 +1818,7 @@ export class TaskManager {
           throw new Error(
             error.response?.data?.detail ||
               error.message ||
-              'Failed to delete job on DGX Spark',
+              (isLocalDev ? 'Failed to delete job on DGX Spark' : 'Failed to delete job on API'),
           );
         }
       }
