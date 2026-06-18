@@ -93,7 +93,10 @@ export const LOOT_BUILD_ICON_FILES = [
 /** True when VITE_ASSET_PATH is an http(s) CDN — skip full loot-assets clone at build. */
 export function usesRemoteLootManifest() {
   const p = (process.env.VITE_ASSET_PATH || '').trim();
-  return /^https?:\/\//i.test(p);
+  if (/^https?:\/\//i.test(p)) return true;
+  // Vercel: vercel.json env may not reach npm scripts — default to GitHub Pages CDN on deploy builds.
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return true;
+  return false;
 }
 
 /** @param {string} linkPath */
