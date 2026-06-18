@@ -5,6 +5,7 @@ import {
   deserializeTaskFromStorage,
   featureToTaskType,
   formatTaskDurationMs,
+  formatTaskTimestamp,
   getTaskElapsedMs,
   loadPersistedTasks,
   mapApiJobStatusToTaskStatus,
@@ -94,13 +95,19 @@ describe('taskPersistence', () => {
     expect(task.result.world_manifest_url).toContain('asset=manifest');
     expect(task.startedAt).toBeInstanceOf(Date);
     expect(task.completedAt).toBeInstanceOf(Date);
-    expect(getTaskElapsedMs(task)).toBe(10006);
+    expect(getTaskElapsedMs(task)).toBe(10005);
   });
 
   it('formats elapsed durations for task rows', () => {
     expect(formatTaskDurationMs(9500)).toBe('10s');
     expect(formatTaskDurationMs(65000)).toBe('1m 5s');
     expect(formatTaskDurationMs(-1)).toBe('—');
+  });
+
+  it('formats task timestamps in US Eastern with mm-dd-yyyy', () => {
+    const formatted = formatTaskTimestamp('2026-06-18T20:41:54.127912-04:00');
+    expect(formatted).toMatch(/^06-18-2026 \d{1,2}:\d{2}:\d{2} (AM|PM) (EDT|EST)$/);
+    expect(formatTaskTimestamp(null)).toBe('—');
   });
 
   it('applies API timestamps onto running tasks', () => {

@@ -37,7 +37,13 @@ const API_STATUS_TO_TASK_STATUS = {
  */
 function toDate(value) {
   if (value instanceof Date) return value;
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const naiveApiIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+    const parsed = new Date(naiveApiIso.test(trimmed) ? `${trimmed}Z` : trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (typeof value === 'number') {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
@@ -89,6 +95,37 @@ export function applyJobTimestampsToTask(task, job) {
   else if (job.created_at && !task.startedAt) task.startedAt = toDate(job.created_at);
   if (job.completed_at) task.completedAt = toDate(job.completed_at);
   return task;
+}
+
+/** US Eastern — matches 3DAIGC-API job clock (`America/New_York`). */
+export const TASK_JOB_TIMEZONE = 'America/New_York';
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function formatTaskTimestamp(value) {
+  if (!value) return '—';
+  const date = toDate(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TASK_JOB_TIMEZONE,
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).formatToParts(date);
+
+  const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
+  const dateStr = `${part('month')}-${part('day')}-${part('year')}`;
+  const timeStr = `${part('hour')}:${part('minute')}:${part('second')} ${part('dayPeriod')}`.trim();
+  const tz = part('timeZoneName');
+  return tz ? `${dateStr} ${timeStr} ${tz}` : `${dateStr} ${timeStr}`;
 }
 
 /**

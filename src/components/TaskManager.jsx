@@ -26,7 +26,7 @@ import {
   isSplatEnvironmentTaskResult,
   isWorldLayerTaskResult,
 } from '../library/worldPackage.js';
-import { formatTaskDurationMs, getTaskElapsedMs, resolveTaskJobId } from '../library/taskPersistence.js';
+import { formatTaskDurationMs, formatTaskTimestamp, getTaskElapsedMs, resolveTaskJobId } from '../library/taskPersistence.js';
 import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
@@ -457,10 +457,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   };
 
-  const formatDate = (date) => {
-    if (!date) return '—';
-    return new Date(date).toLocaleTimeString();
-  };
+  const formatDate = (date) => formatTaskTimestamp(date);
 
   const renderTaskTiming = (task) => {
     const started = task.startedAt || task.createdAt;
