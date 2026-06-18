@@ -614,8 +614,30 @@ function nativeFaceRelayPlugin() {
 
 const DEV_DGX_PROXY_PREFIX = '/__dev_dgx_proxy'
 
+/** Paths that never need HMR — keeps file watchers under OS limits. */
+const DEV_WATCH_IGNORED = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/build/**',
+  '**/dist/**',
+  '**/docs/**',
+  '**/native/**',
+  '**/graphify-out/**',
+  '**/.sessionmem-team/**',
+  '**/coverage/**',
+  '**/logs/**',
+  '**/.vite/**',
+  '**/playwright-report/**',
+  '**/test-results/**',
+  '**/electron-dist/**',
+]
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const useWatchPolling =
+    env.VITE_USE_POLLING === '1' ||
+    env.CHOKIDAR_USEPOLLING === '1' ||
+    env.CHOKIDAR_USEPOLLING === 'true'
   const proxyTarget = (env.DEV_API_PROXY_TARGET || '').trim().replace(/\/$/, '')
   const devApiProxy =
     command === 'serve' && proxyTarget && /^https?:\/\//i.test(proxyTarget)
@@ -636,6 +658,9 @@ export default defineConfig(({ command, mode }) => {
 
   if (command === 'serve' && Object.keys(devApiProxy).length) {
     console.log(`[vite] API dev proxy: ${DEV_DGX_PROXY_PREFIX} → ${proxyTarget}`)
+  }
+  if (command === 'serve' && useWatchPolling) {
+    console.log('[vite] File watch: polling mode (VITE_USE_POLLING / CHOKIDAR_USEPOLLING)')
   }
 
   return {
@@ -695,6 +720,10 @@ export default defineConfig(({ command, mode }) => {
       return false // Fall back to HTTP
     })(),
     strictPort: false, // allow Cursor on 127.0.0.1:3000 while Vite serves LAN (Galaxy XR)
+    watch: {
+      ignored: DEV_WATCH_IGNORED,
+      ...(useWatchPolling ? { usePolling: true, interval: 300 } : {}),
+    },
   },
   optimizeDeps: {
     include: [

@@ -5,6 +5,7 @@
   "homepage": "https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio",
   "scripts": {
     "dev": "vite --host",
+    "dev:polling": "cross-env VITE_USE_POLLING=1 vite --host",
     "dev:surface": "node node_modules/vite/bin/vite.js --host 10.0.0.32 --strictPort false",
     "dev:iwsdk": "iwsdk dev up --open --foreground",
     "dev:runtime": "vite --host",
@@ -104,6 +105,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@vitejs/plugin-react-swc": "^3.11.0",
+    "cross-env": "^7.0.3",
     "electron-builder": "^25.0.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.10.2",
