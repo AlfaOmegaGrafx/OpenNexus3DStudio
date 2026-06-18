@@ -11,8 +11,6 @@ import {
   ensureXrLocomotionRig,
 } from './sceneManagerXrLocomotion.js';
 import { SceneManagerXrTeleport } from './sceneManagerXrTeleport.js';
-import { SceneManagerXrAvatarView } from './sceneManagerXrAvatarView.js';
-import { SceneManagerXrMenu } from './sceneManagerXrMenu.js';
 import {
   isThumbstickTeleportAim,
   readRightThumbstickAxes,
@@ -36,8 +34,6 @@ export class SceneManagerXrInteraction {
     this.grab = new SceneManagerXrGrab(sceneManager);
     this.locomotion = new SceneManagerXrLocomotion(sceneManager);
     this.teleport = new SceneManagerXrTeleport(sceneManager);
-    this.avatarView = new SceneManagerXrAvatarView(sceneManager);
-    this.menu = new SceneManagerXrMenu(sceneManager, this.avatarView);
     this._demoCube = null;
     this._lastFrameTime = 0;
     this._capabilityLogged = false;
@@ -49,23 +45,15 @@ export class SceneManagerXrInteraction {
    */
   onSessionStart(session, options = {}) {
     ensureXrLocomotionRig(this.sceneManager);
-    this.avatarView.onSessionStart(options);
     this.syncGrabbablesFromScene();
     if (this.grab._grabbableRoots.length === 0 && options.isVR !== false) {
       this._ensureDemoGrabbable();
     }
     this._logCapabilityOnce(session, options);
-    console.log(
-      '[XR][interaction] Session started — input, grab, locomotion, teleport active on /',
-      this.avatarView.hasAvatar()
-        ? `(avatar: ${this.avatarView.mode}, left Y = menu, left X = toggle view)`
-        : '',
-    );
+    console.log('[XR][interaction] Session started — input, grab, locomotion, teleport active on /');
   }
 
   onSessionEnd() {
-    this.menu.reset();
-    this.avatarView.onSessionEnd();
     this._removeDemoGrabbable();
     this.grab.reset();
     this.input.reset();
@@ -134,7 +122,6 @@ export class SceneManagerXrInteraction {
       this.teleport.isAiming() ||
       isThumbstickTeleportAim(rightStick.y, rightStick.x);
     this.locomotion.update(deltaSeconds, pointers, { skipRightTurn });
-    this.menu.update(pointers);
   }
 
   _ensureDemoGrabbable() {

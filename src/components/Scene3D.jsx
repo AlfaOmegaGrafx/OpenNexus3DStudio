@@ -7,11 +7,11 @@ import { useCore3D } from '../context/Core3DContext';
  * 
  * This component provides the main 3D viewport that is shared between:
  * - OpenNexus3DStudio (main application)
- * - CharacterStudio (sidebar panels)
+ * - OpenNexus3DStudio avatar sidebar panels
  * 
  * Both applications access the same scene via SceneContext, ensuring:
  * - Single source of truth for the 3D scene
- * - Real-time updates when CharacterStudio panels modify the model
+ * - Real-time updates when OpenNexus3DStudio panels modify the model
  * - Consistent rendering and state management
  */
 const Scene3D = ({ model, renderMode }) => {
@@ -50,23 +50,49 @@ const Scene3D = ({ model, renderMode }) => {
   const [availableTraits, setAvailableTraits] = useState([]);
   const [currentLootCharacter, setCurrentLootCharacter] = useState(null);
 
-  // Initialize scene when component mounts
+  // Initialize scene when component mounts (skip if SceneContext already owns this container)
   useEffect(() => {
-    if (mountRef.current && !isInitialized) {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    if (sceneInitialized && !sceneManager?.renderer?.domElement) {
+      if (isInitialized) setIsInitialized(false);
+    }
+
+    if (sceneInitialized && sceneManager?.renderer?.domElement) {
+      const canvas = sceneManager.renderer.domElement;
+      if (canvas.parentElement !== mount) {
+        mount.appendChild(canvas);
+      }
+      canvas.style.display = 'block';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      if (!isInitialized) {
+        setIsInitialized(true);
+        if (!sceneManager.isRendering) {
+          startRenderLoop();
+        }
+      }
+      window.dispatchEvent(new CustomEvent('sceneViewportReady'));
+      return;
+    }
+
+    if (!isInitialized && !sceneInitialized) {
       console.log('🎬 Scene3D: Initializing 3D scene...');
       console.log('🎬 Scene3D: Container dimensions:', {
-        width: mountRef.current.clientWidth,
-        height: mountRef.current.clientHeight
+        width: mount.clientWidth,
+        height: mount.clientHeight
       });
       
-      initializeScene(mountRef.current, {
-        width: mountRef.current.clientWidth,
-        height: mountRef.current.clientHeight
+      initializeScene(mount, {
+        width: mount.clientWidth,
+        height: mount.clientHeight
       }).then(() => {
         console.log('✅ Scene3D: Scene initialized successfully');
         setIsInitialized(true);
         startRenderLoop();
         console.log('🎬 Scene3D: Render loop started');
+        window.dispatchEvent(new CustomEvent('sceneViewportReady'));
       }).catch(error => {
         console.error('❌ Scene3D: Failed to initialize scene:', error);
         console.error('❌ Scene3D: Error details:', {
@@ -80,7 +106,7 @@ const Scene3D = ({ model, renderMode }) => {
         });
       });
     }
-  }, [initializeScene, startRenderLoop, isInitialized]);
+  }, [initializeScene, startRenderLoop, isInitialized, sceneInitialized, sceneManager]);
 
   // Monitor stats when enabled
   useEffect(() => {
@@ -222,7 +248,7 @@ const Scene3D = ({ model, renderMode }) => {
     };
   }, [isInitialized]);
 
-  // Button handlers for CharacterStudio features
+  // Button handlers for OpenNexus3DStudio avatar features
   const handleVRMExport = async () => {
     if (!currentModel) {
       alert('No model loaded to export');
@@ -289,7 +315,7 @@ const Scene3D = ({ model, renderMode }) => {
   const handleLoadLootAssets = async () => {
     try {
       // Load loot assets manifest
-      const response = await fetch('/loot-assets/loot/models/manifest.json');
+      const response = await fetch('/loot-assets/models/manifest.json');
       const manifest = await response.json();
       
       // Extract available traits

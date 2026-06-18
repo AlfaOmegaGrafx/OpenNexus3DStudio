@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { SceneManager } from '../library/sceneManager';
 
 // Avoid loading cull-mesh (pulls Raycaster + three-mesh-bvh at module scope) when collecting SceneManager deps.
@@ -105,8 +105,8 @@ vi.mock('three/examples/jsm/loaders/FBXLoader.js', () => ({
   }))
 }));
 
-vi.mock('three/examples/jsm/loaders/RGBELoader.js', () => ({
-  RGBELoader: vi.fn(() => ({
+vi.mock('three/examples/jsm/loaders/HDRLoader.js', () => ({
+  HDRLoader: vi.fn(() => ({
     load: vi.fn()
   }))
 }));
@@ -220,9 +220,9 @@ describe('SceneManager', () => {
     it('should load HDR environment successfully', async () => {
       await sceneManager.initialize(mockContainer);
       
-      // Mock the RGBELoader load method
+      // Mock the HDRLoader load method
       const mockLoad = vi.fn();
-      vi.mocked(RGBELoader).mockImplementationOnce(() => ({ load: mockLoad }));
+      vi.mocked(HDRLoader).mockImplementationOnce(() => ({ load: mockLoad }));
       
       sceneManager.loadHDREnvironment('./test.hdr', 0.8);
       
@@ -238,8 +238,8 @@ describe('SceneManager', () => {
       await sceneManager.initialize(mockContainer);
       
       const mockLoad = vi.fn();
-      vi.mocked(RGBELoader).mockImplementationOnce(() => ({ load: mockLoad }));
-      
+      vi.mocked(HDRLoader).mockImplementationOnce(() => ({ load: mockLoad }));
+
       // Mock console.error to avoid test output
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       
@@ -265,6 +265,45 @@ describe('SceneManager', () => {
     it('should dispose resources correctly', () => {
       sceneManager.dispose();
       expect(sceneManager.isInitialized).toBe(false);
+    });
+  });
+
+  describe('XR exit input mapping', () => {
+    const pressed = { pressed: true, touched: false, value: 1 };
+
+    const handSource = {
+      handedness: 'right',
+      profiles: ['generic-hand-select-grasp', 'generic-hand-select'],
+    };
+
+    const touchpadSource = {
+      handedness: 'none',
+      profiles: ['google-cardboard'],
+    };
+
+    it('does not treat hand-tracking pinch (button 4) as exit', () => {
+      expect(
+        sceneManager.isXRSessionExitButton(handSource, 4, pressed, 5),
+      ).toBe(false);
+      expect(sceneManager._isXRHandTrackingInputSource(handSource)).toBe(true);
+      expect(sceneManager.isXRSystemExitInputSource(handSource)).toBe(false);
+    });
+
+    it('treats Quest Menu/B indices as exit for controllers', () => {
+      const quest = { handedness: 'right', profiles: ['oculus-touch-v3'] };
+      expect(sceneManager.isXRSessionExitButton(quest, 5, pressed, 7)).toBe(true);
+      expect(sceneManager.isXRSessionExitButton(quest, 4, pressed, 7)).toBe(false);
+    });
+
+    it('ignores touched-only ghost presses for exit', () => {
+      const quest = { handedness: 'right', profiles: ['oculus-touch-v3'] };
+      const touchedOnly = { pressed: false, touched: true, value: 0.2 };
+      expect(sceneManager.isXRSessionExitButton(quest, 5, touchedOnly, 7)).toBe(false);
+    });
+
+    it('does not match generic-hand profiles as system select exit', () => {
+      expect(sceneManager.isXRSystemExitInputSource(handSource)).toBe(false);
+      expect(sceneManager.isXRSystemExitInputSource(touchpadSource)).toBe(true);
     });
   });
 });

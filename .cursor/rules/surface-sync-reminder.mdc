@@ -1,0 +1,77 @@
+---
+description: Sync Surface PC ↔ DGX after Character Studio changes (local workspace)
+alwaysApply: true
+---
+
+# Surface sync reminder (local PC workspace)
+
+You are editing **Character Studio on the Surface** — the machine that runs
+`npm run dev` and serves `https://<Surface-LAN-IP>:3000/` for browser and
+Galaxy XR tests.
+
+Repo root (typical): `C:\Users\alfao\Documents\GitHub\CharacterStudio`
+
+Whenever you **create, edit, or delete** files in this repo, **apply scp sync yourself** after the edit (user permission). **Never** run git push/pull/fetch/upstream unless the user explicitly asks.
+
+## Agent behavior (Surface)
+
+1. **Do the work on Surface** (edit, `npm install`, `npm run dev`, etc.).
+2. **Do not** run `git push`, `git pull`, `git fetch`, or merge `upstream` unless the user explicitly asks.
+3. **After PC-owned changes** — run automatically:
+   ```powershell
+   .\scripts\sync-to-dgx.ps1
+   ```
+4. **After DGX-owned docs/scripts change** (or start of session) — run when needed:
+   ```powershell
+   .\scripts\sync-from-dgx.ps1
+   ```
+5. **Do not** end responses with a “Sync reminder” when you already ran sync. Only mention sync if it **failed** (SSH down).
+
+## Ownership — edited on **Surface (here)**
+
+| Changed files | Source of truth | Action |
+| ------------- | --------------- | ------ |
+| `src/`, scripts, roadmaps | **PC** | `.\scripts\sync-to-dgx.ps1` |
+| vite.config, index.html, public | **PC** | Keep on PC; sync to DGX if shared |
+
+## Ownership — edited on **DGX (Cursor Remote)**
+
+| Changed on DGX | Action on Surface |
+| -------------- | ----------------- |
+| Pitch Deck, README, package.json, docs | `.\scripts\sync-from-dgx.ps1` |
+| sync-*.ps1, prune-sync-duplicates.sh | `.\scripts\sync-from-dgx.ps1` |
+| `src/` (edited on Spark) | DGX runs `bash scripts/sync-to-pc.sh --include-src` |
+
+Pull DGX `src/` from Surface if DGX did not push yet:
+
+```powershell
+ssh DGX-Local "cd /home/sifr/OpenNexus3DStudio && bash scripts/sync-to-pc.sh --include-src"
+```
+
+Use `DGX-Remote` away from LAN.
+
+`sync-from-dgx.ps1` never copies `src/` or roadmaps — by design.
+
+## Scripts (PowerShell, from Surface repo root)
+
+```powershell
+.\scripts\sync-to-dgx.ps1      # PC code → DGX
+.\scripts\sync-from-dgx.ps1    # DGX docs/branding → PC
+.\scripts\sync-from-dgx.ps1 -IncludeAgentContext   # + memory-bank + graphify-out
+.\scripts\sync-sessionmem-team.ps1   # SessionMem team memories
+.\scripts\sync-dgx.ps1 -Direction to-dgx
+.\scripts\sync-dgx.ps1 -Direction from-dgx
+.\scripts\sync-to-dgx.ps1 -Remote
+.\scripts\sync-from-dgx.ps1 -Remote
+```
+
+## Backend (`3DAIGC-API`)
+
+API runs on DGX Spark (`:7842`). Dev proxy:
+`VITE_API_ENDPOINT=/__dev_dgx_proxy` → `http://10.0.0.158:7842`.
+
+DGX agent rule (remote): `.cursor/rules/dgx-sync-reminder.mdc`
+
+## Equal role on Surface
+
+Surface agent has the **same execute permissions** as DGX: edit files, run `sync-to-dgx.ps1` / `sync-from-dgx.ps1` automatically after edits, SSH to DGX when needed. Never offer options — do it or report a blocker.

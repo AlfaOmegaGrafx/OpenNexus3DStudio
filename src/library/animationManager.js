@@ -2,8 +2,36 @@ import * as THREE from 'three';
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader"
 import { addModelData } from "./utils";
-import { getMixamoAnimation } from './loadMixamoAnimation';
+import {
+  getMixamoAnimation,
+  prepareVrmForMixamoRetarget,
+  resolveVrmBoneTrackName,
+} from './loadMixamoAnimation';
+import { renameVRMBones } from './utils';
 import { getAsArray, getFileNameWithoutExtension } from './utils';
+import { loadStudioAnimationAtIndex } from './studioAnimations';
+
+const MIXER_DELTA = 1 / 30;
+
+/** Ensure Mixamo FBX skeleton world matrices are ready for retargeting. */
+function prepareMixamoModel(mixamoModel) {
+  if (!mixamoModel) return mixamoModel;
+  mixamoModel.updateMatrixWorld(true);
+  return mixamoModel;
+}
+
+/** Apply mixer pose to VRM skinned meshes (required for three-vrm humanoid rigs). */
+function applyVrmHumanoidPose(vrm, delta = MIXER_DELTA) {
+  if (!vrm) return;
+  const humanoid = vrm.humanoid;
+  if (humanoid?.update) {
+    humanoid.update();
+  } else if (humanoid && humanoid.autoUpdateHumanBones !== true) {
+    humanoid.autoUpdateHumanBones = true;
+    humanoid.update?.();
+  }
+  vrm.update?.(delta);
+}
 
 // make a class that hold all the informarion
 const fbxLoader = new FBXLoader();
@@ -32,25 +60,28 @@ class AnimationControl {
 
     this.timeScale = 1;
 
-    if (animations){
+    if (animations?.length){
       this.setAnimations(animations, null, null, poseStart );
 
-      this.to = this.actions[curIdx]
-      
-      
-      if (lastIdx != -1){
+      this.to = this.actions[curIdx] ?? null;
+
+      if (lastIdx != -1 && this.actions[lastIdx]){
         this.from = this.actions[lastIdx];
         this.from.reset();
         this.from.time = animationManager.getFromActionTime();
         this.from.play();
 
-        this.to.weight = animationManager.getWeightIn();
+        if (this.to) {
+          this.to.weight = animationManager.getWeightIn();
+        }
         this.from.weight = animationManager.getWeightOut();
       }
 
-      this.actions[curIdx].reset();
-      this.actions[curIdx].time = animationManager.getToActionTime();
-      this.actions[curIdx].play();
+      if (this.actions[curIdx]) {
+        this.actions[curIdx].reset();
+        this.actions[curIdx].time = animationManager.getToActionTime();
+        this.actions[curIdx].play();
+      }
     }
   }
 
@@ -67,14 +98,23 @@ class AnimationControl {
 
   setAnimations(animations, mixamoModel=null, mouseLookEnabled = null, quickChange = false){
     mouseLookEnabled = mouseLookEnabled == null ? this.animationManager.mouseLookEnabled : mouseLookEnabled;
-    this.animations = animations;
     //this.mixer.stopAllAction();
     if (mixamoModel != null){
+      prepareMixamoModel(mixamoModel);
       if (this.vrm != null){
+        try {
+          renameVRMBones(this.vrm);
+        } catch {
+          /* non-fatal — retarget may still work with raw bone names */
+        }
+        prepareVrmForMixamoRetarget(this.vrm);
         const mixamoAnimation = getMixamoAnimation(animations, mixamoModel , this.vrm);
         if (mixamoAnimation){
           animations = [mixamoAnimation]
           this.mixamoModel = mixamoModel;
+        } else {
+          console.warn('[AnimationManager] Mixamo retarget failed for VRM; clip will not play.');
+          animations = [];
         }
       }
     } else{
@@ -88,13 +128,15 @@ class AnimationControl {
         animations = [];
       }
     }
+    this.animations = animations;
     // modify animations
-    if (mouseLookEnabled && animations.length > 0 && animations[0]?.tracks){
-      animations[0].tracks.map((track, index) => {
-        if(track.name === "neck.quaternion" || track.name === "spine.quaternion"){
-          animations[0].tracks.splice(index, 1)
-        }
-      })
+    if (mouseLookEnabled && animations.length > 0 && animations[0]?.tracks && this.vrm) {
+      const neckNode = resolveVrmBoneTrackName(this.vrm, 'neck');
+      const spineNode = resolveVrmBoneTrackName(this.vrm, 'spine');
+      animations[0].tracks = animations[0].tracks.filter((track) => {
+        const boneName = track.name.split('.')[0];
+        return boneName !== neckNode && boneName !== spineNode;
+      });
     }
     
     if (!quickChange){
@@ -123,8 +165,31 @@ class AnimationControl {
         action.timeScale = this.timeScale;
         this.actions.push(action);
       }
-      this.actions[0].weight = 1;
-      this.actions[0].play();
+      if (this.actions[0]) {
+        this.actions[0].weight = 1;
+        this.actions[0].play();
+      }
+    }
+
+    this.syncPlaybackActions(
+      this.animationManager?.curAnimID ?? 0,
+      this.animationManager?.lastAnimID ?? -1,
+    );
+  }
+
+  /** Keep `to` / `from` aligned with the current clip after setAnimations or transport. */
+  syncPlaybackActions(curIdx, lastIdx = -1) {
+    if (!this.actions?.length) {
+      this.to = null;
+      this.from = null;
+      return;
+    }
+    const idx = Math.min(Math.max(0, curIdx), this.actions.length - 1);
+    this.to = this.actions[idx] ?? null;
+    this.from = lastIdx >= 0 ? (this.actions[lastIdx] ?? null) : null;
+    if (this.to && !this.to.isRunning()) {
+      this.to.reset();
+      this.to.play();
     }
   }
 
@@ -157,7 +222,8 @@ class AnimationControl {
       this.to.weight = weightIn;
     }
 
-    this.mixer.update(1/30);
+    this.mixer.update(MIXER_DELTA);
+    applyVrmHumanoidPose(this.vrm, MIXER_DELTA);
   }
 
   reset() {
@@ -191,6 +257,7 @@ export class AnimationManager{
     this.animationControl  = null;
     this.animations = null;
     this.paused = false;
+    this.currentSpeed = 1;
 
     this.scale = 1;
 
@@ -209,6 +276,10 @@ export class AnimationManager{
     this.mixamoAnimations = null;
 
     this.currentClip = null;
+    /** @type {import('@pixiv/three-vrm').VRM | null} Sole VRM mixer target for playback */
+    this.primaryAnimationVrm = null;
+    /** @type {(() => void) | null} Re-register viewport VRM after clip load */
+    this._viewportResync = null;
 
     setInterval(() => {
       this.update();
@@ -217,8 +288,29 @@ export class AnimationManager{
 
   enableMouseLook(enable){
     this.mouseLookEnabled = enable;
-    this.animationControls.forEach(animControls => {
+    this._getActiveAnimationControls().forEach(animControls => {
       animControls.setMouseLookEnabled(enable);
+    });
+  }
+
+  registerViewportResync(fn) {
+    this._viewportResync = typeof fn === 'function' ? fn : null;
+  }
+
+  triggerPrimarySync() {
+    this._viewportResync?.();
+  }
+
+  /** @param {import('@pixiv/three-vrm').VRM | null} vrm */
+  setPrimaryAnimationVrm(vrm) {
+    this.primaryAnimationVrm = vrm ?? null;
+  }
+
+  _getActiveAnimationControls() {
+    const primary = this.primaryAnimationVrm;
+    return this.animationControls.filter((control) => {
+      if (!control.vrm) return true;
+      return primary != null && control.vrm === primary;
     });
   }
   
@@ -238,7 +330,7 @@ export class AnimationManager{
     const clip = THREE.AnimationClip.findByName( animationModel.animations, 'mixamo.com' );
     
     if (clip != null){
-      this.mixamoModel = animationModel.clone();
+      this.mixamoModel = prepareMixamoModel(animationModel.clone());
       this.mixamoAnimations =   animationModel.animations;
       this.currentClip = clip;
     }
@@ -249,20 +341,46 @@ export class AnimationManager{
       this.currentClip = animationModel.animations[0];
     }
     
-    if (this.mainControl == null){
+    if (this.mainControl == null) {
       this.curAnimID = 0;
       this.lastAnimID = -1;
-      this.mainControl = new AnimationControl(this, animationModel, null, animationModel.animations, this.curAnimID, this.lastAnimID,isPose)
-      this.animationControls.push(this.mainControl)
+      this.mainControl = new AnimationControl(
+        this,
+        animationModel,
+        null,
+        animationModel.animations,
+        this.curAnimID,
+        this.lastAnimID,
+        isPose,
+      );
+      this.animationControls.push(this.mainControl);
     }
 
-    this.animationControls.forEach(animationControl => {
-      animationControl.setAnimations(animationModel.animations, this.mixamoModel, this.mouseLookEnabled, isPose)
+    this.animationControls.forEach((animationControl) => {
+      animationControl.setAnimations(
+        animationModel.animations,
+        this.mixamoModel,
+        this.mouseLookEnabled,
+        isPose,
+      );
+      animationControl.syncPlaybackActions(this.curAnimID, this.lastAnimID);
     });
-    this.setTime(poseTime);
-    if(isPose)this.pause();
-    else this.play();
 
+    // Drop trait/accessory controls that could not retarget (no rig / partial VRM).
+    const deadControls = this.animationControls.filter(
+      (control) => control.vrm && !control.animations?.length,
+    );
+    deadControls.forEach((control) => this.disposeAnimation(control));
+
+    this._viewportResync?.();
+
+    this.setTime(poseTime);
+    if (isPose) {
+      this.stop();
+    } else {
+      this.currentSpeed = 1;
+      this.play();
+    }
   }
 
   getCurrentClip(){
@@ -282,6 +400,7 @@ export class AnimationManager{
     this.animationPaths = this.defaultAnimations;
     this.animationControls = [];
     this.mainControl = null;
+    this.primaryAnimationVrm = null;
   }
 
   storeAnimationPaths(pathArray, pathBase, addDefaultAnimationPaths = true){
@@ -300,6 +419,10 @@ export class AnimationManager{
   }
 
   loadNextAnimation(){
+    if (this._studioAnimationEntries?.length) {
+      const next = this.curLoadAnim >= this.animationPaths.length - 1 ? 0 : this.curLoadAnim + 1;
+      return loadStudioAnimationAtIndex(this, next);
+    }
     if (this.curLoadAnim == this.animationPaths.length-1)
       this.curLoadAnim = 0;
     else
@@ -308,6 +431,10 @@ export class AnimationManager{
   }
 
   loadPreviousAnimation(){
+    if (this._studioAnimationEntries?.length) {
+      const prev = this.curLoadAnim <= 0 ? this.animationPaths.length - 1 : this.curLoadAnim - 1;
+      return loadStudioAnimationAtIndex(this, prev);
+    }
     if (this.curLoadAnim == 0)
       this.curLoadAnim = this.animationPaths.length-1;
     else
@@ -316,13 +443,13 @@ export class AnimationManager{
   }
 
   enableScreenshot() {
-    this.animationControls.forEach(control => {
+    this._getActiveAnimationControls().forEach(control => {
       control.reset()
     }); 
   }
 
   disableScreenshot() {
-    this.animationControls.forEach(control => {
+    this._getActiveAnimationControls().forEach(control => {
       control.resume()
     }); 
   }
@@ -348,14 +475,38 @@ export class AnimationManager{
       console.error("Non Existing VRM was provided.")
       return;
     }
-    let animations = null;
-    if (this.mixamoModel != null){
-      animations = [getMixamoAnimation(this.mixamoAnimations, this.mixamoModel.clone() ,vrm)]
-      if (this.animations == null)
-        this.animations = animations;
+
+    const hips =
+      vrm.humanoid?.getNormalizedBoneNode?.('hips') ??
+      vrm.humanoid?.getRawBoneNode?.('hips');
+    if (!hips) {
+      return;
     }
-    else{
+
+    if (this.animationControls.some((control) => control.vrm === vrm)) {
+      return;
+    }
+
+    try {
+      renameVRMBones(vrm);
+    } catch {
+      /* continue with raw bone names */
+    }
+    prepareVrmForMixamoRetarget(vrm);
+
+    let animations = null;
+    if (this.mixamoModel != null && this.mixamoAnimations) {
+      const mixamoRef = prepareMixamoModel(this.mixamoModel.clone());
+      const retargeted = getMixamoAnimation(this.mixamoAnimations, mixamoRef, vrm);
+      animations = retargeted ? [retargeted] : [];
+      if (this.animations == null && retargeted) {
+        this.animations = animations;
+      }
+    } else {
       animations = this.animations;
+    }
+    if (vrm?.humanoid && vrm.humanoid.autoUpdateHumanBones === false) {
+      vrm.humanoid.autoUpdateHumanBones = true;
     }
     const animationControl = new AnimationControl(this, vrm.scene, vrm, animations, this.curAnimID, this.lastAnimID, this.isPaused())
     this.animationControls.push(animationControl);
@@ -383,12 +534,17 @@ export class AnimationManager{
 
     if (index !== -1) {
         const removedControl = this.animationControls.splice(index, 1)[0];
-        // Dispose of any resources associated with the removed AnimationControl
         removedControl.dispose();
+        if (this.primaryAnimationVrm === vrmToRemove) {
+          this.primaryAnimationVrm = null;
+        }
     }
   }
   
   getFromActionTime(){
+    if (this.lastAnimID < 0 || !this.mainControl?.actions?.[this.lastAnimID]) {
+      return 0;
+    }
     return this.mainControl.actions[this.lastAnimID].time;
   }
 
@@ -424,7 +580,7 @@ export class AnimationManager{
       this.curAnimID = getRandomInt(this.animations.length);
       if (this.curAnimID != this.lastAnimID){
         
-        this.animationControls.forEach(animControl => {
+        this._getActiveAnimationControls().forEach(animControl => {
   
           animControl.from = animControl.actions[this.lastAnimID];
           animControl.to = animControl.actions[this.curAnimID];
@@ -446,13 +602,52 @@ export class AnimationManager{
 
   play(){
     this.paused = false;
+    if (!Number.isFinite(this.weightIn)) {
+      this.weightIn = 1;
+    }
+    if (!Number.isFinite(this.weightOut)) {
+      this.weightOut = 0;
+    }
+    const speed = this.currentSpeed === 0 ? 1 : this.currentSpeed;
+    this._getActiveAnimationControls().forEach((control) => {
+      control.syncPlaybackActions?.(this.curAnimID, this.lastAnimID);
+      control.actions?.forEach((action) => {
+        if (action?.paused) action.paused = false;
+      });
+      if (control.to?.paused) control.to.paused = false;
+      if (control.from?.paused) control.from.paused = false;
+    });
+    if (this.currentSpeed === 0) {
+      this.setSpeed(speed);
+    }
+    this.update(true);
+  }
+  stop(){
+    this.pause();
+    this.currentSpeed = 0;
+    this.setSpeed(0);
+    if (this.mainControl) {
+      this._getActiveAnimationControls().forEach((animControl) => {
+        animControl.setTime(0);
+        animControl.actions?.forEach((action) => {
+          action.time = 0;
+        });
+      });
+      this.update(true);
+    }
   }
   isPaused(){
     return this.paused;
   }
+  getSpeed(){
+    return this.currentSpeed;
+  }
+  getTime(){
+    return this.mainControl?.getTime?.() ?? 0;
+  }
   setTime(time){
     if (this.mainControl){
-      this.animationControls.forEach(animControl => {
+      this._getActiveAnimationControls().forEach(animControl => {
         animControl.setTime(time);
       });
     }
@@ -461,8 +656,9 @@ export class AnimationManager{
     this.setTime(frame * 30);
   }
   setSpeed(speed){
+    this.currentSpeed = speed;
     if (this.mainControl){
-      this.animationControls.forEach(animControl => {
+      this._getActiveAnimationControls().forEach(animControl => {
         animControl.setTimeScale(speed);
       });
     }
@@ -470,7 +666,7 @@ export class AnimationManager{
 
   update(force=false){
     if ((this.mainControl && !this.paused)||force) {
-      this.animationControls.forEach(animControl => {
+      this._getActiveAnimationControls().forEach(animControl => {
         animControl.update(this.weightIn,this.weightOut);
       });
 
@@ -483,4 +679,32 @@ export class AnimationManager{
       else this.weightOut = 0;
     }
   }
+
+  /** Runtime diagnostics for animation playback smoke tests. */
+  getPlaybackDiagnostics() {
+    const vrmControls = this.animationControls.filter((c) => c.vrm);
+    const activeControls = this._getActiveAnimationControls();
+    return {
+      paused: this.paused,
+      currentAnimationName: this.currentAnimationName,
+      hasMixamo: !!this.mixamoModel,
+      mixamoClipName: this.currentClip?.name ?? null,
+      controlCount: this.animationControls.length,
+      activeControlCount: activeControls.length,
+      primaryAnimationVrm: !!this.primaryAnimationVrm,
+      vrmControlCount: vrmControls.length,
+      vrmControls: vrmControls.map((c) => ({
+        actionCount: c.actions?.length ?? 0,
+        toWeight: c.to?.weight ?? null,
+        toTime: c.to?.time ?? null,
+        toPaused: c.to?.paused ?? null,
+        mixerTime: c.getTime?.() ?? null,
+        trackCount: c.animations?.[0]?.tracks?.length ?? 0,
+        sampleTracks: (c.animations?.[0]?.tracks ?? []).slice(0, 3).map((t) => t.name),
+        autoUpdateHumanBones: c.vrm?.humanoid?.autoUpdateHumanBones ?? null,
+      })),
+    };
+  }
 }
+
+export { applyVrmHumanoidPose, prepareMixamoModel, MIXER_DELTA };

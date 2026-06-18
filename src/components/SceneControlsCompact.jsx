@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
 import * as THREE from '../library/three.js';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 import './SceneControlsCompact.css';
+
+const SCENE_TOOL_INTERACTIVE_SELECTOR = [
+  'button',
+  'select',
+  'input',
+  'textarea',
+  'a',
+  '[role="slider"]',
+  '.control-select',
+  '.control-button',
+  '.control-checkbox',
+  '.control-slider',
+  '[data-no-drag-scroll]',
+].join(', ');
 
 /**
  * SceneControlsCompact - Comprehensive 3D scene controls for header
@@ -34,7 +49,7 @@ const SceneControlsCompact = ({
     enableVR,
     isInitialized
   } = useScene();
-  const [lighting, setLightingState] = useState('studio');
+  const [lighting, setLightingState] = useState('soft');
   const [cameraMode, setCameraModeState] = useState('orbit');
   const [showStats, setShowStats] = useState(false);
   const [lightIntensity, setLightIntensityState] = useState(1.0);
@@ -44,6 +59,11 @@ const SceneControlsCompact = ({
   const [toneMapping, setToneMappingState] = useState('ACES');
   const [exposure, setExposureState] = useState(1.0);
   const xrControlsRef = useRef(null);
+  const { scrollRef, scrollHandlers } = useDragToScroll({
+    axis: 'x',
+    interactiveSelector: SCENE_TOOL_INTERACTIVE_SELECTOR,
+    draggingClassName: 'is-dragging',
+  });
 
   const handleRenderModeChange = (mode) => {
     console.log(`🎨 Render mode changed to: ${mode}`);
@@ -333,7 +353,15 @@ const SceneControlsCompact = ({
   };
 
   return (
-    <div className="scene-controls-compact">
+    <div
+      ref={scrollRef}
+      className="scene-controls-scroll"
+      role="region"
+      aria-label="Scene Manager"
+      title="Drag to scroll tools left or right"
+      {...scrollHandlers}
+    >
+      <div className="scene-controls-compact">
 
       {/* Original Lighting Controls */}
       <div className="lighting-controls">
@@ -508,6 +536,7 @@ const SceneControlsCompact = ({
         </div>
       </div>
 
+      </div>
     </div>
   );
 };

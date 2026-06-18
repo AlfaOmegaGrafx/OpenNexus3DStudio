@@ -1,0 +1,60 @@
+.hud {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right, 0px));
+  bottom: calc(72px + max(env(safe-area-inset-bottom, 0px), var(--viewport-bottom-inset, 0px)));
+  z-index: 10050;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #e8e8e8;
+  pointer-events: auto;
+  max-width: 200px;
+}
+
+.hudOk {
+  background: rgba(20, 60, 40, 0.88);
+  border: 1px solid rgba(80, 200, 120, 0.5);
+}
+
+.hudWarn {
+  background: rgba(60, 30, 20, 0.9);
+  border: 1px solid rgba(220, 120, 60, 0.55);
+}
+
+.title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  opacity: 0.95;
+}
+
+.recBtn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(220, 120, 60, 0.6);
+  background: rgba(40, 40, 40, 0.9);
+  color: #f0d8c8;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.recBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recBtnActive {
+  border-color: rgba(230, 70, 70, 0.85);
+  background: rgba(120, 30, 30, 0.92);
+  color: #ffe2e2;
+}
+
+.recId {
+  margin-top: 4px;
+  opacity: 0.8;
+  word-break: break-all;
+}

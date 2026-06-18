@@ -1,5 +1,40 @@
 /* SceneControlsCompact - Compact header controls */
 
+.scene-controls-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2a2a2a;
+  box-sizing: border-box;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.scene-controls-scroll.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.scene-controls-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scene-controls-scroll::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.scene-controls-scroll::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
 .scene-controls-compact {
   display: flex;
   align-items: center;
@@ -10,16 +45,15 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 0.8rem;
   color: #e0e0e0;
-  min-width: fit-content;
-  width: min(calc(100vw - 460px), 880px);
-  margin: 0 auto;
-  flex-wrap: wrap;
-  justify-content: center;
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  box-sizing: border-box;
 }
 
 .scene-controls-compact > div {
-  flex: 0 1 auto;
-  min-width: 120px;
+  flex: 0 0 auto;
 }
 
 .control-item {
@@ -185,7 +219,6 @@
     gap: 6px;
     padding: 5px 8px;
     font-size: 0.78rem;
-    width: calc(100vw - 360px);
   }
   
   .control-item {
@@ -208,10 +241,9 @@
 
 @media (max-width: 768px) {
   .scene-controls-compact {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 4px;
     padding: 4px 6px;
-    width: calc(100vw - 160px);
   }
   
   .control-item {
@@ -254,12 +286,16 @@
   margin-right: 4px;
 }
 
-/* Override Three.js VRButton/ARButton absolute positioning */
-.xr-controls button#VRButton,
-.xr-controls button#ARButton {
+/* Override Three.js VRButton/ARButton absolute positioning.
+   Target all buttons — Three.js only sets id="ARButton"/"VRButton" when the
+   feature IS supported; unsupported buttons get no ID and would escape
+   an ID-based selector, leaving position:absolute intact.               */
+.xr-controls button {
   position: relative !important;
   bottom: auto !important;
   left: auto !important;
+  right: auto !important;
+  top: auto !important;
   width: auto !important;
   min-width: 32px !important;
   height: 32px !important;
@@ -278,16 +314,15 @@
   transition: all 0.2s ease !important;
 }
 
-.xr-controls button#VRButton:hover,
-.xr-controls button#ARButton:hover {
+.xr-controls button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2) !important;
   transform: scale(1.1) !important;
 }
 
-.xr-controls button#VRButton:active,
-.xr-controls button#ARButton:active {
+.xr-controls button:active:not(:disabled) {
   transform: scale(0.95) !important;
 }
+
 
 /* Diagnostic views (depth / view normals / UV) */
 .diagnostic-views {

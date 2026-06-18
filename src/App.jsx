@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { SceneProvider, useScene } from './context/SceneContext';
 import { TaskProvider, useTask } from './context/TaskContext';
 import { AudioProvider } from './context/AudioContext';
@@ -6,6 +6,7 @@ import { SoundProvider } from './context/SoundContext';
 import { Core3DProvider } from './context/Core3DContext';
 import Scene3D from './components/Scene3D';
 import TaskManager from './components/TaskManager';
+import WorldLibrary from './components/WorldLibrary';
 import CombinedImport from './components/CombinedImport';
 import RenderModeSelector from './components/RenderModeSelector';
 import APIStatus from './components/APIStatus';
@@ -18,16 +19,31 @@ import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
 import SceneControlsCompact from './components/SceneControlsCompact';
-import * as THREE from './library/three.js';
 import { ensureAbsoluteUrl } from './library/taskManager';
+import { getDefaultModelForFeature } from './library/aiModelsCatalog.js';
+import {
+  enrichCompletedJobPayload,
+  getTaskResultModelUrl,
+  getTaskResultMeshUrl,
+  getTaskResultFbxUrl,
+  getAutoRigMetaFromResult,
+  getTaskResultFileExtension,
+  normalizeTaskLoadPayload,
+  resolveTaskModelUrl,
+} from './library/taskModelUrl';
+import { exportAvatarPipelineVrm } from './library/avatarPipelineExport.js';
+import { attachSplatPreviewMetadata } from './library/vrmTemplateMetadata.js';
 
-// Import CharacterStudio pages (simplified versions)
+// Import OpenNexus3DStudio avatar panels (Appearance, Save, Mint, Load, Tools)
 import AppearanceSimple from './pages/AppearanceSimple';
 import SaveSimple from './pages/SaveSimple';
 import MintSimple from './pages/MintSimple';
 import LoadSimple from './pages/LoadSimple';
 import ToolsSimple from './pages/ToolsSimple';
 import BottomDisplayMenu from './components/BottomDisplayMenu';
+import NativeFaceRelayHud from './components/NativeFaceRelayHud';
+import { useDragToScroll } from './hooks/useDragToScroll';
+import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -47,57 +63,109 @@ function AppContent() {
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
-  const [characterStudioSidebarCollapsed, setCharacterStudioSidebarCollapsed] = useState(true); // CharacterStudio sidebar collapse state - default to collapsed
+  const [openNexusSidebarCollapsed, setOpenNexusSidebarCollapsed] = useState(true); // OpenNexus avatar sidebar — default collapsed
   const combinedImportRef = useRef(null);
-  
+  const headerRef = useRef(null);
+  const sceneControlsRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const syncChromeHeights = () => {
+      const headerHeight = headerRef.current?.offsetHeight ?? 0;
+      const sceneControlsHeight = sceneControlsRef.current?.offsetHeight ?? 0;
+      if (headerHeight > 0) {
+        document.documentElement.style.setProperty('--app-header-height', `${headerHeight}px`);
+      }
+      if (sceneControlsHeight > 0) {
+        document.documentElement.style.setProperty('--scene-controls-height', `${sceneControlsHeight}px`);
+      }
+      const chromeTop = headerHeight + sceneControlsHeight;
+      if (chromeTop > 0) {
+        document.documentElement.style.setProperty('--app-chrome-top-height', `${chromeTop}px`);
+      }
+    };
+
+    const syncLayout = () => {
+      syncChromeHeights();
+      requestAnimationFrame(syncChromeHeights);
+    };
+
+    const unsubscribeViewport = subscribeViewportLayoutSync(syncLayout);
+
+    syncLayout();
+    const observer = new ResizeObserver(syncLayout);
+    if (headerRef.current) observer.observe(headerRef.current);
+    if (sceneControlsRef.current) observer.observe(sceneControlsRef.current);
+
+    const barObserver = new ResizeObserver(syncLayout);
+    const overlay = document.querySelector('.bottom-menu-overlay');
+    if (overlay) barObserver.observe(overlay);
+
+    return () => {
+      unsubscribeViewport();
+      observer.disconnect();
+      barObserver.disconnect();
+    };
+  }, []);
+
+  const { scrollRef: sidebarScrollRef, scrollHandlers: sidebarScrollHandlers } = useDragToScroll({
+    axis: 'y',
+    disabled: sidebarCollapsed,
+    draggingClassName: 'is-drag-scrolling',
+  });
+
+  const { scrollRef: headerScrollRef, scrollHandlers: headerScrollHandlers } = useDragToScroll({
+    axis: 'x',
+    draggingClassName: 'is-dragging',
+  });
+
   // Debug class changes
   useEffect(() => {
     console.log('🔍 Class Debug:', {
       sidebarCollapsed,
-      characterStudioSidebarCollapsed,
-      hasCharacterStudio: !characterStudioSidebarCollapsed,
+      openNexusSidebarCollapsed,
+      hasOpenNexusSidebar: !openNexusSidebarCollapsed,
       mainSidebarCollapsed: sidebarCollapsed
     });
-  }, [sidebarCollapsed, characterStudioSidebarCollapsed]);
+  }, [sidebarCollapsed, openNexusSidebarCollapsed]);
   
   // Synchronized hamburger handlers - when one collapses, the other expands
   const handleLeftHamburgerClick = () => {
     if (sidebarCollapsed) {
       // Left hamburger is expanding - collapse right hamburger
       setSidebarCollapsed(false);
-      setCharacterStudioSidebarCollapsed(true);
+      setOpenNexusSidebarCollapsed(true);
     } else {
       // Left hamburger is collapsing - expand right hamburger
       setSidebarCollapsed(true);
-      setCharacterStudioSidebarCollapsed(false);
+      setOpenNexusSidebarCollapsed(false);
     }
   };
 
   const handleRightHamburgerClick = () => {
-    if (characterStudioSidebarCollapsed) {
+    if (openNexusSidebarCollapsed) {
       // Right hamburger is expanding - collapse left hamburger
-      setCharacterStudioSidebarCollapsed(false);
+      setOpenNexusSidebarCollapsed(false);
       setSidebarCollapsed(true);
     } else {
       // Right hamburger is collapsing - expand left hamburger
-      setCharacterStudioSidebarCollapsed(true);
+      setOpenNexusSidebarCollapsed(true);
       setSidebarCollapsed(false);
     }
   };
 
-  // CharacterStudio menu cycling
-  const characterStudioMenus = ['appearance', 'save', 'mint', 'load', 'tools'];
+  // OpenNexus3DStudio avatar panel menu cycling
+  const openNexusMenus = ['appearance', 'save', 'mint', 'load', 'tools'];
   const [currentMenuIndex, setCurrentMenuIndex] = useState(0); // Default to appearance (index 0)
   
-  const handleCharacterStudioNavigation = (direction) => {
+  const handleOpenNexusNavigation = (direction) => {
     if (direction === 'next') {
-      const nextIndex = (currentMenuIndex + 1) % characterStudioMenus.length;
+      const nextIndex = (currentMenuIndex + 1) % openNexusMenus.length;
       setCurrentMenuIndex(nextIndex);
-      setCurrentPanel(characterStudioMenus[nextIndex]);
+      setCurrentPanel(openNexusMenus[nextIndex]);
     } else if (direction === 'back') {
-      const prevIndex = currentMenuIndex === 0 ? characterStudioMenus.length - 1 : currentMenuIndex - 1;
+      const prevIndex = currentMenuIndex === 0 ? openNexusMenus.length - 1 : currentMenuIndex - 1;
       setCurrentMenuIndex(prevIndex);
-      setCurrentPanel(characterStudioMenus[prevIndex]);
+      setCurrentPanel(openNexusMenus[prevIndex]);
     }
   };
   
@@ -117,15 +185,25 @@ function AppContent() {
     isInitialized,
     currentModel,
     renderMode,
+    rendererType,
     isLoading: sceneLoading,
     loadModel,
+    loadWorldFromManifestUrl,
+    loadWorldEnvironment,
+    clearWorld,
     updateRenderMode,
     clearModel,
     exportModel,
     startRenderLoop,
     getSceneData,
-    sceneManager
+    sceneManager,
+    characterManager,
+    expressionVrmRevision,
   } = useScene();
+
+  const isViewportReady = Boolean(
+    isInitialized && sceneManager?.renderer?.domElement && sceneManager?.scene,
+  );
   
   const {
     isConnected,
@@ -144,31 +222,278 @@ function AppContent() {
     setIsElectron(!!window.electronAPI);
   }, []);
 
-  // Handle task completion and auto-load generated models
+  const pendingGeneratedModelRef = useRef(null);
+
+  // Auto-load completed task meshes into the main viewport (when scene is ready)
   useEffect(() => {
-    const handleTaskCompleted = (event) => {
-      const { taskId, result } = event.detail;
-      console.log('App: Task completed, loading model:', result);
-      
-      if (result && result.modelUrl) {
-        // Load the generated model into the viewport
-        const modelUrl = result.modelUrl.startsWith('/') ? 
-          `${apiEndpoint}${result.modelUrl}` : 
-          result.modelUrl;
-        
-        console.log('App: Loading model from URL:', modelUrl);
-        loadModel(modelUrl).catch(error => {
-          console.error('App: Failed to load generated model:', error);
+    const loadGeneratedWorld = async (taskResult, source = 'taskCompleted') => {
+      const {
+        getWorldManifestUrlFromTaskResult,
+        isFullWorldPackageTaskResult,
+        isSplatEnvironmentTaskResult,
+      } = await import('./library/worldPackage.js');
+      const manifestUrl = getWorldManifestUrlFromTaskResult(taskResult);
+      if (manifestUrl) {
+        const resolvedManifest = resolveTaskModelUrl(manifestUrl, apiEndpoint);
+        const worldBaseUrl = taskResult?.world_base_url || taskResult?.result?.world_base_url;
+        console.log(`App: Loading world package (${source}):`, resolvedManifest);
+        await loadWorldFromManifestUrl(resolvedManifest, {
+          apiEndpoint,
+          worldBaseUrl: worldBaseUrl ? resolveTaskModelUrl(worldBaseUrl, apiEndpoint) : undefined,
         });
+        return true;
+      }
+
+      const splatUrl = getTaskResultModelUrl(taskResult);
+      if (splatUrl && isSplatEnvironmentTaskResult(taskResult)) {
+        const ext = getTaskResultFileExtension(taskResult);
+        const resolved = resolveTaskModelUrl(splatUrl, apiEndpoint);
+        attachSplatPreviewMetadata(resolved);
+        console.log(`App: Loading world environment splat (${source}):`, resolved);
+        await loadWorldEnvironment(resolved, {
+          fromAigc: true,
+          fileExtension: ext || undefined,
+          worldName:
+            taskResult?.prompt?.slice?.(0, 48) ||
+            taskResult?.name ||
+            `Splat ${String(taskResult?.job_id || '').slice(0, 8)}`,
+        });
+        return true;
+      }
+
+      if (isFullWorldPackageTaskResult(taskResult)) {
+        console.warn(`App: World task has no manifest URL (${source})`, taskResult);
+        return false;
+      }
+      return false;
+    };
+
+    const loadGeneratedModel = async (rawUrl, source = 'task', taskResult = null, task = null) => {
+      const resolved = resolveTaskModelUrl(rawUrl, apiEndpoint);
+      if (!resolved) return;
+
+      const jobId =
+        taskResult?.job_id ||
+        taskResult?.jobId ||
+        task?.job_id ||
+        (typeof task?.id === 'string' && task.id.startsWith('job_') ? task.id.slice(4) : null);
+
+      const emitViewportFailed = (error) => {
+        window.dispatchEvent(
+          new CustomEvent('viewportLoadFailed', {
+            detail: {
+              jobId,
+              error: error?.message || String(error),
+            },
+          }),
+        );
+      };
+
+      window.dispatchEvent(
+        new CustomEvent('viewportLoadStart', {
+          detail: { jobId, source },
+        }),
+      );
+
+      const autoRigMeta = getAutoRigMetaFromResult(taskResult);
+      const fileExtension = getTaskResultFileExtension(taskResult, { preferMesh: true });
+      const fbxRaw = getTaskResultFbxUrl(taskResult, autoRigMeta.job_id);
+      const attachRigFbxUrl = fbxRaw ? resolveTaskModelUrl(fbxRaw, apiEndpoint) : null;
+      const isAvatarFromImage = task?.type === 'avatar-from-image';
+      const isTemplateRig =
+        isAvatarFromImage ||
+        autoRigMeta.rig_info?.rig_mode === 'template' ||
+        autoRigMeta.rig_info?.rig_type === 'humanoid_template' ||
+        autoRigMeta.rig_info?.generation_method === 'humanoid_vrm_template' ||
+        taskResult?.inputs?.rig_mode === 'template' ||
+        taskResult?.humanoid_template_id != null ||
+        taskResult?.inputs?.humanoid_template_id != null ||
+        taskResult?.result?.generation_info?.rig_mode === 'template';
+      const isAutoRig =
+        taskResult?.feature === 'auto_rig' ||
+        taskResult?.result?.rig_info != null ||
+        autoRigMeta.bone_count > 0 ||
+        isTemplateRig;
+      const preserveExportedOrientation = isAvatarFromImage || isTemplateRig || isAutoRig;
+      const shouldExportVrm = task?.options?.export_vrm_after === true;
+
+      const runLoad = async () => {
+        console.log(`App: Loading model (${source}):`, resolved);
+        const model = await loadModel(resolved, {
+          fromAigc: true,
+          viewportManaged: true,
+          avatarFromImage: isAvatarFromImage,
+          taskType: task?.type,
+          ensureForwardFacing: false,
+          orientationMode: 'none',
+          autoScale: false,
+          layer: 'player',
+          fileExtension: fileExtension || undefined,
+          autoRigMeta: isAutoRig ? autoRigMeta : null,
+          attachRigFbxUrl: isAutoRig ? attachRigFbxUrl : null,
+          templateRig: isTemplateRig,
+          preserveExportedOrientation,
+        });
+
+        window.dispatchEvent(
+          new CustomEvent('viewportLoadComplete', {
+            detail: { jobId, source },
+          }),
+        );
+
+        if (shouldExportVrm && model) {
+          try {
+            const baseName =
+              task?.prompt?.slice(0, 40).replace(/[^\w-]+/g, '_') || 'avatar_pipeline';
+            await exportAvatarPipelineVrm({
+              model,
+              apiEndpoint,
+              filename: baseName,
+              humanoidTemplateId:
+                taskResult?.humanoid_template_id ||
+                autoRigMeta.rig_info?.humanoid_template_id ||
+                'template',
+              autoRigMeta,
+            });
+            console.log('App: VRM download triggered after avatar pipeline');
+          } catch (exportErr) {
+            console.warn('App: Post-pipeline VRM export failed:', exportErr);
+          }
+        }
+      };
+
+      if (!isViewportReady) {
+        pendingGeneratedModelRef.current = { rawUrl, taskResult, task, source };
+        console.log('App: Scene not ready; queued model load after init');
+        return;
+      }
+      pendingGeneratedModelRef.current = null;
+      runLoad().catch((error) => {
+        console.error('App: Failed to load generated model:', error);
+        emitViewportFailed(error);
+      });
+    };
+
+    const handleTaskCompleted = async (event) => {
+      const { result, task, taskId } = event.detail || {};
+      const loadPayload =
+        normalizeTaskLoadPayload(task) ||
+        enrichCompletedJobPayload(
+          result,
+          result?.job_id || task?.job_id,
+          task?.type || result?.pipeline || null,
+        ) ||
+        result;
+      console.log('App: taskCompleted load', {
+        taskId,
+        taskType: task?.type,
+        feature: loadPayload?.feature,
+        manifest: loadPayload?.world_manifest_url,
+        modelUrl: getTaskResultMeshUrl(loadPayload),
+      });
+      const { isWorldLayerTaskResult } = await import('./library/worldPackage.js');
+      if (isWorldLayerTaskResult(loadPayload)) {
+        try {
+          const loaded = await loadGeneratedWorld(loadPayload, 'taskCompleted');
+          if (loaded) return;
+        } catch (error) {
+          console.error('App: Failed to load generated world:', error);
+        }
+        if (loadPayload?.feature === 'image_to_world' || loadPayload?.pipelineStage === 'world_package') {
+          return;
+        }
+      }
+      const rawUrl = getTaskResultMeshUrl(loadPayload);
+      if (rawUrl) await loadGeneratedModel(rawUrl, 'taskCompleted', loadPayload, task);
+    };
+
+    const handleLoadModelFromUrl = async (event) => {
+      const task = event.detail?.task || null;
+      const loadPayload =
+        normalizeTaskLoadPayload(task) ||
+        normalizeTaskLoadPayload({
+          result: event.detail?.result,
+          job_id: event.detail?.result?.job_id,
+          type: task?.type,
+        }) ||
+        event.detail?.result;
+      const { isFullWorldPackageTaskResult, isSplatEnvironmentTaskResult } = await import(
+        './library/worldPackage.js',
+      );
+      const isWorld =
+        isFullWorldPackageTaskResult(loadPayload) || isSplatEnvironmentTaskResult(loadPayload);
+      console.log('App: loadModelFromUrl event', {
+        taskId: event.detail?.taskId,
+        feature: loadPayload?.feature,
+        isWorld,
+        modelUrl: getTaskResultMeshUrl(loadPayload),
+      });
+      if (isWorld) {
+        try {
+          const loaded = await loadGeneratedWorld(loadPayload, 'loadModelFromUrl');
+          if (loaded) return;
+        } catch (error) {
+          console.error('App: Failed to load world from URL event:', error);
+        }
+        if (isFullWorldPackageTaskResult(loadPayload)) {
+          return;
+        }
+      }
+      const rawUrl =
+        event.detail?.url || getTaskResultMeshUrl(loadPayload) || getTaskResultModelUrl(loadPayload);
+      if (rawUrl) {
+        await loadGeneratedModel(rawUrl, 'loadModelFromUrl', loadPayload, task);
+      } else {
+        console.warn('App: loadModelFromUrl — no model URL in payload', loadPayload);
+        window.dispatchEvent(
+          new CustomEvent('viewportLoadFailed', {
+            detail: {
+              jobId: event.detail?.taskId,
+              error: 'No model URL in task result',
+            },
+          }),
+        );
       }
     };
 
     window.addEventListener('taskCompleted', handleTaskCompleted);
-    
+    window.addEventListener('loadModelFromUrl', handleLoadModelFromUrl);
+
     return () => {
       window.removeEventListener('taskCompleted', handleTaskCompleted);
+      window.removeEventListener('loadModelFromUrl', handleLoadModelFromUrl);
     };
-  }, [loadModel, apiEndpoint]);
+  }, [
+    loadModel,
+    loadWorldFromManifestUrl,
+    loadWorldEnvironment,
+    apiEndpoint,
+    isViewportReady,
+  ]);
+
+  useEffect(() => {
+    const flushPending = () => {
+      if (!isViewportReady || !pendingGeneratedModelRef.current) return;
+      const pending = pendingGeneratedModelRef.current;
+      pendingGeneratedModelRef.current = null;
+      console.log('App: Scene ready; loading queued model:', pending.rawUrl);
+      window.dispatchEvent(
+        new CustomEvent('loadModelFromUrl', {
+          detail: {
+            url: pending.rawUrl,
+            result: pending.taskResult,
+            task: pending.task,
+            taskId: pending.task?.id,
+            source: pending.source || 'pendingQueue',
+          },
+        }),
+      );
+    };
+
+    flushPending();
+    window.addEventListener('sceneViewportReady', flushPending);
+    return () => window.removeEventListener('sceneViewportReady', flushPending);
+  }, [isViewportReady]);
 
   // Handle render mode changes with state tracking
   const handleRenderModeChange = useCallback((mode) => {
@@ -252,7 +577,6 @@ function AppContent() {
       'auto-rigging',
       'mesh-painting',
       'mesh-painting-text',
-      'part-completion',
       'mesh-retopology',
       'mesh-uv-unwrapping',
       'mesh-editing-text',
@@ -266,7 +590,7 @@ function AppContent() {
         console.log('App: Exporting current model to GLB for', taskType);
         // Use getGLBBlobData from download-utils
         const { getGLBBlobData } = await import('./library/download-utils.js');
-        modelData = await getGLBBlobData(currentModel, { optimized: true });
+        modelData = await getGLBBlobData(currentModel, { forApiUpload: true });
         console.log('App: Model exported successfully, size:', modelData.size, 'bytes');
       } catch (error) {
         console.error('App: Failed to export model:', error);
@@ -326,55 +650,47 @@ function AppContent() {
     }
   }, [isElectron, clearModel, loadModel]);
 
-  // Ensure main scene has sky background image from Character Studio
-  useEffect(() => {
-    if (sceneManager && sceneManager.scene) {
-      // Load the sky background image
-      const textureLoader = new THREE.TextureLoader();
-      textureLoader.load(
-        '/assets/backgrounds/background4.jpg',
-        (texture) => {
-          texture.mapping = THREE.EquirectangularReflectionMapping;
-          sceneManager.scene.background = texture;
-        },
-        undefined,
-        (error) => {
-          console.error('Failed to load sky background image:', error);
-        }
-      );
-    }
-  }, [sceneManager]);
-
-  // Note: Removed separate CharacterStudio 3D viewport - sky background is now handled by main canvas
+  // Note: Sky background is loaded in SceneManager.setupHDREnvironment() before the first frame.
 
   // Check if there are any running tasks
-  const hasRunningTasks = tasks.some(task => task.status === 'running');
+  const hasRunningTasks = tasks.some(
+    (task) => task.status === 'running' || task.status === 'pending',
+  );
 
   return (
     <div className="app">
       <TaskProgressBar tasks={tasks} />
-      <header className="app-header">
-        <div className="title-container">
+      <header ref={headerRef} className="app-header">
+        {/* Title bar — horizontal inline row on top */}
+        <div className="title-bar">
           <h1 className="main-title">OpenNexus3DStudio:</h1>
-          <div className="audiowave-text">
-            <div className="space-time-row">
-              <span className="space-time">SPACE-TIME</span>
-            </div>
-            <div className="edition-row">
-              <span className="edition">EDITION</span>
-            </div>
-          </div>
+          <span className="audiowave-text">
+            <span className="space-time-row">SPACE-TIME</span>
+            <span className="edition-row">EDITION</span>
+          </span>
           <div className="title-api-control">
-            <div className="api-status-compact">
-              <div 
-                className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}
-              />
+            <div
+              className="api-status-compact"
+              onClick={forceConnectionCheck}
+              title={isConnected ? 'API Connected' : 'Click to reconnect'}
+            >
+              <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />
               <span className="status-text">
                 {isConnected ? 'Connected' : 'Disconnected'}
               </span>
             </div>
           </div>
+          <a className="title-xr-lab-link" href="/xr" title="IWSDK immersive mode (WebXR lab)">
+            XR Lab
+          </a>
         </div>
+
+        {/* Header controls — scrollable row below title */}
+        <div
+          ref={headerScrollRef}
+          className="header-controls-scroll"
+          {...headerScrollHandlers}
+        >
         <div className="header-controls">
           {/* Audio Controls */}
           <div className="header-section audio-section">
@@ -464,7 +780,9 @@ function AppContent() {
                   input.accept = 'image/*';
                   input.onchange = (e) => {
                     if (e.target.files[0]) {
-                      handleAITask('image-to-3d', 'Convert image to 3D', e.target.files[0]);
+                      handleAITask('image-to-3d', 'Convert image to 3D', e.target.files[0], {
+                        model_preference: getDefaultModelForFeature('image-to-3d'),
+                      });
                     }
                   };
                   input.click();
@@ -480,7 +798,7 @@ function AppContent() {
           {/* Render modes + diagnostic shading (header) */}
           <div className="header-section four-button-section">
             <div className="header-section-title">Render</div>
-            <div className="header-controls-group" style={{ flexWrap: 'wrap', rowGap: '0.25rem', maxWidth: '240px' }}>
+            <div className="header-controls-group">
               <button 
                 className={`header-btn ${renderModeStates.solid ? 'active' : ''}`}
                 onClick={() => handleRenderModeChange('solid')}
@@ -521,8 +839,8 @@ function AppContent() {
                 // 3. Control panels via blendShapeControls
                 if (window.blendShapeControls) {
                   console.log('Skeleton ON - hiding blend shapes, showing bone structure');
-                  window.blendShapeControls.setBlendShapesVisible(false); // Collapse blend shapes
-                  window.blendShapeControls.setBonePanelVisible(true);   // Expand bone structure
+                  window.blendShapeControls.setBlendShapesVisible(false);
+                  window.blendShapeControls.setBonePanelVisible(true);
                   
                   // 4. Auto-scroll to bone structure panel
                   setTimeout(() => {
@@ -560,8 +878,8 @@ function AppContent() {
                 // 3. Control panels via blendShapeControls
                 if (window.blendShapeControls) {
                   console.log('Skeleton OFF - showing blend shapes, hiding bone structure');
-                  window.blendShapeControls.setBlendShapesVisible(true);  // Expand blend shapes
-                  window.blendShapeControls.setBonePanelVisible(false);  // Collapse bone structure
+                  window.blendShapeControls.setBlendShapesVisible(true);
+                  window.blendShapeControls.setBonePanelVisible(false);
                   
                   // 4. Auto-scroll to blend shapes panel
                   setTimeout(() => {
@@ -651,7 +969,7 @@ function AppContent() {
             </div>
           </div>
 
-          {/* CharacterStudio Panels - Moved to end */}
+          {/* OpenNexus3DStudio avatar panels */}
           <div className="header-section four-button-section">
             <div className="header-section-title">Studio</div>
             <div className="header-controls-group studio-controls">
@@ -660,7 +978,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentPanel('appearance');
                   setCurrentMenuIndex(0);
-                  setCharacterStudioSidebarCollapsed(false);
+                  setOpenNexusSidebarCollapsed(false);
                 }}
                 title="Character Appearance"
               >
@@ -671,7 +989,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentPanel('save');
                   setCurrentMenuIndex(1);
-                  setCharacterStudioSidebarCollapsed(false);
+                  setOpenNexusSidebarCollapsed(false);
                 }}
                 title="Save Character"
               >
@@ -682,7 +1000,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentPanel('mint');
                   setCurrentMenuIndex(2);
-                  setCharacterStudioSidebarCollapsed(false);
+                  setOpenNexusSidebarCollapsed(false);
                 }}
                 title="Mint Character"
               >
@@ -693,7 +1011,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentPanel('load');
                   setCurrentMenuIndex(3);
-                  setCharacterStudioSidebarCollapsed(false);
+                  setOpenNexusSidebarCollapsed(false);
                 }}
                 title="Load Character"
               >
@@ -704,7 +1022,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentPanel('tools');
                   setCurrentMenuIndex(4);
-                  setCharacterStudioSidebarCollapsed(false);
+                  setOpenNexusSidebarCollapsed(false);
                 }}
                 title="3D Tools & Export"
               >
@@ -714,10 +1032,24 @@ function AppContent() {
           </div>
 
         </div>
+        </div>
       </header>
 
-      {/* Scene Controls Row - Below Header */}
-      <div className="scene-controls-row">
+      {/* Scene Manager row — hamburgers flank toolbar for vertical alignment */}
+      <div className="scene-controls-row" ref={sceneControlsRef}>
+        <button
+          type="button"
+          className="anchored-left-hamburger scene-controls-hamburger"
+          onClick={handleLeftHamburgerClick}
+          title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <div className="hamburger-icon">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </button>
         <div className="scene-controls-container">
           <SceneControlsCompact
             sceneManager={sceneManager}
@@ -733,37 +1065,132 @@ function AppContent() {
             }}
           />
         </div>
+        <button
+          type="button"
+          className="anchored-right-hamburger scene-controls-hamburger"
+          onClick={handleRightHamburgerClick}
+          title={openNexusSidebarCollapsed ? 'Expand OpenNexus3DStudio' : 'Collapse OpenNexus3DStudio'}
+          aria-label={
+            openNexusSidebarCollapsed ? 'Expand OpenNexus3DStudio' : 'Collapse OpenNexus3DStudio'
+          }
+        >
+          <div className="hamburger-icon">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </button>
       </div>
 
-      {/* Anchored Hamburger Menus */}
-      <button
-        className="anchored-left-hamburger"
-        onClick={handleLeftHamburgerClick}
-        title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-      >
-        <div className="hamburger-icon">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </button>
+      {/* OpenNexus3DStudio avatar sidebar — fixed below header + scene-controls */}
+      <div className={`opennexus-sidebar ${openNexusSidebarCollapsed ? 'collapsed' : ''}`}>
+        <button
+          type="button"
+          className="opennexus-sticky-hamburger"
+          onClick={handleRightHamburgerClick}
+          title={openNexusSidebarCollapsed ? 'Expand OpenNexus3DStudio' : 'Collapse OpenNexus3DStudio'}
+        >
+          <div className="hamburger-icon">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </button>
 
-      <button
-        className="anchored-right-hamburger"
-        onClick={handleRightHamburgerClick}
-        title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
-      >
-        <div className="hamburger-icon">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </button>
+        {openNexusSidebarCollapsed && (
+          <div className="collapsed-opennexus-icons">
+            <button
+              type="button"
+              className={`opennexus-sidebar-icon ${currentPanel === 'appearance' ? 'active' : ''}`}
+              onClick={() => {
+                setOpenNexusSidebarCollapsed(false);
+                setCurrentPanel('appearance');
+                setCurrentMenuIndex(0);
+              }}
+              data-tooltip="Character Appearance"
+              title="Character Appearance"
+            >
+              👤
+            </button>
+            <button
+              type="button"
+              className={`opennexus-sidebar-icon ${currentPanel === 'save' ? 'active' : ''}`}
+              onClick={() => {
+                setOpenNexusSidebarCollapsed(false);
+                setCurrentPanel('save');
+                setCurrentMenuIndex(1);
+              }}
+              data-tooltip="Save Character"
+              title="Save Character"
+            >
+              💾
+            </button>
+            <button
+              type="button"
+              className={`opennexus-sidebar-icon ${currentPanel === 'mint' ? 'active' : ''}`}
+              onClick={() => {
+                setOpenNexusSidebarCollapsed(false);
+                setCurrentPanel('mint');
+                setCurrentMenuIndex(2);
+              }}
+              data-tooltip="Mint Character"
+              title="Mint Character"
+            >
+              🪙
+            </button>
+            <button
+              type="button"
+              className={`opennexus-sidebar-icon ${currentPanel === 'load' ? 'active' : ''}`}
+              onClick={() => {
+                setOpenNexusSidebarCollapsed(false);
+                setCurrentPanel('load');
+                setCurrentMenuIndex(3);
+              }}
+              data-tooltip="Load Character"
+              title="Load Character"
+            >
+              📁
+            </button>
+            <button
+              type="button"
+              className={`opennexus-sidebar-icon ${currentPanel === 'tools' ? 'active' : ''}`}
+              onClick={() => {
+                setOpenNexusSidebarCollapsed(false);
+                setCurrentPanel('tools');
+                setCurrentMenuIndex(4);
+              }}
+              data-tooltip="3D Tools & Export"
+              title="3D Tools & Export"
+            >
+              🛠️
+            </button>
+          </div>
+        )}
 
-      {/* Removed redundant viewport toggle - now controlled by sidebar */}
+        {!openNexusSidebarCollapsed && (
+          <div className="opennexus-content">
+            <div className="opennexus-header">
+              <h3 className="opennexus-title">OpenNexus3DStudio</h3>
+            </div>
+            <div className="opennexus-panels">
+              {currentPanel === 'appearance' && <AppearanceSimple onNavigate={handleOpenNexusNavigation} />}
+              {currentPanel === 'save' && <SaveSimple onNavigate={handleOpenNexusNavigation} />}
+              {currentPanel === 'mint' && <MintSimple onNavigate={handleOpenNexusNavigation} />}
+              {currentPanel === 'load' && <LoadSimple onNavigate={handleOpenNexusNavigation} />}
+              {currentPanel === 'tools' && <ToolsSimple onNavigate={handleOpenNexusNavigation} />}
+            </div>
+          </div>
+        )}
+      </div>
 
-      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!characterStudioSidebarCollapsed ? 'has-character-studio' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
-        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ position: 'relative' }}>
+      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!openNexusSidebarCollapsed ? 'has-opennexus' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
+        <div
+          ref={sidebarScrollRef}
+          className={`sidebar ${sidebarCollapsed ? 'collapsed' : 'sidebar-scroll-panel'}`}
+          style={{ position: 'relative' }}
+          title={sidebarCollapsed ? undefined : 'Drag to scroll panel'}
+          {...(sidebarCollapsed ? {} : sidebarScrollHandlers)}
+        >
           {/* Hamburger Menu Button */}
           <button 
             className="hamburger-menu"
@@ -840,7 +1267,9 @@ function AppContent() {
                     input.accept = 'image/*';
                     input.onchange = (e) => {
                       if (e.target.files[0]) {
-                        handleAITask('image-to-3d', null, e.target.files[0]);
+                        handleAITask('image-to-3d', null, e.target.files[0], {
+                          model_preference: getDefaultModelForFeature('image-to-3d'),
+                        });
                       }
                     };
                     input.click();
@@ -880,10 +1309,11 @@ function AppContent() {
             <>
           <BlendShapeController 
             sceneManager={sceneManager}
+            characterManager={characterManager}
             currentModel={currentModel}
+            expressionVrmRevision={expressionVrmRevision}
             isVisible={true}
             onToggle={(controls) => {
-              // Store the controls for use by skeleton button
               window.blendShapeControls = controls;
             }}
             isActive={skeletonActive}
@@ -897,6 +1327,7 @@ function AppContent() {
           <APIStatus 
             endpoint={apiEndpoint}
             isConnected={isConnected}
+            rendererType={rendererType}
             onEndpointChange={setApiEndpoint}
             onTestConnection={forceConnectionCheck}
           />
@@ -905,6 +1336,7 @@ function AppContent() {
             onAITask={handleAITask}
             isApiConnected={isConnected}
           />
+          <WorldLibrary apiEndpoint={apiEndpoint} compact />
           {/* Debug info */}
           <div style={{ background: '#333', padding: '0.5rem', margin: '0.25rem 0', borderRadius: '4px', fontSize: '0.7rem' }}>
             <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
@@ -936,106 +1368,11 @@ function AppContent() {
             model={currentModel}
             renderMode={renderMode}
           />
-          {/* Bottom Animations Panel */}
-          <BottomDisplayMenu />
-        </div>
-
-        {/* CharacterStudio Sidebar */}
-        <div className={`character-studio-sidebar ${characterStudioSidebarCollapsed ? 'collapsed' : ''}`}>
-          {/* CharacterStudio Sticky Hamburger Menu - Always Visible */}
-          <button 
-            className="character-studio-sticky-hamburger"
-            onClick={handleRightHamburgerClick}
-            title={characterStudioSidebarCollapsed ? 'Expand CharacterStudio' : 'Collapse CharacterStudio'}
-          >
-            <div className="hamburger-icon">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          </button>
-
-          {/* Collapsed CharacterStudio Sidebar Icons */}
-          {characterStudioSidebarCollapsed && (
-            <div className="collapsed-character-studio-icons">
-              <button 
-                className={`character-studio-sidebar-icon ${currentPanel === 'appearance' ? 'active' : ''}`}
-                onClick={() => {
-                  setCharacterStudioSidebarCollapsed(false);
-                  setCurrentPanel('appearance');
-                  setCurrentMenuIndex(0);
-                }}
-                data-tooltip="Character Appearance"
-                title="Character Appearance"
-              >
-                👤
-              </button>
-              <button 
-                className={`character-studio-sidebar-icon ${currentPanel === 'save' ? 'active' : ''}`}
-                onClick={() => {
-                  setCharacterStudioSidebarCollapsed(false);
-                  setCurrentPanel('save');
-                  setCurrentMenuIndex(1);
-                }}
-                data-tooltip="Save Character"
-                title="Save Character"
-              >
-                💾
-              </button>
-              <button 
-                className={`character-studio-sidebar-icon ${currentPanel === 'mint' ? 'active' : ''}`}
-                onClick={() => {
-                  setCharacterStudioSidebarCollapsed(false);
-                  setCurrentPanel('mint');
-                  setCurrentMenuIndex(2);
-                }}
-                data-tooltip="Mint Character"
-                title="Mint Character"
-              >
-                🪙
-              </button>
-              <button 
-                className={`character-studio-sidebar-icon ${currentPanel === 'load' ? 'active' : ''}`}
-                onClick={() => {
-                  setCharacterStudioSidebarCollapsed(false);
-                  setCurrentPanel('load');
-                  setCurrentMenuIndex(3);
-                }}
-                data-tooltip="Load Character"
-                title="Load Character"
-              >
-                📁
-              </button>
-              <button 
-                className={`character-studio-sidebar-icon ${currentPanel === 'tools' ? 'active' : ''}`}
-                onClick={() => {
-                  setCharacterStudioSidebarCollapsed(false);
-                  setCurrentPanel('tools');
-                  setCurrentMenuIndex(4);
-                }}
-                data-tooltip="3D Tools & Export"
-                title="3D Tools & Export"
-              >
-                🛠️
-              </button>
-            </div>
-          )}
-
-          {/* Full CharacterStudio Sidebar Content */}
-          {!characterStudioSidebarCollapsed && (
-            <div className="character-studio-content">
-              <div className="character-studio-header">
-                <h3 className="character-studio-title">CharacterStudio</h3>
-              </div>
-              <div className="character-studio-panels">
-                {currentPanel === 'appearance' && <AppearanceSimple onNavigate={handleCharacterStudioNavigation} />}
-                {currentPanel === 'save' && <SaveSimple onNavigate={handleCharacterStudioNavigation} />}
-                {currentPanel === 'mint' && <MintSimple onNavigate={handleCharacterStudioNavigation} />}
-                {currentPanel === 'load' && <LoadSimple onNavigate={handleCharacterStudioNavigation} />}
-                {currentPanel === 'tools' && <ToolsSimple onNavigate={handleCharacterStudioNavigation} />}
-              </div>
-            </div>
-          )}
+          {/* Bottom Animations Panel (overlay-anchored so it isn't clipped by the full-height scene) */}
+          <div className="bottom-menu-overlay">
+            <BottomDisplayMenu />
+          </div>
+          <NativeFaceRelayHud />
         </div>
       </div>
     </div>
@@ -1045,17 +1382,17 @@ function AppContent() {
 function App() {
   return (
     <ErrorBoundary showDetails={true}>
-      <AudioProvider>
-        <SoundProvider>
-          <SceneProvider>
-            <TaskProvider>
+      <TaskProvider>
+        <AudioProvider>
+          <SoundProvider>
+            <SceneProvider>
               <Core3DProvider>
                 <AppContent />
               </Core3DProvider>
-            </TaskProvider>
-          </SceneProvider>
-        </SoundProvider>
-      </AudioProvider>
+            </SceneProvider>
+          </SoundProvider>
+        </AudioProvider>
+      </TaskProvider>
     </ErrorBoundary>
   );
 }

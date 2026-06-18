@@ -42,7 +42,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
 
 ### CharacterStudio Features
 - **VRM Support**: Full VRM model loading and manipulation
-- **Blend Shapes**: Facial expression controls
+- **Blend Shapes**: VRM facial expression controls
 - **Character Animation**: Bone and animation support
 - **VRM Export**: Export models in VRM format
 - **Character Studio Integration**: Seamless workflow integration

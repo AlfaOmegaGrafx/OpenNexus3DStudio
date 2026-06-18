@@ -38,7 +38,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
           onModelImported(processedModel, file);
         }
         
-        alert('Model imported successfully for CharacterStudio!');
+        alert('Model imported successfully into OpenNexus3DStudio!');
       } else {
         console.warn('Model validation issues:', validation.issues);
         alert(`Model imported with issues: ${validation.issues.join(', ')}`);
@@ -56,16 +56,16 @@ const CharacterStudioImport = ({ onModelImported }) => {
   };
 
   return (
-    <div className="character-studio-import">
+    <div className="opennexus-import">
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">CharacterStudio Import</h3>
+          <h3 className="card-title">OpenNexus3DStudio GLB Import</h3>
         </div>
         
         <div className="import-content">
           <div className="import-info mb-3">
             <p className="text-sm text-gray-400 mb-2">
-              Import GLB files exported from OpenNexus3DStudio for use in CharacterStudio
+              Import GLB files into OpenNexus3DStudio avatar workflows (VRM-ready)
             </p>
             <div className="feature-list">
               <div className="feature-item">
@@ -74,7 +74,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
               </div>
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
-                <span>CharacterStudio optimization</span>
+                <span>OpenNexus3DStudio optimization</span>
               </div>
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
@@ -107,7 +107,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
                   Processing...
                 </>
               ) : (
-                'Import GLB for CharacterStudio'
+                'Import GLB for OpenNexus3DStudio'
               )}
             </button>
           </div>

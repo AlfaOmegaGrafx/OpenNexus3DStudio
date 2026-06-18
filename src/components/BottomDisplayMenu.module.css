@@ -1,43 +1,147 @@
+/* Default: flex child of bottom-menu-overlay */
+.Container {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* Main app: fixed to main-viewport rect (excludes OpenNexus3DStudio avatar sidebar). */
+.ContainerViewportDocked {
+  position: fixed;
+  left: var(--dock-left, 0);
+  bottom: max(
+    var(--dock-bottom-gap, 0px),
+    var(--viewport-bottom-inset, 0px),
+    env(safe-area-inset-bottom, 0px)
+  );
+  width: var(--dock-width, 100%);
+  height: auto;
+  max-height: none;
+  z-index: var(--z-scene-controls, 1002);
+  pointer-events: none;
+}
+
+.ContainerViewportDocked.ContainerMinimized {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding-right: 0;
+}
+
+.bottomBarStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: auto;
+}
 
 .ContainerPositionTop {
   padding: 0;
   margin: 0;
-  margin-bottom: 105px;
-  width:180px;
+  width: 180px;
   height: 35px;
-  z-index: 1000;
   backdrop-filter: blur(22.5px);
   background: rgba(5, 11, 14, 0.8);
   user-select: none;
-  position: absolute;
+  position: relative;
   border-radius: 20px 20px 0 0;
+  display: flex;
   align-items: center;
 }
 
 .ContainerPosition {
   padding: 0;
   margin: 0;
-  margin-bottom: 20px;
-  width:300px;
+  width: 300px;
   height: 85px;
   backdrop-filter: blur(22.5px);
   background: rgba(5, 11, 14, 0.8);
-  z-index: 1000;
   user-select: none;
-  position: absolute;
+  position: relative;
+  border-radius: 0 0 8px 8px;
 }
 
-.Container {
+.barFooter {
   display: flex;
-  min-height: 100vh;
-  margin: 0;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 34px;
+  padding: 0 36px 4px 6px;
+  box-sizing: border-box;
+  position: relative;
 }
 
+.minimizeButton {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(8, 234, 160, 0.35);
+  border-radius: 6px;
+  background: rgba(30, 37, 48, 0.95);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.minimizeButton:hover {
+  border-color: rgba(8, 234, 160, 0.7);
+  background: rgba(40, 50, 62, 0.98);
+}
+
+.minimizeButtonIcon {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: -2px;
+}
+
+.minimizedChip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(220px, calc(100% - 24px));
+  margin: 0 var(--dock-chip-right-inset, 16px) 0 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(8, 234, 160, 0.45);
+  border-radius: 8px;
+  background: rgba(5, 11, 14, 0.92);
+  backdrop-filter: blur(22.5px);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.minimizedChipIcon {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.minimizedChipLabel {
+  font-size: 13px;
+  text-shadow: 1px 1px 2px black;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .arrow-button {
-
   cursor: pointer;
   overflow: hidden;
   opacity: 0.8;
@@ -52,40 +156,26 @@
   margin-bottom: 10px;
   background-color: #1e2530;
 }
-.left-button{
+.left-button {
   background: url('./ui/backButton_small.png');
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
 
-.right-button{
+.right-button {
   background: url('./ui/nextButton_small.png');
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
 .topLine {
-  background: rgb(0, 149, 100);
-  background: -moz-linear-gradient(
-    90deg,
-    rgba(0, 149, 100, 0) 0%,
-    rgba(8, 234, 160, 1) 50%,
-    rgba(0, 149, 100, 0) 100%
-  );
-  background: -webkit-linear-gradient(
-    90deg,
-    rgba(0, 149, 100, 0) 0%,
-    rgba(8, 234, 160, 1) 50%,
-    rgba(0, 149, 100, 0) 100%
-  );
   background: linear-gradient(
     90deg,
     rgba(0, 149, 100, 0) 0%,
     rgba(8, 234, 160, 1) 50%,
     rgba(0, 149, 100, 0) 100%
   );
-  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#009564",endColorstr="#009564",GradientType=1);
   position: absolute;
   top: 0;
   left: 0;
@@ -95,40 +185,41 @@
 
 .traitInfoTitle {
   color: white;
-  /* text-transform: uppercase; */
   text-shadow: 1px 1px 2px black;
   font-size: 16px;
   word-spacing: 2px;
   margin-bottom: 10px;
 }
 
-.flexSelect{
+.flexSelect {
   display: flex;
   justify-content: space-between;
   width: 95%;
-  height:40px;
+  height: 40px;
   margin: 5px auto 0;
   align-items: center;
 }
 
-.flexButtons{
+.flexButtons {
   display: flex;
   justify-content: space-between;
   width: 100px;
-  height:30px;
-  margin: 0px auto;
+  height: 30px;
+  margin: 0 auto;
   align-items: center;
 }
-.flexButtonsTop{
+.flexButtonsTop {
   display: flex;
-  justify-content: space-around;
-  width: 150px;
-  height:100%;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
   margin: auto;
-  padding-top: -3 0px;
+  padding: 0 8px;
   align-items: center;
+  box-sizing: border-box;
 }
-.optionButtons{
+.optionButtons {
   cursor: pointer;
   overflow: hidden;
   opacity: 0.8;
@@ -140,7 +231,7 @@
   display: flex;
   justify-content: space-around;
 }
-.optionButtonsSmall{
+.optionButtonsSmall {
   cursor: pointer;
   overflow: hidden;
   opacity: 0.8;
@@ -151,14 +242,30 @@
   align-items: center;
   display: flex;
   justify-content: space-around;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 
-.optionButtons img{
+.playPauseButton,
+.playStopButton {
+  opacity: 1;
+}
+
+.stopIcon {
+  display: block;
+  width: 62%;
+  height: 62%;
+  background: rgba(255, 255, 255, 0.92);
+  margin: auto;
+}
+
+.optionButtons img {
   width: 100%;
   height: 100%;
 }
 
-.optionButtonsSmall img{
+.optionButtonsSmall img {
   width: 80%;
   height: 80%;
 }
@@ -177,3 +284,14 @@
   padding: 0 4px;
 }
 
+/* Standalone pages (Appearance etc.): minimized chip bottom-right of screen */
+.Container.ContainerMinimized:not(.ContainerViewportDocked) {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(12px, env(safe-area-inset-bottom, 0px), var(--viewport-bottom-inset, 0px));
+  left: auto;
+  width: auto;
+  height: auto;
+  align-items: flex-end;
+  justify-content: flex-end;
+}

@@ -33,24 +33,6 @@ export function ensureSceneRoots(sceneManager) {
 }
 
 /**
- * Ensure world/player/props layer roots are direct scene children when not in XR.
- * Fixes re-entry after XR teardown when an avatar loads before the next session.
- * @param {import('./sceneManager.js').SceneManager} sceneManager
- */
-export function normalizeSceneLayerRoots(sceneManager) {
-  if (!sceneManager?.scene) return;
-  if (sceneManager.renderer?.xr?.isPresenting) return;
-
-  ensureSceneRoots(sceneManager);
-  for (const key of FLOOR_ANCHOR_LAYER_KEYS) {
-    const root = sceneManager[key];
-    if (root && root.parent !== sceneManager.scene) {
-      sceneManager.scene.add(root);
-    }
-  }
-}
-
-/**
  * @param {import('./sceneManager.js').SceneManager} sceneManager
  */
 export function clearWorld(sceneManager) {

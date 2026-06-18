@@ -16,6 +16,16 @@ Browse the [screenshot & demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7
 
 Deploy the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend on your own machine or server (see **API Backend Setup** below). Screenshots: [demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7).
 
+### Public demo (Vercel)
+
+The repo is **Vercel deploy-ready** for a public viewport demo (VRM upload, traits, UI) without exposing LAN/DGX secrets:
+
+- Config: [`vercel.json`](vercel.json) — `VITE_PUBLIC_DEMO=1`, loot assets via CDN
+- Build guard: `npm run verify:public-env` blocks client secrets on CI/Vercel
+- Docs: [docs/PUBLIC_DEPLOY.md](docs/PUBLIC_DEPLOY.md)
+
+Import the GitHub repo in Vercel; no `VITE_API_ENDPOINT` required for the public demo. Full AI generation stays on local dev + self-hosted [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API).
+
 ## 🚀 Core Principles
 - **All Local**: No data leaves your device. 
 - **Open Source**: Apache2.0 licensed.

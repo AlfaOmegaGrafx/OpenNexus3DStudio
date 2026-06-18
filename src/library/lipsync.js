@@ -87,6 +87,8 @@ export class LipSync {
   constructor(vrm) {
     this.vrm = vrm
     this._micStream = null
+    /** When true, mic FFT visemes are not applied (e.g. webcam face tracking owns the mouth). */
+    this._suspended = false
 
     const update = (deltaTime, elapsedTime) => {
       requestAnimationFrame(update)
@@ -95,6 +97,18 @@ export class LipSync {
 
     update()
 
+  }
+
+  /** Pause mic-driven visemes without tearing down the audio graph. */
+  setSuspended(suspended) {
+    this._suspended = !!suspended;
+    if (this._suspended && this.vrm) {
+      clearXRDriverLipSyncVisemeOverride(this.vrm);
+    }
+  }
+
+  isSuspended() {
+    return this._suspended;
   }
 
   /**
@@ -188,6 +202,7 @@ export class LipSync {
   }
 
   update(deltaTime) {
+    if (this._suspended) return;
     if (this.meter) {
       const { volume } = this.meter;
       const em = this.vrm?.expressionManager;
@@ -449,7 +464,7 @@ export class LipSync {
     )
 
     // Spectral bands beyond the masc/fem vowel formants → consonant cues.
-    const hzToBin = (hz) => Math.round(((2 * FFT_SIZE) / samplingFrequency) * hz)
+    const hzToBin = (hz) => Math.round(((2 * 1024) / 44100) * hz)
     const sibLow = hzToBin(SIBILANCE_HZ_LOW)
     const sibHigh = Math.min(sensitivityPerPole.length - 1, hzToBin(SIBILANCE_HZ_HIGH))
     let sibSum = 0
@@ -512,7 +527,11 @@ export class LipSync {
     processor.averaging = 0.95
     processor.clipLag = 750
 
-    processor.connect(audioContext.destination)
+    const silencer = audioContext.createGain()
+    silencer.gain.value = 0
+    processor.connect(silencer)
+    silencer.connect(audioContext.destination)
+    processor._silencer = silencer
 
     processor.checkClipping = () => {
       if (!processor.clipping) {
@@ -526,6 +545,9 @@ export class LipSync {
 
     processor.shutdown = () => {
       processor.disconnect()
+      if (processor._silencer) {
+        try { processor._silencer.disconnect() } catch { /* ignore */ }
+      }
       processor.onaudioprocess = null
     }
 

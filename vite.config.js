@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react-swc'
+import { iwsdkDev } from '@iwsdk/vite-plugin-dev'
 import path from 'path'
 import fs from 'fs'
 
@@ -138,6 +139,171 @@ function nativeFaceRelayPlugin() {
       let ingestCount = 0
       let lastIngestLogAt = 0
 
+      const recordingsDir = path.resolve(__dirname, 'logs', 'face-recordings')
+      // Free-tier cap. Long-session mode (subscription / x402 upgrade — see
+      // MONETIZATION_ROADMAP.md §10) lifts this by passing `longSession: true`.
+      const FREE_TIER_MAX_RECORDING_MS = 90 * 1000
+      const MAX_RECORDING_AUDIO_BYTES = 32 * 1024 * 1024
+      /** Active recording state: append every ingested payload as JSONL while recording. */
+      let recording = {
+        active: false,
+        id: /** @type {string|null} */ (null),
+        startedAt: 0,
+        frames: 0,
+        longSession: false,
+        maxMs: FREE_TIER_MAX_RECORDING_MS,
+        truncated: false,
+        /** @type {import('fs').WriteStream|null} */
+        stream: null,
+      }
+
+      function ensureRecordingsDir() {
+        try {
+          if (!fs.existsSync(recordingsDir)) fs.mkdirSync(recordingsDir, { recursive: true })
+        } catch {
+          /* ignore */
+        }
+      }
+
+      function safeRecordingId(raw) {
+        const id = String(raw || '').trim()
+        // Reject path traversal / unsafe filename chars; keep it boring.
+        if (!id || !/^[A-Za-z0-9._-]{1,64}$/.test(id)) return null
+        return id
+      }
+
+      function stopRecording() {
+        const prev = recording
+        if (prev.stream) {
+          try {
+            prev.stream.end()
+          } catch {
+            /* ignore */
+          }
+        }
+        recording = {
+          active: false,
+          id: null,
+          startedAt: 0,
+          frames: 0,
+          longSession: false,
+          maxMs: FREE_TIER_MAX_RECORDING_MS,
+          truncated: false,
+          stream: null,
+        }
+        return prev
+      }
+
+      function startRecording(rawId, longSession) {
+        ensureRecordingsDir()
+        const id = safeRecordingId(rawId) || `face-${new Date().toISOString().replace(/[:.]/g, '-')}`
+        stopRecording()
+        const file = path.resolve(recordingsDir, `${id}.jsonl`)
+        const stream = fs.createWriteStream(file, { flags: 'w' })
+        recording = {
+          active: true,
+          id,
+          startedAt: Date.now(),
+          frames: 0,
+          longSession: !!longSession,
+          maxMs: longSession ? Infinity : FREE_TIER_MAX_RECORDING_MS,
+          truncated: false,
+          stream,
+        }
+        console.log(
+          `[native-face-relay] recording started → ${id}.jsonl${longSession ? ' (long session)' : ` (free tier, cap ${FREE_TIER_MAX_RECORDING_MS / 1000}s)`}`,
+        )
+        return id
+      }
+
+      function appendRecordingFrame(payload) {
+        if (!recording.active || !recording.stream) return
+        // Free-tier cap: auto-stop when the recording exceeds maxMs.
+        if (Date.now() - recording.startedAt > recording.maxMs) {
+          recording.truncated = true
+          const stopped = stopRecording()
+          console.log(
+            `[native-face-relay] recording auto-stopped at free-tier cap → ${stopped.id} (${stopped.frames} frames). Long-session mode unlocks longer captures.`,
+          )
+          return
+        }
+        try {
+          // Always stamp a server receive time so playback can re-derive cadence
+          // even if the APK omitted `t`.
+          const frame =
+            payload && typeof payload === 'object' && payload.t != null
+              ? payload
+              : { ...payload, t: Date.now() }
+          recording.stream.write(`${JSON.stringify(frame)}\n`)
+          recording.frames += 1
+        } catch {
+          /* ignore */
+        }
+      }
+
+      function listRecordings() {
+        ensureRecordingsDir()
+        try {
+          return fs
+            .readdirSync(recordingsDir)
+            .filter((f) => f.endsWith('.jsonl'))
+            .map((f) => {
+              const full = path.resolve(recordingsDir, f)
+              let size = 0
+              let mtime = 0
+              try {
+                const st = fs.statSync(full)
+                size = st.size
+                mtime = st.mtimeMs
+              } catch {
+                /* ignore */
+              }
+              const recId = f.replace(/\.jsonl$/, '')
+              return {
+                id: recId,
+                bytes: size,
+                mtimeMs: mtime,
+                hasAudio: !!recordingAudioPath(recId),
+              }
+            })
+            .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        } catch {
+          return []
+        }
+      }
+
+      function recordingAudioPath(id) {
+        const safe = safeRecordingId(id)
+        if (!safe) return null
+        const file = path.resolve(recordingsDir, `${safe}.webm`)
+        return fs.existsSync(file) ? file : null
+      }
+
+      function readRecordingFrames(id) {
+        const safe = safeRecordingId(id)
+        if (!safe) return null
+        const file = path.resolve(recordingsDir, `${safe}.jsonl`)
+        if (!fs.existsSync(file)) return null
+        try {
+          const text = fs.readFileSync(file, 'utf8')
+          /** @type {Array<Record<string, unknown>>} */
+          const frames = []
+          for (const line of text.split('\n')) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+            try {
+              const obj = JSON.parse(trimmed)
+              if (obj && typeof obj === 'object') frames.push(obj)
+            } catch {
+              /* skip malformed line */
+            }
+          }
+          return frames
+        } catch {
+          return null
+        }
+      }
+
       function writeSse(res, data) {
         try {
           res.write(`data: ${JSON.stringify(data)}\n\n`)
@@ -148,6 +314,7 @@ function nativeFaceRelayPlugin() {
 
       function broadcastFacePayload(payload) {
         latestFacePayload = payload
+        appendRecordingFrame(payload)
         for (const res of sseClients) {
           writeSse(res, payload)
         }
@@ -178,6 +345,201 @@ function nativeFaceRelayPlugin() {
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.statusCode = 200
           res.end(JSON.stringify(latestFacePayload || {}))
+          return
+        }
+
+        // List available recordings (newest first).
+        if (pathname === '/__native_face_recordings' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Cache-Control', 'no-store')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.statusCode = 200
+          res.end(JSON.stringify({ recordings: listRecordings() }))
+          return
+        }
+
+        // Companion mic audio for a face recording (WebM/Opus).
+        if (pathname === '/__native_face_recording_audio') {
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+          const id = new URLSearchParams((req.url || '').split('?')[1] || '').get('id')
+          const audioFile = recordingAudioPath(id)
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return
+          }
+          if (req.method === 'HEAD' || req.method === 'GET') {
+            if (!audioFile) {
+              res.statusCode = 404
+              res.end()
+              return
+            }
+            const stat = fs.statSync(audioFile)
+            if (req.method === 'HEAD') {
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'audio/webm')
+              res.setHeader('Content-Length', String(stat.size))
+              res.setHeader('Cache-Control', 'no-store')
+              res.end()
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'audio/webm')
+            res.setHeader('Content-Length', String(stat.size))
+            res.setHeader('Cache-Control', 'no-store')
+            fs.createReadStream(audioFile).pipe(res)
+            return
+          }
+        }
+
+        if (pathname === '/__native_face_record_audio') {
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return
+          }
+
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+
+          const id = new URLSearchParams((req.url || '').split('?')[1] || '').get('id')
+          const safe = safeRecordingId(id)
+          if (!safe) {
+            res.statusCode = 400
+            res.end('Bad Request')
+            return
+          }
+
+          const chunks = []
+          let total = 0
+          req.on('data', (chunk) => {
+            total += chunk.length
+            if (total > MAX_RECORDING_AUDIO_BYTES) {
+              res.statusCode = 413
+              res.end('Payload Too Large')
+              req.destroy()
+              return
+            }
+            chunks.push(chunk)
+          })
+          req.on('end', () => {
+            try {
+              ensureRecordingsDir()
+              const out = path.resolve(recordingsDir, `${safe}.webm`)
+              fs.writeFileSync(out, Buffer.concat(chunks))
+              console.log(`[native-face-relay] audio saved → ${safe}.webm (${total} bytes)`)
+              res.statusCode = 204
+              res.end()
+            } catch {
+              res.statusCode = 500
+              res.end('Write failed')
+            }
+          })
+          return
+        }
+
+        // Fetch a single recording as an ordered array of frames for playback.
+        if (pathname === '/__native_face_recording' && req.method === 'GET') {
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Cache-Control', 'no-store')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          const id = new URLSearchParams((req.url || '').split('?')[1] || '').get('id')
+          const frames = readRecordingFrames(id)
+          if (!frames) {
+            res.statusCode = 404
+            res.end(JSON.stringify({ error: 'recording not found' }))
+            return
+          }
+          res.statusCode = 200
+          res.end(JSON.stringify({ id, frames }))
+          return
+        }
+
+        // Start/stop recording the relay stream to logs/face-recordings/<id>.jsonl.
+        if (pathname === '/__native_face_record') {
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+          res.setHeader('Content-Type', 'application/json')
+
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return
+          }
+
+          if (req.method === 'GET') {
+            res.statusCode = 200
+            res.end(
+              JSON.stringify({
+                active: recording.active,
+                id: recording.id,
+                frames: recording.frames,
+                startedAt: recording.startedAt,
+                longSession: recording.longSession,
+                maxMs: recording.maxMs === Infinity ? null : recording.maxMs,
+                truncated: recording.truncated,
+              }),
+            )
+            return
+          }
+
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.end(JSON.stringify({ error: 'Method Not Allowed' }))
+            return
+          }
+
+          let body = ''
+          req.setEncoding('utf8')
+          req.on('data', (chunk) => {
+            body += chunk
+            if (body.length > 8 * 1024) {
+              req.destroy()
+            }
+          })
+          req.on('end', () => {
+            let action = 'start'
+            let id = null
+            let longSession = false
+            try {
+              const obj = body ? JSON.parse(body) : {}
+              if (obj && typeof obj === 'object') {
+                if (typeof obj.action === 'string') action = obj.action
+                if (typeof obj.id === 'string') id = obj.id
+                longSession = obj.longSession === true || obj.longSession === 'true'
+              }
+            } catch {
+              /* default to start */
+            }
+            if (action === 'stop') {
+              const stopped = stopRecording()
+              console.log(
+                `[native-face-relay] recording stopped → ${stopped.id || '(none)'} (${stopped.frames} frames)`,
+              )
+              res.statusCode = 200
+              res.end(
+                JSON.stringify({
+                  active: false,
+                  id: stopped.id,
+                  frames: stopped.frames,
+                  truncated: stopped.truncated,
+                }),
+              )
+              return
+            }
+            const startedId = startRecording(id, longSession)
+            res.statusCode = 200
+            res.end(JSON.stringify({ active: true, id: startedId, frames: 0, longSession }))
+          })
           return
         }
 
@@ -279,7 +641,20 @@ export default defineConfig(({ command, mode }) => {
   return {
   plugins: [
     react(),
-    ...(command === 'serve' ? [remoteLogPlugin(), nativeFaceRelayPlugin()] : []),
+    ...(command === 'serve'
+      ? [
+          iwsdkDev({
+            emulator: { device: 'metaQuest3', activation: 'localhost' },
+            ai: {
+              mode: 'agent',
+              screenshotSize: { width: 800, height: 800 },
+            },
+            verbose: true,
+          }),
+          remoteLogPlugin(),
+          nativeFaceRelayPlugin(),
+        ]
+      : []),
   ],
   build: {
     outDir: './build',
@@ -290,13 +665,14 @@ export default defineConfig(({ command, mode }) => {
     },
   },
   resolve: {
-    alias: {
-      buffer: 'buffer/',
-      // Force all Three.js imports to use the same instance
-      three: path.resolve(__dirname, 'node_modules/three'),
-      // Alias for centralized Three.js module
-      '@/three': path.resolve(__dirname, 'src/library/three.js'),
-    },
+    alias: [
+      { find: /^three\/addons\/(.*)/, replacement: path.resolve(__dirname, 'node_modules/three/examples/jsm/$1') },
+      { find: 'three/webgpu', replacement: path.resolve(__dirname, 'node_modules/three/build/three.webgpu.js') },
+      { find: 'three/tsl', replacement: path.resolve(__dirname, 'node_modules/three/build/three.tsl.js') },
+      { find: /^three$/, replacement: path.resolve(__dirname, 'node_modules/three/build/three.module.js') },
+      { find: 'buffer', replacement: 'buffer/' },
+      { find: '@/three', replacement: path.resolve(__dirname, 'src/library/three.js') },
+    ],
   },
   server: {
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
@@ -318,15 +694,31 @@ export default defineConfig(({ command, mode }) => {
       console.warn('⚠️  WebXR (AR/VR) will not work on Galaxy XR without HTTPS')
       return false // Fall back to HTTP
     })(),
-    strictPort: true, // fail if port in use (avoids multiple dev servers on 3001, 3002…). E2E uses PORT=3099
+    strictPort: false, // allow Cursor on 127.0.0.1:3000 while Vite serves LAN (Galaxy XR)
   },
   optimizeDeps: {
-    include: ['three', '@pixiv/three-vrm'],
+    include: [
+      'three',
+      '@pixiv/three-vrm',
+      '@iwsdk/core',
+      '@gltf-transform/core',
+      '@gltf-transform/extensions',
+      '@gltf-transform/functions',
+      'meshoptimizer',
+      'draco3dgltf',
+    ],
     // Aggressively deduplicate Three.js to avoid multiple instances warning
     dedupe: ['three', '@pixiv/three-vrm'],
     esbuildOptions: {
       // Ensure Three.js is properly resolved
       resolveExtensions: ['.js', '.jsx', '.ts', '.tsx'],
+      alias: {
+        'three/addons/postprocessing/Pass.js': path.resolve(
+          __dirname,
+          'node_modules/three/examples/jsm/postprocessing/Pass.js',
+        ),
+        'three/webgpu': path.resolve(__dirname, 'node_modules/three/build/three.webgpu.js'),
+      },
     },
   },
   ssr: {

@@ -219,6 +219,64 @@ export function disconnectNativeFaceRelay() {
   _connectedLogged = false;
 }
 
+const RELAY_PATH_RECORD = '/__native_face_record';
+const RELAY_PATH_RECORDINGS = '/__native_face_recordings';
+
+/**
+ * Tell the relay server to start recording the incoming face stream to JSONL.
+ *
+ * Free-tier recordings are capped server-side (~90s). `longSession: true` lifts the
+ * cap and is the gated upgrade (subscription / x402 — see MONETIZATION_ROADMAP.md §10);
+ * callers should only set it after verifying entitlement.
+ *
+ * @param {string|{ id?: string, longSession?: boolean }} [idOrOptions]
+ * @returns {Promise<{ active: boolean, id: string|null, frames: number, longSession?: boolean }>}
+ */
+export async function startNativeFaceRecording(idOrOptions) {
+  const opts =
+    typeof idOrOptions === 'string' ? { id: idOrOptions } : idOrOptions || {};
+  const url = new URL(RELAY_PATH_RECORD, window.location.origin).href;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'start', id: opts.id, longSession: !!opts.longSession }),
+  });
+  if (!res.ok) throw new Error(`record start failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Stop the active relay-server recording.
+ * @returns {Promise<{ active: boolean, id: string|null, frames: number }>}
+ */
+export async function stopNativeFaceRecording() {
+  const url = new URL(RELAY_PATH_RECORD, window.location.origin).href;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'stop' }),
+  });
+  if (!res.ok) throw new Error(`record stop failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** @returns {Promise<{ active: boolean, id: string|null, frames: number, startedAt: number }>} */
+export async function getNativeFaceRecordingStatus() {
+  const url = new URL(RELAY_PATH_RECORD, window.location.origin).href;
+  const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+  if (!res.ok) throw new Error(`record status failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** @returns {Promise<Array<{ id: string, bytes: number, mtimeMs: number }>>} */
+export async function listNativeFaceRecordings() {
+  const url = new URL(RELAY_PATH_RECORDINGS, window.location.origin).href;
+  const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+  if (!res.ok) throw new Error(`list recordings failed: HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data?.recordings) ? data.recordings : [];
+}
+
 /** Connect when `?nativeFaceRelay=1` is present (after nativeFaceBridge init). */
 export function initNativeFaceRelayFromUrl() {
   if (!isNativeFaceRelayEnabledInUrl()) return;

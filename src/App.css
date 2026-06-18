@@ -2,58 +2,138 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background: #1a1a1a;
   color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --app-header-height: 96px;
+  --scene-controls-height: 52px;
+  --app-chrome-top-height: calc(var(--app-header-height) + var(--scene-controls-height));
+  --viewport-top-inset: 0px;
+  --viewport-bottom-inset: 0px;
+  --app-visible-height: 100dvh;
+  --animation-bar-edge-gap: 16px;
+  /* Collapsed side-rail icon column — shared by left & right panels */
+  --collapsed-rail-width: 60px;
+  --collapsed-rail-icon-width: 40px;
+  --collapsed-rail-icon-height: 40px;
+  --collapsed-rail-icon-gap: 0.5rem;
+  --collapsed-rail-icon-padding: 0.5rem 0.25rem;
+  /* Z-index scale — side panels MUST stay below header (see .cursor/rules/sidebar-z-index.mdc) */
+  --z-side-panel: 998;
+  --z-app-header: 1001;
+  --z-scene-controls: 1002;
 }
 
 .app-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.0001rem 0.5rem;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: 0;
   background: #2a2a2a;
   position: relative;
-  z-index: 1001; /* Higher than CharacterStudio sidebar */
+  z-index: var(--z-app-header, 1001);
   border-bottom: 1px solid #3a3a3a;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  margin-bottom: -4px;
 }
 
-
-.title-container {
+/* Title bar — compact horizontal row across the top */
+.title-bar {
   display: flex;
-  flex-direction: column;
-  gap: 0px;
-  margin-bottom: 0px;
-  position: relative;
   align-items: center;
-  justify-content: center;
+  gap: 0.25rem;
+  padding: 2px 0.5rem;
+  white-space: nowrap;
+  border-bottom: 1px solid #333;
+  font-size: 1.7rem;
 }
-
 
 .main-title {
   margin: 0;
-  font-size: 0.25rem;
+  font-size: calc(1.7rem - 2px);
   font-weight: 600;
   color: #ffffff;
-  line-height: 0.6;
+  line-height: 1;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  text-align: center;
-}
-
-.title-api-control {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 0.0001rem;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: calc(1.7rem - 2px);
   font-weight: 600;
   color: #ffffff;
+}
+
+.audiowave-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  margin-top: calc(0.35rem + 1px);
+}
+
+.space-time-row,
+.edition-row {
+  display: inline;
+  line-height: 1;
+  font-size: calc(0.85rem + 3px);
+  font-weight: 600;
+  color: #aaa;
+  letter-spacing: 0.5px;
+}
+
+.title-api-control {
+  display: flex;
+  align-items: center;
+  margin-left: 0.25rem;
+}
+
+.title-xr-lab-link {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #8ec5ff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.title-xr-lab-link:hover {
+  text-decoration: underline;
+}
+
+/* Header controls horizontal scroll wrapper — mirrors scene-controls-scroll */
+.header-controls-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2a2a2a;
+  box-sizing: border-box;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.header-controls-scroll.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.header-controls-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.header-controls-scroll::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.header-controls-scroll::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
 }
 
 .header-controls {
@@ -61,9 +141,10 @@
   gap: 0;
   align-items: center;
   flex-wrap: nowrap;
-  width: 100%;
-  justify-content: space-evenly;
-  overflow: hidden;
+  width: max-content;
+  min-width: 100%;
+  justify-content: flex-start;
+  padding: 4px 0.5rem;
 }
 
 .header-section {
@@ -71,38 +152,34 @@
   flex-direction: column;
   align-items: center;
   gap: 0.2rem;
-  min-width: 65px;
+  min-width: fit-content;
   position: relative;
   padding: 0 0.3rem;
   justify-content: center;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 /* Single button sections (like TASKS) */
 .single-button-section {
-  flex: 0.5;
-  min-width: 50px;
+  flex: 0 0 auto;
   padding: 0 0.2rem;
 }
 
 /* Two button sections (like FILE, AI) */
 .two-button-section {
-  flex: 0.8;
-  min-width: 80px;
+  flex: 0 0 auto;
   padding: 0 0.25rem;
 }
 
 /* Three button sections (like RENDER) */
 .three-button-section {
-  flex: 1.2;
-  min-width: 100px;
+  flex: 0 0 auto;
   padding: 0 0.3rem;
 }
 
 /* Four button sections (like STUDIO) */
 .four-button-section {
-  flex: 1.5;
-  min-width: 120px;
+  flex: 0 0 auto;
   padding: 0 0.4rem;
 }
 
@@ -122,6 +199,7 @@
   color: #aaa;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .header-controls-group {
@@ -129,9 +207,8 @@
   gap: 0.25rem;
   align-items: center;
   margin: 0 4px;
-  flex: 1;
   justify-content: center;
-  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .header-btn {
@@ -147,7 +224,7 @@
   transition: all 0.2s ease;
   font-size: 0.65rem;
   font-weight: 500;
-  width: 50px;
+  white-space: nowrap;
   height: 32px;
   justify-content: center;
   margin: 0 1px;
@@ -249,8 +326,8 @@
   letter-spacing: 0.5px;
 }
 
-/* CharacterStudio Panel System */
-.character-studio-panel {
+/* OpenNexus3DStudio Panel System */
+.opennexus-panel {
   position: fixed;
   top: 0;
   right: 0;
@@ -315,8 +392,8 @@
   background: #2a2a2a;
 }
 
-/* CharacterStudio Viewport Overlay - Responsive positioning */
-.character-studio-viewport-overlay {
+/* OpenNexus3DStudio Viewport Overlay - Responsive positioning */
+.opennexus-viewport-overlay {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -336,7 +413,7 @@
   transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
 }
 
-.character-studio-viewport-title {
+.opennexus-viewport-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: #fff;
@@ -345,7 +422,7 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.character-studio-viewport-canvas {
+.opennexus-viewport-canvas {
   border-radius: 6px;
   overflow: hidden;
   position: relative;
@@ -353,48 +430,55 @@
   border: 1px solid rgba(0, 122, 204, 0.3);
 }
 
-.character-studio-viewport-canvas:hover {
+.opennexus-viewport-canvas:hover {
   border-color: rgba(0, 122, 204, 0.6);
 }
 
-/* CharacterStudio Sidebar */
-.character-studio-sidebar {
+/* OpenNexus3DStudio Sidebar — below header + scene-controls row (z-index stays behind chrome) */
+.opennexus-sidebar {
   position: fixed;
-  top: 1px; /* Start below the header */
+  top: calc(
+    var(
+      --app-chrome-top-height,
+      calc(var(--app-header-height, 96px) + var(--scene-controls-height, 52px))
+    ) + var(--viewport-top-inset, 0px)
+  );
+  bottom: max(0px, env(safe-area-inset-bottom, 0px), var(--viewport-bottom-inset, 0px));
   right: 0;
-  width: min(400px, 30vw); /* Responsive width, max 400px */
-  height: calc(100vh - 1px); /* Adjust height to account for header */
+  width: min(400px, 30vw);
+  height: auto;
   background: #2a2a2a;
   border-left: 1px solid #3a3a3a;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
-  z-index: 999; /* Below header (1001) but above 3D viewport */
+  z-index: var(--z-side-panel, 998);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: transform 0.3s ease, width 0.3s ease;
   transform: translateX(0);
-  padding: 0.5rem;
+  padding: 0;
   box-sizing: border-box;
 }
 
-.character-studio-sidebar:not(.collapsed) {
+.opennexus-sidebar:not(.collapsed) {
   transform: translateX(0);
 }
 
-.character-studio-sidebar.collapsed {
-  width: 60px;
-  padding: 0.5rem;
-  transform: translateX(calc(100% - 60px));
+.opennexus-sidebar.collapsed {
+  width: var(--collapsed-rail-width, 60px);
+  padding: 0;
+  transform: translateX(calc(100% - var(--collapsed-rail-width, 60px)));
+  align-items: stretch;
 }
 
-/* Anchored Right Hamburger Menu */
+/* Scene Manager row hamburgers — flex-aligned with toolbar (not fixed offset) */
+.anchored-left-hamburger,
 .anchored-right-hamburger {
-  position: fixed;
-  top: 139px;
-  right: 0;
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
   background: #3a3a3a;
   border: 1px solid #555;
-  border-radius: 0 4px 4px 0;
   padding: 0.5rem;
   cursor: pointer;
   z-index: 1003;
@@ -407,10 +491,24 @@
   justify-content: center;
 }
 
+.anchored-left-hamburger {
+  border-radius: 0 4px 4px 0;
+}
+
+.anchored-right-hamburger {
+  border-radius: 4px 0 0 4px;
+}
+
+.anchored-left-hamburger:hover,
+.anchored-right-hamburger:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
 /* Removed viewport toggle - now controlled by sidebar */
 
-/* Original CharacterStudio Hamburger Menu (hidden) */
-.character-studio-sticky-hamburger {
+/* Original OpenNexus3DStudio Hamburger Menu (hidden) */
+.opennexus-sticky-hamburger {
   position: sticky;
   top: 0;
   left: 0;
@@ -431,12 +529,12 @@
   visibility: hidden;
 }
 
-.character-studio-sticky-hamburger:hover {
+.opennexus-sticky-hamburger:hover {
   background: #4a4a4a;
   border-color: #666;
 }
 
-.character-studio-sticky-hamburger .hamburger-icon {
+.opennexus-sticky-hamburger .hamburger-icon {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -444,7 +542,7 @@
   height: 16px;
 }
 
-.character-studio-sticky-hamburger .hamburger-icon span {
+.opennexus-sticky-hamburger .hamburger-icon span {
   display: block;
   height: 2px;
   background: #ccc;
@@ -453,21 +551,24 @@
 }
 
 
-/* Collapsed CharacterStudio Icons */
-.collapsed-character-studio-icons {
+/* Collapsed side-rail icon columns — mirrored layout on left & right */
+.collapsed-sidebar-icons,
+.collapsed-opennexus-icons {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 1rem;
   align-items: center;
   justify-content: flex-start;
+  gap: var(--collapsed-rail-icon-gap, 0.5rem);
+  padding: var(--collapsed-rail-icon-padding, 0.5rem 0.25rem);
   width: 100%;
-  margin-top: 115px; /* Position below the hamburger menu + 55px more */
+  box-sizing: border-box;
+  margin: 0;
 }
 
-.character-studio-sidebar-icon {
-  width: 50px;
-  height: 30px;
+.opennexus-sidebar-icon,
+.sidebar-icon {
+  width: var(--collapsed-rail-icon-width, 40px);
+  height: var(--collapsed-rail-icon-height, 40px);
   background: #3a3a3a;
   border: 1px solid #555;
   border-radius: 4px;
@@ -477,29 +578,32 @@
   justify-content: center;
   font-size: 0.9rem;
   transition: all 0.2s ease;
-  padding: 4px 8px;
-  margin-bottom: 0.5rem; /* Add spacing between icons */
+  padding: 0;
+  margin: 0;
   position: relative;
+  flex-shrink: 0;
 }
 
-.character-studio-sidebar-icon:hover {
+.opennexus-sidebar-icon:hover,
+.sidebar-icon:hover {
   background: #4a4a4a;
   border-color: #666;
   transform: scale(1.05);
 }
 
-.character-studio-sidebar-icon.active {
+.opennexus-sidebar-icon.active {
   background: #007acc;
   border-color: #007acc;
   color: white;
   box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
 }
 
-.character-studio-sidebar-icon:active {
+.opennexus-sidebar-icon:active,
+.sidebar-icon:active {
   transform: scale(0.95);
 }
 
-.character-studio-sidebar-icon::after {
+.opennexus-sidebar-icon::after {
   content: attr(data-tooltip);
   position: absolute;
   right: 100%;
@@ -523,7 +627,7 @@
   margin-right: 8px;
 }
 
-.character-studio-sidebar-icon::before {
+.opennexus-sidebar-icon::before {
   content: '';
   position: absolute;
   right: calc(100% + 2px);
@@ -538,43 +642,42 @@
   pointer-events: none;
 }
 
-.character-studio-sidebar-icon:hover::after,
-.character-studio-sidebar-icon:hover::before {
+.opennexus-sidebar-icon:hover::after,
+.opennexus-sidebar-icon:hover::before {
   opacity: 1;
   visibility: visible;
 }
 
-/* CharacterStudio Content */
-.character-studio-content {
+/* OpenNexus3DStudio Content */
+.opennexus-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  gap: 0.5rem;
+  gap: 0;
   position: relative;
   z-index: 1;
-  margin-top: -1px; /* Start below the fixed CharacterStudio header */
+  min-height: 0;
 }
 
-.character-studio-header {
-  position: fixed;
-  top: 1px;
-  right: 0;
-  width: 400px;
+.opennexus-header {
+  position: relative;
+  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 0;
-  padding: 0.5rem 1rem 0.5rem 0.25rem;
+  min-height: 52px;
+  padding: 6px 0.75rem;
+  box-sizing: border-box;
   background: #2a2a2a;
   border-bottom: 1px solid #3a3a3a;
   flex-shrink: 0;
-  margin-top: 0;
-  margin-left: 50px;
-  z-index: 999; /* Below main header (1001) but above viewport */
+  margin: 0;
+  z-index: 2;
 }
 
-.character-studio-title {
+.opennexus-title {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
@@ -582,30 +685,33 @@
 }
 
 
-.character-studio-panels {
+.opennexus-panels {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 0;
+  padding: 0.5rem 0.75rem 0.75rem;
   background: #2a2a2a;
   position: relative;
-  z-index: 999; /* Same as sidebar, below header */
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-/* CharacterStudio Scrollbar styling */
-.character-studio-sidebar::-webkit-scrollbar {
+/* OpenNexus3DStudio Scrollbar styling */
+.opennexus-sidebar::-webkit-scrollbar {
   width: 6px;
 }
 
-.character-studio-sidebar::-webkit-scrollbar-track {
+.opennexus-sidebar::-webkit-scrollbar-track {
   background: #2a2a2a;
 }
 
-.character-studio-sidebar::-webkit-scrollbar-thumb {
+.opennexus-sidebar::-webkit-scrollbar-thumb {
   background: #555;
   border-radius: 3px;
 }
 
-.character-studio-sidebar::-webkit-scrollbar-thumb:hover {
+.opennexus-sidebar::-webkit-scrollbar-thumb:hover {
   background: #777;
 }
 
@@ -620,68 +726,56 @@
   margin-left: 0;
 }
 
-/* CharacterStudio viewport is completely independent of left sidebar state */
-/* When CharacterStudio sidebar is open, adjust viewport (regardless of left sidebar state) */
-.app-content.has-character-studio .main-viewport {
+/* OpenNexus3DStudio viewport is completely independent of left sidebar state */
+/* When OpenNexus3DStudio sidebar is open, adjust viewport (regardless of left sidebar state) */
+.app-content.has-opennexus .main-viewport {
   margin-right: min(400px, 30vw) !important;
 }
 
-/* When CharacterStudio sidebar is collapsed, remove right margin (regardless of left sidebar state) */
-.app-content:not(.has-character-studio) .main-viewport {
+/* When OpenNexus3DStudio sidebar is collapsed, remove right margin (regardless of left sidebar state) */
+.app-content:not(.has-opennexus) .main-viewport {
   margin-right: 0 !important;
 }
 
-/* Ensure CharacterStudio viewport is completely independent of left sidebar state */
-.app-content.main-sidebar-collapsed.has-character-studio .main-viewport {
+/* Ensure OpenNexus3DStudio viewport is completely independent of left sidebar state */
+.app-content.main-sidebar-collapsed.has-opennexus .main-viewport {
   margin-right: min(400px, 30vw) !important;
   margin-left: 0;
 }
 
-.app-content.main-sidebar-collapsed:not(.has-character-studio) .main-viewport {
+.app-content.main-sidebar-collapsed:not(.has-opennexus) .main-viewport {
   margin-right: 0 !important;
   margin-left: 0;
 }
 
-/* Note: CharacterStudio viewport is now completely independent of left sidebar state */
+/* Note: OpenNexus3DStudio viewport is now completely independent of left sidebar state */
 
 /* Main viewport should always be visible - never hide it */
 .app-content .main-viewport {
   display: block !important;
 }
 
-/* Independent CharacterStudio viewport control - Locked to HDR Sky position */
-.character-studio-viewport-overlay.visible {
+/* Independent OpenNexus3DStudio viewport control - Locked to HDR Sky position */
+.opennexus-viewport-overlay.visible {
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, -50%) scale(1);
   display: flex;
 }
 
-.character-studio-viewport-overlay.hidden {
+.opennexus-viewport-overlay.hidden {
   opacity: 0;
   visibility: hidden;
   transform: translate(-50%, -50%) scale(0.95);
   display: none;
 }
 
-/* CharacterStudio viewport is completely independent of left sidebar state and locked to HDR Sky */
-.character-studio-viewport-overlay {
+/* OpenNexus3DStudio viewport is completely independent of left sidebar state and locked to HDR Sky */
+.opennexus-viewport-overlay {
   transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
 }
 
-/* Space-time and Edition text styling - each on its own row */
-.space-time-row {
-  display: block;
-  line-height: 1.2;
-  margin-top: 4px;
-}
-
-.edition-row {
-  display: block;
-  line-height: 1.2;
-}
-
-/* Simplified CharacterStudio Components */
+/* Simplified OpenNexus3DStudio Components */
 .sectionTitle {
   font-size: 1.2rem;
   font-weight: 600;
@@ -1018,15 +1112,15 @@
 .app-content {
   display: flex;
   flex: 1;
-  overflow: visible; /* Allow scrolling when content exceeds viewport */
+  position: relative; /* Anchor for the absolutely-positioned OpenNexus3DStudio sidebar */
+  overflow: hidden;
   transition: margin-top 0.3s ease;
-  height: calc(100vh - 96px);
+  /* Fill space below header + scene-controls row (do not use header height only). */
   min-height: 0;
-  max-height: calc(100vh - 96px); /* Prevent exceeding viewport */
 }
 
 .app-content.has-progress {
-  margin-top: 50px;
+  margin-top: 58px;
 }
 
 .sidebar {
@@ -1036,37 +1130,33 @@
   border-right: 1px solid #3a3a3a;
   padding: 0.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   box-sizing: border-box;
   transition: width 0.3s ease;
   position: relative;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sidebar.sidebar-scroll-panel {
+  touch-action: pan-y;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.sidebar.sidebar-scroll-panel.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .sidebar.collapsed {
-  width: 60px;
-  padding: 0.5rem;
-}
-
-/* Anchored Left Hamburger Menu */
-.anchored-left-hamburger {
-  position: fixed;
-  top: 139px;
-  left: 0;
-  background: #3a3a3a;
-  border: 1px solid #555;
-  border-radius: 0 0 0 0;
-  padding: 0.5rem;
-  cursor: pointer;
-  z-index: 1003;
-  transition: all 0.2s ease;
-  margin: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: var(--collapsed-rail-width, 60px);
+  padding: 0;
+  align-items: stretch;
 }
 
 /* Original Hamburger Menu (hidden) */
@@ -1112,45 +1202,12 @@
   transition: all 0.3s ease;
 }
 
-.sidebar.collapsed .hamburger-menu {
-  right: 0;
-  top: 0;
-  align-self: flex-end;
+.sidebar.collapsed .hamburger-menu,
+.opennexus-sidebar.collapsed .opennexus-sticky-hamburger {
+  display: none;
 }
 
-/* Collapsed Sidebar Icons */
-.collapsed-sidebar-icons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 3rem;
-}
-
-.sidebar-icon {
-  width: 50px;
-  height: 30px;
-  background: #3a3a3a;
-  border: 1px solid #555;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  padding: 4px 8px;
-  position: relative;
-}
-
-.sidebar-icon:hover {
-  background: #4a4a4a;
-  border-color: #666;
-  transform: scale(1.05);
-}
-
-.sidebar-icon:active {
-  transform: scale(0.95);
-}
+/* Collapsed Sidebar Icons — see shared .collapsed-sidebar-icons rules above */
 
 .sidebar-icon::after {
   content: attr(data-tooltip);
@@ -1205,40 +1262,66 @@
   height: 100%;
   min-width: 0; /* Allow flexbox to shrink */
   min-height: 0; /* Allow flexbox to shrink */
-  overflow-y: auto; /* Allow vertical scrolling */
-  overflow-x: hidden; /* Prevent horizontal scrolling */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Bottom menu: BottomDisplayMenu pins itself to .main-viewport via JS (see component). */
+.main-viewport .bottom-menu-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-scene-controls, 1002);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  overflow: visible;
+  padding-bottom: max(
+    var(--animation-bar-edge-gap),
+    env(safe-area-inset-bottom, 0px),
+    var(--viewport-bottom-inset, 0px)
+  );
+  box-sizing: border-box;
+}
+
+/* XR / mobile browsers (Galaxy XR Chrome): larger floor when insets are under-reported */
+@media (hover: none) and (pointer: coarse) {
+  .main-viewport .bottom-menu-overlay {
+    --animation-bar-edge-gap: 24px;
+  }
 }
 
 /* Scrollbar styling */
 .sidebar::-webkit-scrollbar,
 .main-viewport::-webkit-scrollbar,
-.character-studio-sidebar::-webkit-scrollbar {
+.opennexus-sidebar::-webkit-scrollbar {
   width: 8px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .main-viewport::-webkit-scrollbar-track,
-.character-studio-sidebar::-webkit-scrollbar-track {
+.opennexus-sidebar::-webkit-scrollbar-track {
   background: #2a2a2a;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .main-viewport::-webkit-scrollbar-thumb,
-.character-studio-sidebar::-webkit-scrollbar-thumb {
+.opennexus-sidebar::-webkit-scrollbar-thumb {
   background: #555;
   border-radius: 4px;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .main-viewport::-webkit-scrollbar-thumb:hover,
-.character-studio-sidebar::-webkit-scrollbar-thumb:hover {
+.opennexus-sidebar::-webkit-scrollbar-thumb:hover {
   background: #777;
 }
 
 /* Firefox scrollbar styling */
 .sidebar,
 .main-viewport,
-.character-studio-sidebar {
+.opennexus-sidebar {
   scrollbar-width: thin;
   scrollbar-color: #555 #2a2a2a;
 }
@@ -1247,17 +1330,26 @@
 @media (max-width: 768px) {
   .app-content {
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
   }
   
   .sidebar {
     width: 100%;
     height: 200px;
+    flex-shrink: 0;
     border-right: none;
     border-bottom: 1px solid #3a3a3a;
   }
   
   .main-viewport {
-    height: calc(100vh - 200px - 80px);
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  .app-content.has-opennexus .main-viewport {
+    margin-right: 0 !important;
   }
 }
 
@@ -1343,6 +1435,8 @@
   border: 1px solid #4a4a4a;
   box-sizing: border-box;
   overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .card-header {
@@ -1489,6 +1583,17 @@
 /* Task Manager */
 .task-manager {
   margin-bottom: 1rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button,
+.header-btn,
+.control-button,
+.mode-button,
+.hamburger-icon {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .task-item {
@@ -2392,8 +2497,8 @@
   margin: 0.5rem 0;
 }
 
-/* CharacterStudio Import */
-.character-studio-import {
+/* OpenNexus3DStudio Import */
+.opennexus-import {
   margin-bottom: 1rem;
 }
 
@@ -2521,8 +2626,8 @@
   flex-shrink: 0;
 }
 
-/* CharacterStudio Overlay Styles */
-.character-studio-overlay {
+/* OpenNexus3DStudio Overlay Styles */
+.opennexus-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -2536,7 +2641,7 @@
   transition: all 0.3s ease;
 }
 
-.character-studio-overlay-title {
+.opennexus-overlay-title {
   position: absolute;
   top: 1rem;
   left: 1rem;
@@ -2559,7 +2664,7 @@
   text-transform: uppercase;
 }
 
-.character-studio-overlay-content {
+.opennexus-overlay-content {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -2807,7 +2912,7 @@
 
 /* Responsive overlay */
 @media (max-width: 768px) {
-  .character-studio-overlay-title {
+  .opennexus-overlay-title {
     font-size: 1rem;
     top: 0.5rem;
     left: 0.5rem;
@@ -2896,42 +3001,36 @@
   font-weight: bold;
 }
 
-/* Scene Controls Row - Below Header */
+/* Scene Manager toolbar — below header; hamburgers in same row for alignment */
 .scene-controls-row {
+  flex-shrink: 0;
   background: rgba(42, 42, 42, 0.95);
   border-bottom: 1px solid #3a3a3a;
-  padding: 0;
+  padding: 6px 4px;
   display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 1001; /* Same as header to be above Character Studio panels */
-  height: auto;
-  margin-top: 1px;
-  margin-left: -5px;
+  z-index: var(--z-scene-controls, 1002);
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
   border-radius: 0 0 8px 8px;
+  position: relative;
+  isolation: isolate;
 }
 
 .scene-controls-container {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  max-width: 100%;
-  width: 100%;
-  justify-content: center;
-  flex-wrap: wrap;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
-/* Scene Controls Compact Styles */
+/* Inner scroll + nowrap live in SceneControlsCompact.css (.scene-controls-scroll / .scene-controls-compact) */
 .scene-controls-compact {
-  display: flex;
-  align-items: center;
   gap: 10px;
-  width: 100%;
-  flex-wrap: nowrap;
-  justify-content: center;
-  overflow-x: auto;
-  padding: 0 8px;
 }
 
 .render-mode-controls,
@@ -3185,8 +3284,12 @@
 @media (max-width: 768px) {
   .scene-controls-compact {
     gap: 4px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-start;
+  }
+
+  .scene-controls-row {
+    padding: 6px 2px;
   }
   
   .control-label {
