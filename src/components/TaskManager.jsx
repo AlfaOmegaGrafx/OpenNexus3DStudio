@@ -33,6 +33,7 @@ import {
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
 import { AI_BACKEND_UNAVAILABLE_MSG, isLocalDev } from '../library/runtimeUi';
+import TaskAdvancedOptions from './TaskAdvancedOptions.jsx';
 
 export { ALL_MODELS, TASK_TYPE_TO_FEATURE };
 

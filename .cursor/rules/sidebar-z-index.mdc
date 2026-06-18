@@ -16,13 +16,13 @@ When adjusting **any** side panel (Character Studio right rail, left tool sideba
 
 | Layer | Token / class | z-index |
 |-------|----------------|---------|
-| Side panels | `--z-side-panel` / `.character-studio-sidebar`, `.sidebar` overlays | **998** |
+| Side panels | `--z-side-panel` / `.opennexus-sidebar`, `.sidebar` overlays | **998** |
 | App header | `--z-app-header` / `.app-header` | **1001** |
 | Scene controls row | `--z-scene-controls` / `.scene-controls-row` | **1002** |
 
 - Side panel `z-index` must stay **strictly below 1001** (use `var(--z-side-panel)`).
-- Do **not** raise side panels to 1003+ to fix overlap — fix `top` / layout instead.
-- Character Studio sidebar is `position: fixed` with `top: var(--app-chrome-top-height)`; if it visually touches the header, it should tuck **under** it, not above it.
+- Do **not** raise side panels to 1003+ to fix overlap — fix `top` / layout instead (see `memory-bank/app-chrome-layout-protected-state.md`).
+- `.opennexus-sidebar` is `position: fixed` with `top: var(--app-content-top)` (measured); if icons sit under scene-controls, lower `top` — do not raise z-index.
 
 ## Checklist when changing side panel layout
 

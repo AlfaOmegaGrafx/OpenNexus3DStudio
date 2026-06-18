@@ -68,6 +68,7 @@ function AppContent() {
   const combinedImportRef = useRef(null);
   const headerRef = useRef(null);
   const sceneControlsRef = useRef(null);
+  const appContentRef = useRef(null);
 
   useLayoutEffect(() => {
     const syncChromeHeights = () => {
@@ -83,6 +84,18 @@ function AppContent() {
       if (chromeTop > 0) {
         document.documentElement.style.setProperty('--app-chrome-top-height', `${chromeTop}px`);
       }
+      const progressHeight = document.querySelector('.task-progress-bar')?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty('--task-progress-height', `${progressHeight}px`);
+
+      const appContentTop = appContentRef.current?.getBoundingClientRect().top ?? 0;
+      if (appContentTop > 0) {
+        document.documentElement.style.setProperty('--app-content-top', `${Math.round(appContentTop)}px`);
+      } else if (chromeTop > 0) {
+        document.documentElement.style.setProperty(
+          '--app-content-top',
+          `${Math.round(chromeTop + progressHeight)}px`,
+        );
+      }
     };
 
     const syncLayout = () => {
@@ -96,6 +109,10 @@ function AppContent() {
     const observer = new ResizeObserver(syncLayout);
     if (headerRef.current) observer.observe(headerRef.current);
     if (sceneControlsRef.current) observer.observe(sceneControlsRef.current);
+    if (appContentRef.current) observer.observe(appContentRef.current);
+
+    const progressBar = document.querySelector('.task-progress-bar');
+    if (progressBar) observer.observe(progressBar);
 
     const barObserver = new ResizeObserver(syncLayout);
     const overlay = document.querySelector('.bottom-menu-overlay');
@@ -658,9 +675,30 @@ function AppContent() {
     (task) => task.status === 'running' || task.status === 'pending',
   );
 
+  useLayoutEffect(() => {
+    const syncProgressHeight = () => {
+      const progressHeight = document.querySelector('.task-progress-bar')?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty('--task-progress-height', `${progressHeight}px`);
+
+      const appContentTop = appContentRef.current?.getBoundingClientRect().top ?? 0;
+      if (appContentTop > 0) {
+        document.documentElement.style.setProperty('--app-content-top', `${Math.round(appContentTop)}px`);
+      }
+    };
+
+    syncProgressHeight();
+    requestAnimationFrame(syncProgressHeight);
+
+    const bar = document.querySelector('.task-progress-bar');
+    if (!bar) return undefined;
+
+    const observer = new ResizeObserver(syncProgressHeight);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [hasRunningTasks, tasks.length]);
+
   return (
     <div className="app">
-      <TaskProgressBar tasks={tasks} />
       <header ref={headerRef} className="app-header">
         {/* Title bar — horizontal inline row on top */}
         <div className="title-bar">
@@ -1083,6 +1121,8 @@ function AppContent() {
         </button>
       </div>
 
+      <TaskProgressBar tasks={tasks} />
+
       {/* OpenNexus3DStudio avatar sidebar — fixed below header + scene-controls */}
       <div className={`opennexus-sidebar ${openNexusSidebarCollapsed ? 'collapsed' : ''}`}>
         <button
@@ -1184,7 +1224,10 @@ function AppContent() {
         )}
       </div>
 
-      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!openNexusSidebarCollapsed ? 'has-opennexus' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
+      <div
+        ref={appContentRef}
+        className={`app-content ${!openNexusSidebarCollapsed ? 'has-opennexus' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}
+      >
         <div
           ref={sidebarScrollRef}
           className={`sidebar ${sidebarCollapsed ? 'collapsed' : 'sidebar-scroll-panel'}`}

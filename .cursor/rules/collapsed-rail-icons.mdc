@@ -6,7 +6,7 @@ alwaysApply: true
 
 # Collapsed side-rail icon symmetry
 
-When changing **collapsed** left (`.sidebar`) or right (`.character-studio-sidebar`) icon strips:
+When changing **collapsed** left (`.sidebar`) or right (`.opennexus-sidebar`) icon strips:
 
 ## Invariant
 
@@ -27,15 +27,15 @@ Do **not** add per-side overrides (e.g. extra `padding-top: 3rem` on one rail on
 
 Style both rails together:
 
-- Containers: `.collapsed-sidebar-icons`, `.collapsed-character-studio-icons`
-- Buttons: `.sidebar-icon`, `.character-studio-sidebar-icon`
-- Collapsed width: `.sidebar.collapsed`, `.character-studio-sidebar.collapsed`
+- Containers: `.collapsed-sidebar-icons`, `.collapsed-opennexus-icons`
+- Buttons: `.sidebar-icon`, `.opennexus-sidebar-icon`
+- Collapsed width: `.sidebar.collapsed`, `.opennexus-sidebar.collapsed`
 
 ## Layout rules
 
-1. **No ghost hamburger space** — in-panel hamburgers (`.hamburger-menu`, `.character-studio-sticky-hamburger`) use `display: none` when collapsed; scene-controls row hamburgers are the active controls.
+1. **No ghost hamburger space** — in-panel hamburgers (`.hamburger-menu`, `.opennexus-sticky-hamburger`) use `display: none` when collapsed; scene-controls row hamburgers are the active controls.
 2. **No asymmetric top offsets** — do not reserve space for hidden hamburgers with large `padding-top` on one side only.
-3. **Right rail vertical origin** — `.character-studio-sidebar` uses `top: var(--app-chrome-top-height)` (header + scene-controls), not header alone.
+3. **Right rail vertical origin** — `.opennexus-sidebar` uses `top: var(--app-content-top)` (measured from `.app-content` in `App.jsx`), not header alone and not `--app-chrome-top-height` calc alone.
 4. **Spacing via gap only** — use `gap` on the icon column; avoid extra `margin-bottom` on individual icons on one side.
 
 ## Checklist when adding/changing collapsed icons

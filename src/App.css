@@ -11,6 +11,7 @@
   --app-header-height: 96px;
   --scene-controls-height: 52px;
   --app-chrome-top-height: calc(var(--app-header-height) + var(--scene-controls-height));
+  --task-progress-height: 0px;
   --viewport-top-inset: 0px;
   --viewport-bottom-inset: 0px;
   --app-visible-height: 100dvh;
@@ -434,15 +435,10 @@
   border-color: rgba(0, 122, 204, 0.6);
 }
 
-/* OpenNexus3DStudio Sidebar — below header + scene-controls row (z-index stays behind chrome) */
+/* OpenNexus3DStudio Sidebar — align with .app-content top (matches left rail origin) */
 .opennexus-sidebar {
   position: fixed;
-  top: calc(
-    var(
-      --app-chrome-top-height,
-      calc(var(--app-header-height, 96px) + var(--scene-controls-height, 52px))
-    ) + var(--viewport-top-inset, 0px)
-  );
+  top: calc(var(--app-content-top, var(--app-chrome-top-height, 148px)) + var(--viewport-top-inset, 0px));
   bottom: max(0px, env(safe-area-inset-bottom, 0px), var(--viewport-bottom-inset, 0px));
   right: 0;
   width: min(400px, 30vw);
@@ -454,7 +450,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform 0.3s ease, width 0.3s ease;
+  transition: transform 0.3s ease, width 0.3s ease, top 0.3s ease;
   transform: translateX(0);
   padding: 0;
   box-sizing: border-box;
@@ -1114,13 +1110,8 @@
   flex: 1;
   position: relative; /* Anchor for the absolutely-positioned OpenNexus3DStudio sidebar */
   overflow: hidden;
-  transition: margin-top 0.3s ease;
-  /* Fill space below header + scene-controls row (do not use header height only). */
   min-height: 0;
-}
-
-.app-content.has-progress {
-  margin-top: 58px;
+  /* Fill space below header + scene-controls row (do not use header height only). */
 }
 
 .sidebar {
