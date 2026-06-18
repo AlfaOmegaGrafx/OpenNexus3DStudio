@@ -12,6 +12,13 @@ export const LOOT_ASSETS_DEFAULT_BRANCH = 'main';
 /** GitHub Pages CDN (optional remote manifest path via VITE_ASSET_PATH). */
 export const LOOT_ASSETS_GITHUB_PAGES = 'https://m3-org.github.io/loot-assets/';
 
+/** Raw GitHub paths for build-time icon fetch (CDN / Vercel). Icons live under loot/icons/ on main. */
+export const LOOT_BUILD_ICONS_RAW_BASES = [
+  `https://raw.githubusercontent.com/m3-org/loot-assets/${LOOT_ASSETS_DEFAULT_BRANCH}/loot/icons`,
+  `https://raw.githubusercontent.com/m3-org/loot-assets/${LOOT_ASSETS_DEFAULT_BRANCH}/icons`,
+  `${LOOT_ASSETS_GITHUB_PAGES}loot/icons`,
+];
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const repoRoot = path.resolve(__dirname, '..');
