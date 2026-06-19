@@ -627,6 +627,7 @@ const DEV_WATCH_IGNORED = [
   '**/coverage/**',
   '**/logs/**',
   '**/.vite/**',
+  '**/public/loot-assets/**',
   '**/playwright-report/**',
   '**/test-results/**',
   '**/electron-dist/**',
@@ -722,6 +723,7 @@ export default defineConfig(({ command, mode }) => {
     strictPort: false, // allow Cursor on 127.0.0.1:3000 while Vite serves LAN (Galaxy XR)
     watch: {
       ignored: DEV_WATCH_IGNORED,
+      followSymlinks: false,
       ...(useWatchPolling ? { usePolling: true, interval: 300 } : {}),
     },
   },

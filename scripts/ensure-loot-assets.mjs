@@ -10,6 +10,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadEnv } from 'vite';
 import {
   LOOT_ASSETS_DEFAULT_BRANCH,
   LOOT_ASSETS_GIT_CLONE_URL,
@@ -21,9 +22,20 @@ import {
   isLootLinkReady,
   publicLootLink,
   resolveExternalLootDir,
+  repoRoot,
   useExternalLootDir,
   usesRemoteLootManifest,
 } from './loot-assets-paths.mjs';
+
+/** Load .env so `npm run get-assets` respects VITE_ASSET_PATH (CDN vs junction). */
+function hydrateEnvFromDotEnv() {
+  const fromFile = loadEnv('development', repoRoot, '');
+  for (const [key, value] of Object.entries(fromFile)) {
+    if (process.env[key] === undefined || process.env[key] === '') {
+      process.env[key] = value;
+    }
+  }
+}
 
 /**
  * @param {string} file
@@ -137,6 +149,8 @@ function ensureInlineLayout() {
 }
 
 async function main() {
+  hydrateEnvFromDotEnv();
+
   if (usesRemoteLootManifest()) {
     await ensureBuildIconsOnly();
     console.log('[get-assets] loot-assets ready (remote manifest + local build icons)');
