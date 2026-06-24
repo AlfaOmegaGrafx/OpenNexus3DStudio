@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildStudioHandoffUrl,
   parseJobHandoffFromLocation,
-} from '../src/library/jobHandoff.js';
+} from '../library/jobHandoff.js';
 
 describe('jobHandoff', () => {
   it('buildStudioHandoffUrl encodes jobId and autoLoad', () => {

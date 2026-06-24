@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildXrHubEmbedUrl, getXrHubEmbedUrl, showXrAiPanel } from '../src/library/xrHubConfig.js';
+import { buildXrHubEmbedUrl, getXrHubEmbedUrl, showXrAiPanel } from '../library/xrHubConfig.js';
 
 describe('xrHubConfig', () => {
   it('buildXrHubEmbedUrl adds embed query param', () => {
