@@ -13,6 +13,52 @@ export const MAX_DELETED_JOB_IDS = 500;
 /** Matches 3DAIGC-API Redis job TTL (24h). */
 export const JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
 
+/** Mirrors taskManager pollJobStatus defaults (3s interval). */
+export const TASK_POLL_INTERVAL_MS = 3000;
+export const TASK_POLL_MAX_ATTEMPTS = 200;
+export const TASK_POLL_LONG_MAX_ATTEMPTS = 600;
+export const TASK_POLL_STALE_GRACE_MS = 5 * 60 * 1000;
+/** statusPollingUnavailable rows stop pretending to run after this. */
+export const STATUS_POLL_UNAVAILABLE_STALE_MS = 15 * 60 * 1000;
+
+export const STALE_RUNNING_TASK_ERROR =
+  'Lost track of this job in the browser. The server may have already finished — use Task Manager → Sync DGX to refresh, or delete this row.';
+
+const LONG_RUNNING_TASK_TYPES = new Set([
+  'image-to-3d',
+  'image-to-splat',
+  'avatar-from-image',
+  'image-to-world',
+]);
+
+/**
+ * Max time the UI should keep polling before treating a running row as detached.
+ * @param {object} [task]
+ */
+export function getTaskPollBudgetMs(task) {
+  const attempts = LONG_RUNNING_TASK_TYPES.has(task?.type)
+    ? TASK_POLL_LONG_MAX_ATTEMPTS
+    : TASK_POLL_MAX_ATTEMPTS;
+  return attempts * TASK_POLL_INTERVAL_MS + TASK_POLL_STALE_GRACE_MS;
+}
+
+/**
+ * Running task exceeded local poll budget or status polling was never available.
+ * @param {object} task
+ * @param {number} [nowMs]
+ */
+export function isRunningTaskDetached(task, nowMs = Date.now()) {
+  if (!task || task.status !== 'running') return false;
+  const anchor = task.startedAt || task.createdAt;
+  if (!anchor) return false;
+  const elapsed = nowMs - toDate(anchor).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0) return false;
+  if (task.result?.statusPollingUnavailable) {
+    return elapsed > STATUS_POLL_UNAVAILABLE_STALE_MS;
+  }
+  return elapsed > getTaskPollBudgetMs(task);
+}
+
 const FEATURE_TO_TASK_TYPE = Object.fromEntries(
   Object.entries(TASK_TYPE_TO_FEATURE)
     .filter(([, feature]) => feature)

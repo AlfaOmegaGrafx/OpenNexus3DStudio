@@ -42,6 +42,7 @@ import {
   applyJobTimestampsToTask,
   isApiJobStale,
   isJobDeletedLocally,
+  isRunningTaskDetached,
   isTaskStale,
   loadPersistedTasks,
   mapApiJobStatusToTaskStatus,
@@ -49,6 +50,7 @@ import {
   partitionStaleTasks,
   resolveTaskJobId,
   sortTasksForDisplay,
+  STALE_RUNNING_TASK_ERROR,
   taskFromApiJob,
   writeTaskStorageSnapshot,
 } from './taskPersistence.js';
@@ -494,6 +496,8 @@ export class TaskManager {
         console.log('Job polling completed:', finalResult);
 
         if (finalResult && finalResult.statusPollingUnavailable) {
+          const row = this.tasks.get(taskId);
+          if (row) row.statusMessage = 'Submitted — use Sync DGX when the job finishes';
           this.updateTaskStatus(taskId, 'running', 10, finalResult, null);
           this.emit('taskUpdated', { task: this.tasks.get(taskId) });
         } else {
@@ -2090,6 +2094,7 @@ export class TaskManager {
 
   async syncTasksWithApiHistory(limit = 100) {
     if (!this.isConnected || !this.apiEndpoint) return [];
+    await this._reconcileDetachedRunningTasks();
     const base = this.apiEndpoint.replace(/\/$/, '');
     const response = await axios.get(`${base}/api/v1/system/jobs/history`, {
       params: { limit },
@@ -2145,6 +2150,7 @@ export class TaskManager {
   async resumeInterruptedJobs() {
     if (!this.isConnected) return;
     this._pruneStaleTasks({ silent: true });
+    await this._reconcileDetachedRunningTasks();
     for (const task of this.getAllTasks()) {
       if (!task.job_id) continue;
       if (isTaskStale(task)) continue;
@@ -2154,6 +2160,65 @@ export class TaskManager {
       void this._resumeTaskPolling(task).finally(() => {
         this._resumingJobs.delete(task.job_id);
       });
+    }
+  }
+
+  async _reconcileDetachedRunningTasks() {
+    if (!this.isConnected) return;
+
+    for (const task of this.getAllTasks()) {
+      if (task.status !== 'running' || !task.job_id) continue;
+      if (this._resumingJobs.has(task.job_id)) continue;
+      if (!isRunningTaskDetached(task)) continue;
+
+      try {
+        const status = await this.checkJobStatus(task.job_id);
+        const mappedStatus = mapApiJobStatusToTaskStatus(status?.status);
+        if (mappedStatus === 'completed') {
+          const completedResult = this._buildCompletedTaskResult(status, task.job_id, task.type);
+          this.updateTaskStatus(task.id, 'completed', 100, completedResult);
+          this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+          continue;
+        }
+        if (mappedStatus === 'failed') {
+          this.updateTaskStatus(
+            task.id,
+            'failed',
+            task.progress,
+            status,
+            status?.error || status?.message || 'Job failed',
+          );
+          this.emit('taskFailed', { task: this.getTask(task.id) });
+          continue;
+        }
+        if (mappedStatus === 'running' || mappedStatus === 'pending') {
+          continue;
+        }
+      } catch (error) {
+        if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
+          const jobId = resolveTaskJobId(task);
+          if (jobId) markJobDeletedLocally(jobId);
+          this.removeTask(task.id);
+          this.emit('taskRemoved', { task, reason: 'expired' });
+          continue;
+        }
+        const isNetworkDown =
+          error.code === 'ERR_NETWORK' ||
+          error.code === 'ECONNABORTED' ||
+          error.message?.includes('Network Error') ||
+          error.response?.status >= 500;
+        if (isNetworkDown) continue;
+      }
+
+      this.updateTaskStatus(
+        task.id,
+        'failed',
+        task.progress,
+        task.result ?? null,
+        STALE_RUNNING_TASK_ERROR,
+      );
+      task.statusMessage = 'Sync DGX to refresh';
+      this.emit('taskFailed', { task: this.getTask(task.id), error: STALE_RUNNING_TASK_ERROR });
     }
   }
 
@@ -2196,6 +2261,8 @@ export class TaskManager {
         pollOptions.maxAttempts ?? 200,
       );
       if (finalResult?.statusPollingUnavailable) {
+        const row = this.getTask(task.id);
+        if (row) row.statusMessage = 'Submitted — use Sync DGX when the job finishes';
         this.updateTaskStatus(task.id, 'running', 10, finalResult, null);
         this.emit('taskUpdated', { task: this.getTask(task.id) });
         return;
@@ -2214,7 +2281,13 @@ export class TaskManager {
         this.emit('taskRemoved', { task, reason: 'expired' });
         return;
       }
-      console.warn(`[TaskManager] Failed to resume job ${task.job_id}:`, error?.message || error);
+      const message =
+        /polling timeout/i.test(error?.message || '')
+          ? STALE_RUNNING_TASK_ERROR
+          : error?.message || STALE_RUNNING_TASK_ERROR;
+      console.warn(`[TaskManager] Failed to resume job ${task.job_id}:`, message);
+      this.updateTaskStatus(task.id, 'failed', task.progress ?? null, task.result ?? null, message);
+      this.emit('taskFailed', { task: this.getTask(task.id), error: message });
     }
   }
 
