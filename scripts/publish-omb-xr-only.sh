@@ -8,6 +8,7 @@ cd "$ROOT"
 git add \
   package.json \
   package-lock.json \
+  scripts/verify-build-deps.mjs \
   .env.example \
   docs/api/api.md \
   docs/SPATIAL_FABRIC_INTEGRATION.md \

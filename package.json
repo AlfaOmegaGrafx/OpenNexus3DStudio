@@ -26,7 +26,7 @@
     "get-assets": "node scripts/ensure-loot-assets.mjs",
     "link-assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/link-loot-assets.ps1",
     "verify:public-env": "node scripts/verify-public-build-env.mjs",
-    "build": "npm run verify:public-env && npm run get-assets && vite build",
+    "build": "npm run verify:public-env && npm run verify:build-deps && npm run get-assets && vite build",
     "serve": "vite preview",
     "dist-mac": "electron-builder --mac",
     "dist-win": "electron-builder --win",
@@ -47,7 +47,8 @@
     "lint:prettier": "prettier --check \"**/*\" --end-of-line auto",
     "setup-mcp": "node scripts/setup-thirdweb-mcp.js",
     "setup-https": "node scripts/setup-https.js",
-    "update-roadmap": "node scripts/update-roadmap-date.js"
+    "update-roadmap": "node scripts/update-roadmap-date.js",
+    "verify:build-deps": "node scripts/verify-build-deps.mjs"
   },
   "dependencies": {
     "@iwsdk/core": "^0.4.2",
@@ -87,7 +88,12 @@
     "three-mesh-bvh": "^0.9.10",
     "use-sound": "^5.0.0",
     "wait-on": "^7.2.0",
-    "zustand": "^3.7.2"
+    "zustand": "^3.7.2",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
+    "meshoptimizer": "^0.22.0",
+    "draco3dgltf": "^1.5.7"
   },
   "devDependencies": {
     "@iwsdk/cli": "^0.4.2",
