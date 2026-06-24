@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildWorldManifestFetchCandidates,
   inferWorldAssetBaseUrlFromManifestUrl,
   isFullWorldPackageTaskResult,
   isSplatEnvironmentTaskResult,
@@ -114,5 +115,14 @@ describe('worldPackage', () => {
     expect(worlds).toHaveLength(1);
     expect(worlds[0].name).toBe('Forest scene');
     expect(worlds[0].manifest).toContain('/api/v1/system/jobs/abc/download?asset=manifest');
+  });
+
+  it('buildWorldManifestFetchCandidates includes world.manifest.json fallback', () => {
+    const urls = buildWorldManifestFetchCandidates(
+      '/api/v1/system/jobs/abc-123/download?asset=manifest',
+      '/__dev_dgx_proxy',
+    );
+    expect(urls.some((u) => u.includes('world.manifest.json'))).toBe(true);
+    expect(urls.some((u) => u.includes('asset=manifest'))).toBe(true);
   });
 });

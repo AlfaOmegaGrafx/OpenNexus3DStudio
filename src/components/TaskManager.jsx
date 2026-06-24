@@ -14,6 +14,7 @@ import {
   PREFERRED_PIPELINES,
   resolveAutoRigModelForTask,
   resolveMeshModelForAvatarFromImage,
+  resolveSplatModelForPhotos,
 } from '../library/aiModelsCatalog.js';
 import {
   getTaskResultModelUrl,
@@ -27,11 +28,24 @@ import {
   isWorldLayerTaskResult,
 } from '../library/worldPackage.js';
 import { formatTaskDurationMs, getTaskElapsedMs, resolveTaskJobId } from '../library/taskPersistence.js';
+import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
+import { canPublishTaskToSpatialFabric } from '../library/spatialFabricAdapter.js';
+import {
+  normalizeObjectName,
+  objectNameFromFilename,
+  slugifyObjectName,
+} from '../library/objectNameUtils.js';
 import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
+import {
+  MAX_TOTAL_IMAGES,
+  multiImageUploadHint,
+  splitPrimaryAndReferenceFiles,
+  supportsMultiImageInput,
+} from '../library/multiImageInput.js';
 import TaskAdvancedOptions from './TaskAdvancedOptions.jsx';
 
 export { ALL_MODELS, TASK_TYPE_TO_FEATURE };
@@ -50,8 +64,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskType, setNewTaskType] = useState('text-to-3d');
+  const [newObjectName, setNewObjectName] = useState('');
   const [newTaskPrompt, setNewTaskPrompt] = useState('');
   const [newTaskImage, setNewTaskImage] = useState(null);
+  const [newTaskImages, setNewTaskImages] = useState([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
   const [newTaskModel, setNewTaskModel] = useState(() => getDefaultModelForFeature('text-to-3d'));
   const [taskOptions, setTaskOptions] = useState({
     texture_resolution: 1024,
@@ -60,6 +77,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     rig_mode: AUTO_RIG_MODES.FULL,
     humanoid_template_id: DEFAULT_HUMANOID_TEMPLATE_ID,
     include_splat_preview: false,
+    use_multiview_mesh: true,
     prop_regions_json: '',
     world_name: '',
     prop_mesh_model_preference: 'trellis2_image_to_textured_mesh',
@@ -78,15 +96,29 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const [deleteError, setDeleteError] = useState(null);
   const [isSyncingTasks, setIsSyncingTasks] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [publishingJobId, setPublishingJobId] = useState(null);
   const [availableModels, setAvailableModels] = useState(ALL_MODELS);
   const { currentModel } = useScene();
   const { deleteTask, syncTasksFromApi, clearCompletedTasks, getApiEndpoint } = useTask();
   const apiEndpoint = getApiEndpoint();
+  const { openBrowser, publishJob, config: spatialConfig } = useSpatialFabric(apiEndpoint);
   const fileInputRef = useRef(null);
+  const objectNameInputRef = useRef(null);
+  const [objectNamePlaceholder, setObjectNamePlaceholder] = useState(
+    'e.g. Dragon Knight, Desk Lamp, Childhood Bedroom',
+  );
   const avatarSdkReady = Boolean(
     import.meta.env.VITE_AVATARSDK_CLIENT_ID && import.meta.env.VITE_AVATARSDK_CLIENT_SECRET
   );
   const canStartAnyTask = isApiConnected || avatarSdkReady;
+  const normalizedNewObjectName = normalizeObjectName(newObjectName);
+  const canSubmitNewTask = Boolean(normalizedNewObjectName);
+
+  useEffect(() => {
+    if (!showNewTask) return undefined;
+    const timer = window.setTimeout(() => objectNameInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [showNewTask]);
 
   // Log only when the file input is expected (new task open + image-related type) but missing.
   useEffect(() => {
@@ -253,6 +285,14 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     console.log('TaskManager: newTaskType:', newTaskType);
     console.log('TaskManager: newTaskImage:', newTaskImage);
 
+    const objectName = normalizeObjectName(newObjectName);
+    if (!objectName) {
+      alert('⚠️ Enter a name for this 3D object before starting.');
+      objectNameInputRef.current?.focus();
+      objectNameInputRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
+
     if (newTaskType === 'mesh-painting' && !newTaskImage) {
       alert('⚠️ Mesh painting (image) requires a reference image.');
       return;
@@ -318,10 +358,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         : newTaskType === 'avatar-from-image'
           ? 'Generate avatar from photo (mesh + template VRM rig)'
           : newTaskType === 'image-to-world'
-            ? taskOptions.world_name?.trim() || 'Explorable world from photo'
+            ? objectName
             : `${newTaskType.replace('-', ' ')} on current model`);
 
     const options = {
+      object_name: objectName,
       texture_resolution: taskOptions.texture_resolution,
       output_format:
         taskOptions.output_format ??
@@ -344,7 +385,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     }
     if (newTaskType === 'avatar-from-image') {
-      options.mesh_model_preference = resolveMeshModelForAvatarFromImage(newTaskModel);
       options.humanoid_template_id =
         taskOptions.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID;
       options.include_splat_preview = Boolean(taskOptions.include_splat_preview);
@@ -369,7 +409,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       options.model_preference = newTaskModel || 'opennexus_image_to_world';
       options.prop_mesh_model_preference =
         taskOptions.prop_mesh_model_preference || 'trellis2_image_to_textured_mesh';
-      options.world_name = taskOptions.world_name?.trim() || prompt;
+      options.world_name = objectName;
       if (taskOptions.prop_regions_json?.trim()) {
         try {
           const parsed = JSON.parse(taskOptions.prop_regions_json);
@@ -388,9 +428,31 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
 
     console.log('TaskManager: Calling onAITask with options:', options);
-    onAITask(newTaskType, prompt, newTaskImage, options);
+    const multiImage = supportsMultiImageInput(newTaskType) && newTaskImages.length > 0;
+    const { primary, references } = multiImage
+      ? splitPrimaryAndReferenceFiles(newTaskImages, primaryImageIndex)
+      : { primary: newTaskImage, references: [] };
+    const imageFile = primary || newTaskImage;
+    if (references.length > 0) {
+      options.reference_image_files = references;
+      options.use_multiview_mesh = Boolean(taskOptions.use_multiview_mesh);
+    }
+    if (newTaskType === 'image-to-splat' && references.length >= 1) {
+      options.model_preference = resolveSplatModelForPhotos(1, references.length);
+    }
+    if (newTaskType === 'avatar-from-image') {
+      options.mesh_model_preference = resolveMeshModelForAvatarFromImage(newTaskModel, {
+        referenceCount: references.length,
+        useMultiview: taskOptions.use_multiview_mesh,
+      });
+    }
+    onAITask(newTaskType, prompt, imageFile, options);
+    setNewObjectName('');
     setNewTaskPrompt('');
+    setObjectNamePlaceholder('e.g. Dragon Knight, Desk Lamp, Childhood Bedroom');
     setNewTaskImage(null);
+    setNewTaskImages([]);
+    setPrimaryImageIndex(0);
     setMeshEditSourceImage(null);
     setMeshEditMaskImage(null);
     // Reset to default model for the task type
@@ -399,13 +461,33 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   };
 
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    console.log('TaskManager: handleImageChange called, file:', file ? file.name : 'null');
-    if (file) {
-      setNewTaskImage(file);
-      console.log('TaskManager: File set:', file.name, file.size, 'bytes');
-    } else {
+    const files = Array.from(e.target.files || []);
+    const multi = supportsMultiImageInput(newTaskType);
+    const selected = multi ? files.slice(0, MAX_TOTAL_IMAGES) : files.slice(0, 1);
+    console.log('TaskManager: handleImageChange called, files:', selected.map((f) => f.name));
+    if (selected.length === 0) {
       console.warn('TaskManager: No file selected');
+      return;
+    }
+    if (multi) {
+      setNewTaskImages(selected);
+      setPrimaryImageIndex(0);
+      setNewTaskImage(selected[0]);
+    } else {
+      setNewTaskImages([]);
+      setPrimaryImageIndex(0);
+      setNewTaskImage(selected[0]);
+    }
+    const suggested = objectNameFromFilename(selected[0].name);
+    if (suggested) {
+      setObjectNamePlaceholder(suggested);
+    }
+  };
+
+  const handleSetPrimaryImage = (index) => {
+    setPrimaryImageIndex(index);
+    if (newTaskImages[index]) {
+      setNewTaskImage(newTaskImages[index]);
     }
   };
 
@@ -577,6 +659,37 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   };
 
+  const handleOpenMetaverseBrowser = async (event) => {
+    event?.stopPropagation?.();
+    try {
+      await openBrowser();
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
+  };
+
+  const handlePublishRp1 = async (task, event) => {
+    event.stopPropagation();
+    const jobId = resolveTaskJobId(task);
+    if (!jobId) {
+      alert('No DGX job id on this task — sync from DGX or wait for completion.');
+      return;
+    }
+    setPublishingJobId(jobId);
+    try {
+      const assetName = slugifyObjectName(
+        task.options?.object_name || task.name,
+        taskJobId ? `job-${taskJobId}` : 'opennexus-mesh',
+      );
+      await publishJob(jobId, assetName);
+    } catch (err) {
+      console.error('[SpatialFabric] TaskManager publish failed', err);
+      alert(err?.message || String(err));
+    } finally {
+      setPublishingJobId(null);
+    }
+  };
+
   return (
     <div className="task-manager">
       <div className="card">
@@ -611,8 +724,21 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               >
                 Clear
               </button>
+              <button
+                className="btn btn-secondary"
+                onClick={(event) => void handleOpenMetaverseBrowser(event)}
+                title="Open RP1 Scene Assembler / Open Metaverse Browser"
+              >
+                OMB
+              </button>
           </div>
         </div>
+
+        {spatialConfig?.msfPublicUrl ? (
+          <p style={{ fontSize: '0.55rem', color: '#888', padding: '0 0.75rem 0.35rem', margin: 0 }}>
+            Scene Assembler: {spatialConfig.msfPublicUrl}
+          </p>
+        ) : null}
 
         {syncMessage && (
           <div
@@ -676,7 +802,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               >
                 Open3DStudio
               </a>{' '}
-              Workflows use DGX-verified defaults: TRELLIS.2 for image→3D, SkinTokens for full rig, UniRig for template VRM.
+              Workflows use DGX-verified defaults: TRELLIS.2 for image→3D;{' '}
+              <strong>SkinTokens</strong> for <em>Auto Rigging → full rig</em>;{' '}
+              <strong>UniRig</strong> for <em>Avatar from Image → template VRM</em> (not SkinTokens).
               Models list updates from the API when connected.
             </p>
             {(newTaskType === 'image-to-3d' || newTaskType === 'auto-rigging') && (
@@ -695,48 +823,55 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               </p>
             )}
             <form onSubmit={handleSubmitTask}>
-              <div className="flex gap-1.5 mb-1.5">
-                <div style={{ flex: 1 }}>
-                  <select 
-                    value={newTaskType} 
-                    onChange={(e) => setNewTaskType(e.target.value)}
-                    className="input w-full"
-                    style={{ padding: '0.375rem', fontSize: '0.65rem' }}
-                  >
-                    <option value="text-to-3d">Text to 3D</option>
-                    <option value="image-to-3d">Image to 3D (textured mesh)</option>
-                    <option value="image-to-raw-mesh">Image to Raw Mesh</option>
-                    <option value="image-to-splat">Image to Gaussian Splat</option>
-                    <option value="image-to-world">Image to World (splat + props)</option>
-                    <option value="avatar-from-image">Avatar from Image (TRELLIS.2 + template VRM)</option>
-                    <option value="mesh-painting-text">Mesh painting (text)</option>
-                    <option value="mesh-painting">Mesh painting (image)</option>
-                    <option value="mesh-segmentation">Mesh Segmentation</option>
-                    <option value="mesh-retopology">Mesh Retopology</option>
-                    <option value="mesh-uv-unwrapping">Mesh UV Unwrapping</option>
-                    <option value="mesh-editing-text">Mesh editing (text)</option>
-                    <option value="mesh-editing-image">Mesh editing (image)</option>
-                    <option value="auto-rigging">Auto Rigging</option>
-                    <option value="avatar-from-photo">Avatar From Photo (AvatarSDK)</option>
-                  </select>
-                </div>
-                <div className="flex gap-1">
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary"
-                    data-testid="task-start-btn"
-                    onClick={() => console.log('TaskManager: Submit button clicked')}
-                  >
-                    Start
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary"
-                    onClick={() => setShowNewTask(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <div className="mb-1.5">
+                <select 
+                  value={newTaskType} 
+                  onChange={(e) => setNewTaskType(e.target.value)}
+                  className="input w-full"
+                  style={{ padding: '0.375rem', fontSize: '0.65rem' }}
+                >
+                  <option value="text-to-3d">Text to 3D</option>
+                  <option value="image-to-3d">Image to 3D (textured mesh)</option>
+                  <option value="image-to-raw-mesh">Image to Raw Mesh</option>
+                  <option value="image-to-splat">Image to Gaussian Splat</option>
+                  <option value="image-to-world">Image to World (splat + props)</option>
+                  <option value="avatar-from-image">Avatar from Image (TRELLIS.2 + template VRM)</option>
+                  <option value="mesh-painting-text">Mesh painting (text)</option>
+                  <option value="mesh-painting">Mesh painting (image)</option>
+                  <option value="mesh-segmentation">Mesh Segmentation</option>
+                  <option value="mesh-retopology">Mesh Retopology</option>
+                  <option value="mesh-uv-unwrapping">Mesh UV Unwrapping</option>
+                  <option value="mesh-editing-text">Mesh editing (text)</option>
+                  <option value="mesh-editing-image">Mesh editing (image)</option>
+                  <option value="auto-rigging">Auto Rigging</option>
+                  <option value="avatar-from-photo">Avatar From Photo (AvatarSDK)</option>
+                </select>
+              </div>
+
+              <div className="mb-1.5">
+                <label
+                  htmlFor="task-object-name-input"
+                  style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}
+                >
+                  Object name <span style={{ color: '#f88' }}>*</span>
+                </label>
+                <input
+                  ref={objectNameInputRef}
+                  id="task-object-name-input"
+                  type="text"
+                  className="input w-full"
+                  value={newObjectName}
+                  onChange={(e) => setNewObjectName(e.target.value)}
+                  placeholder={objectNamePlaceholder}
+                  required
+                  maxLength={64}
+                  data-testid="task-object-name-input"
+                  style={{ padding: '0.375rem', fontSize: '0.65rem' }}
+                  autoComplete="off"
+                />
+                <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
+                  Required before starting. Shown in the task list and used when publishing to RP1 / Scene Assembler.
+                </p>
               </div>
 
               {isApiConnected && newTaskType !== 'avatar-from-photo' && newTaskType !== 'avatar-from-image' && (
@@ -896,19 +1031,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     ))}
                   </select>
                   <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}>
-                    World name (optional)
-                  </label>
-                  <input
-                    type="text"
-                    className="input w-full"
-                    value={taskOptions.world_name}
-                    onChange={(e) =>
-                      setTaskOptions((prev) => ({ ...prev, world_name: e.target.value }))
-                    }
-                    placeholder="Childhood bedroom"
-                    style={{ padding: '0.375rem', fontSize: '0.65rem', marginBottom: '0.5rem' }}
-                  />
-                  <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}>
                     Prop regions JSON (optional)
                   </label>
                   <textarea
@@ -998,7 +1120,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       : newTaskType === 'image-to-raw-mesh'
                         ? 'Upload Image (raw mesh):'
                       : newTaskType === 'image-to-splat'
-                        ? 'Upload Image (TripoSplat → Spark.js):'
+                        ? 'Upload photo(s) (1 → TripoSplat, 2+ → WorldMirror):'
                         : newTaskType === 'image-to-world'
                           ? 'Upload Reference Image:'
                         : newTaskType === 'avatar-from-image'
@@ -1012,6 +1134,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     id="task-image-file-input"
                     type="file"
                     accept="image/*"
+                    multiple={supportsMultiImageInput(newTaskType)}
                     data-testid="task-image-file-input"
                     onChange={handleImageChange}
                     style={{ display: 'none' }}
@@ -1027,9 +1150,72 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       marginBottom: '0.25rem'
                     }}
                   >
-                    {newTaskImage ? `Change File (${newTaskImage.name})` : 'Choose File'}
+                    {newTaskImage
+                      ? supportsMultiImageInput(newTaskType) && newTaskImages.length > 1
+                        ? `${newTaskImages.length} photos selected`
+                        : `Change File (${newTaskImage.name})`
+                      : supportsMultiImageInput(newTaskType)
+                        ? 'Choose photo(s)'
+                        : 'Choose File'}
                   </button>
-                  {newTaskImage && (
+                  {supportsMultiImageInput(newTaskType) && (
+                    <div style={{ fontSize: '0.58rem', color: '#9ab', marginTop: '0.25rem' }}>
+                      {multiImageUploadHint(newTaskType)}
+                    </div>
+                  )}
+                  {supportsMultiImageInput(newTaskType) && newTaskImages.length > 1 && (
+                    <>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          fontSize: '0.58rem',
+                          color: '#9ab',
+                          marginTop: '0.35rem',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={taskOptions.use_multiview_mesh !== false}
+                          onChange={(e) =>
+                            setTaskOptions((prev) => ({
+                              ...prev,
+                              use_multiview_mesh: e.target.checked,
+                            }))
+                          }
+                        />
+                        Use all photos for mesh (TRELLIS multiview)
+                      </label>
+                      <div
+                        style={{
+                          marginTop: '0.35rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.2rem',
+                        }}
+                      >
+                        {newTaskImages.map((file, index) => (
+                          <button
+                            key={`${file.name}-${index}`}
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => handleSetPrimaryImage(index)}
+                            style={{
+                              fontSize: '0.58rem',
+                              padding: '0.2rem 0.35rem',
+                              textAlign: 'left',
+                              borderColor: index === primaryImageIndex ? '#6af' : undefined,
+                            }}
+                          >
+                            {index === primaryImageIndex ? '★ Primary: ' : 'Set primary: '}
+                            {file.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {newTaskImage && (!supportsMultiImageInput(newTaskType) || newTaskImages.length <= 1) && (
                     <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '0.25rem' }}>
                       Selected: {newTaskImage.name}
                     </div>
@@ -1088,6 +1274,27 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   )}
                 </div>
               )}
+
+              <div className="flex gap-1 mt-1.5">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  data-testid="task-start-btn"
+                  disabled={!canSubmitNewTask}
+                  title={canSubmitNewTask ? 'Start generation' : 'Enter an object name first'}
+                  onClick={() => console.log('TaskManager: Submit button clicked')}
+                  style={{ flex: 1 }}
+                >
+                  Start
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowNewTask(false)}
+                >
+                  Cancel
+                </button>
+              </div>
             </form>
           </div>
         )}
@@ -1162,6 +1369,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         <span style={{ color: '#666' }}>
                           {' '}
                           • job {resolveTaskJobId(task).slice(0, 8)}…
+                          {task.handoffSource === 'galaxy-xr' ? ' • XR' : ''}
                           {task.syncedFromApi ? ' • DGX' : ''}
                         </span>
                       ) : null}
@@ -1228,12 +1436,21 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   </div>
                 )}
 
-                {task.result && (() => {
+                {(task.result || (task.status === 'completed' && resolveTaskJobId(task))) && (() => {
                   const loadPayload = normalizeTaskLoadPayload(task);
                   const isFullWorld = isFullWorldPackageTaskResult(loadPayload);
                   const isSplatEnv = isSplatEnvironmentTaskResult(loadPayload);
                   const isWorld = isFullWorld || isSplatEnv;
                   const modelUrl = getTaskResultModelUrl(loadPayload);
+                  const meshUrl = getTaskResultMeshUrl(loadPayload);
+                  const canPublishRp1 = canPublishTaskToSpatialFabric(task, loadPayload, {
+                    isSplatOnly: isSplatEnv && !meshUrl,
+                    hasMesh: Boolean(meshUrl),
+                    meshUrl,
+                    isFullWorld,
+                  });
+                  const taskJobId = resolveTaskJobId(task);
+                  const isPublishing = publishingJobId && taskJobId === publishingJobId;
                   return (
                   <div className="text-xs text-green-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
                     {isViewportLoading
@@ -1283,6 +1500,44 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           Load Model
                         </button>
                       )
+                    )}
+                    {canPublishRp1 && (
+                      <button
+                        onClick={(event) => void handlePublishRp1(task, event)}
+                        disabled={!isApiConnected || isPublishing}
+                        style={{
+                          marginLeft: '0.35rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: '#6f42c1',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: isApiConnected && !isPublishing ? 'pointer' : 'not-allowed',
+                          opacity: isApiConnected ? 1 : 0.55,
+                        }}
+                        title="Publish completed mesh GLB to MSF / RP1 object library and open Scene Assembler"
+                      >
+                        {isPublishing ? '…' : 'Publish RP1'}
+                      </button>
+                    )}
+                    {!isWorld && (canPublishRp1 || taskJobId) && (
+                      <button
+                        onClick={(event) => void handleOpenMetaverseBrowser(event)}
+                        style={{
+                          marginLeft: '0.35rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                        title="Open RP1 Scene Assembler / Open Metaverse Browser"
+                      >
+                        OMB
+                      </button>
                     )}
                   </div>
                   );

@@ -1,12 +1,13 @@
 /**
  * TaskManager - Manages AI generation tasks and workflows
- * Similar to the task management in CharacterStudio but focused on 3DAIGC workflows
+ * Similar to the task management in OpenNexus3DStudio but focused on 3DAIGC workflows
  *
  * HTTP targets 3DAIGC-API (AlfaOmegaGrafx/3DAIGC-API: mesh_generation.py, system.py).
  * There is no api.md in this repo; backend should publish OpenAPI or a consumer contract doc.
  */
 import axios from 'axios';
 import { logger } from './logger.js';
+import { isLocalDev } from './runtimeUi.js';
 import { performanceMonitor } from './performanceMonitor.js';
 import { rollbackManager } from './rollbackManager.js';
 import avatarSdkService from '../services/avatarSdkService.js';
@@ -25,6 +26,12 @@ import {
   AVATAR_MESH_DECIMATION_TARGET,
 } from './aiModelsCatalog.js';
 import {
+  buildTaskDisplayName,
+  normalizeObjectName,
+  slugifyObjectName,
+  withObjectNamePayload,
+} from './objectNameUtils.js';
+import {
   AUTO_RIG_MODES,
   buildTemplateAutoRigOptions,
   DEFAULT_HUMANOID_TEMPLATE_ID,
@@ -33,10 +40,13 @@ import {
 } from './avatarPipelineCatalog.js';
 import {
   applyJobTimestampsToTask,
+  isApiJobStale,
   isJobDeletedLocally,
+  isTaskStale,
   loadPersistedTasks,
   mapApiJobStatusToTaskStatus,
   markJobDeletedLocally,
+  partitionStaleTasks,
   resolveTaskJobId,
   sortTasksForDisplay,
   taskFromApiJob,
@@ -303,7 +313,11 @@ export class TaskManager {
               endpoint: this.apiEndpoint,
               wasConnected,
               errorDetails,
-              recovery: errorDetails.connectionRefused ? 'Set VITE_API_ENDPOINT to your API server URL (e.g. DGX Sparks)' : 'Check server accessibility'
+              recovery: errorDetails.connectionRefused
+                ? isLocalDev
+                  ? 'Set VITE_API_ENDPOINT to your API server URL (e.g. DGX Sparks)'
+                  : 'Connect a backend API in your hosted instance'
+                : 'Check server accessibility',
             }
           );
         } catch (logErr) {
@@ -353,14 +367,21 @@ export class TaskManager {
       throw new Error(`Unsupported task type: ${type}`);
     }
 
+    const objectName = normalizeObjectName(options?.object_name);
+    if (!objectName) {
+      throw new Error('Object name is required');
+    }
+    const taskOptions = { ...options, object_name: objectName };
+
     const taskId = `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const safePrompt = typeof prompt === 'string' ? prompt : '';
     const task = {
       id: taskId,
       type,
-      name: `${type.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} - ${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}`,
-      prompt,
+      name: buildTaskDisplayName(type, objectName, safePrompt),
+      prompt: safePrompt,
       imageFile,
-      options,
+      options: taskOptions,
       status: 'pending',
       progress: 0,
       createdAt: new Date(),
@@ -519,6 +540,14 @@ export class TaskManager {
       }
       return result;
     } catch (error) {
+      if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
+        const jobId = resolveTaskJobId(task);
+        if (jobId) markJobDeletedLocally(jobId);
+        this.removeTask(taskId);
+        this.emit('taskRemoved', { task, reason: 'expired' });
+        throw error;
+      }
+
       logger.error('Task execution failed', error, {
         taskId,
         taskType: task.type,
@@ -608,6 +637,21 @@ export class TaskManager {
     return fileId;
   }
 
+  static formatNetworkError(endpoint, error) {
+    const httpsPage =
+      typeof window !== 'undefined' && window.location?.protocol === 'https:';
+    const directHttpApi = /^https?:\/\//i.test(endpoint || '');
+    const proxyHint =
+      httpsPage && directHttpApi && !String(endpoint).includes('__dev_dgx_proxy')
+        ? ' On HTTPS dev, set VITE_API_ENDPOINT=/__dev_dgx_proxy and DEV_API_PROXY_TARGET=http://10.0.0.158:7842 in .env.'
+        : '';
+    const e = new Error(
+      `Network error: No response from server at ${endpoint}. Ensure the API server is running.${proxyHint}`,
+    );
+    e.originalError = error;
+    return e;
+  }
+
   static formatApiError(error) {
     const data = error?.response?.data;
     if (typeof data === 'string' && data.length > 0) {
@@ -686,13 +730,13 @@ export class TaskManager {
    */
   async executeTextTo3D(prompt, options) {
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/text-to-textured-mesh`;
-    const requestData = {
+    const requestData = withObjectNamePayload({
       text_prompt: prompt,
       texture_prompt: options?.texture_prompt ?? prompt,
       texture_resolution: options?.texture_resolution ?? 1024,
       output_format: 'glb',
       model_preference: options?.model_preference ?? 'trellis_text_to_textured_mesh',
-    };
+    }, options);
     if (options?.mesh_simplify != null) {
       requestData.mesh_simplify = options.mesh_simplify;
     }
@@ -749,6 +793,40 @@ export class TaskManager {
   }
 
   /**
+   * Upload reference images for multi-image jobs (Phase 1).
+   * @param {File[]} referenceFiles
+   * @returns {Promise<string[]>}
+   */
+  async uploadReferenceImageFiles(referenceFiles = []) {
+    const ids = [];
+    for (const file of referenceFiles) {
+      if (!file) continue;
+      const maxSide =
+        Number(import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
+      const prepared = await resizeImageFor3daigc(file, maxSide);
+      const id = await this.uploadImageFileForApi(prepared);
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /**
+   * @param {object} [options]
+   * @returns {Promise<string[]>}
+   */
+  async resolveReferenceImageFileIds(options = {}) {
+    const fromOptions = options.reference_image_file_ids;
+    if (Array.isArray(fromOptions) && fromOptions.length > 0) {
+      return fromOptions.filter((id) => typeof id === 'string' && id.length > 0);
+    }
+    const files = options.reference_image_files;
+    if (!Array.isArray(files) || files.length === 0) {
+      return [];
+    }
+    return this.uploadReferenceImageFiles(files);
+  }
+
+  /**
    * Upload image to 3DAIGC-API file store (preferred path for image-to-textured-mesh).
    * @returns {Promise<string|null>} file_id or null if upload is unavailable
    */
@@ -772,6 +850,22 @@ export class TaskManager {
         logger.info('Image file upload endpoint not available; falling back to image_base64', { uploadUrl, status });
         return null;
       }
+      const networkish =
+        !err.response &&
+        (err.code === 'ERR_NETWORK' ||
+          err.code === 'ECONNABORTED' ||
+          err.code === 'ECONNREFUSED' ||
+          err.code === 'ERR_CONNECTION_REFUSED' ||
+          err.request);
+      if (networkish || status === 400 || status === 413 || status === 422) {
+        logger.warn('Image file upload failed; falling back to image_base64', {
+          uploadUrl,
+          status,
+          code: err.code,
+          message: err.message,
+        });
+        return null;
+      }
       throw err;
     }
   }
@@ -781,7 +875,9 @@ export class TaskManager {
    */
   async executeImageTo3D(prompt, imageFile, options) {
     if (!imageFile) {
-      return await this.executeTextTo3D(prompt || 'Convert image to 3D', options);
+      throw new Error(
+        'Image to 3D requires an input image. Select a photo before submitting — it will not fall back to text-to-3D.',
+      );
     }
     const maxSide =
       Number(options?.max_image_side ?? import.meta.env.VITE_3DAIGC_MAX_IMAGE_SIDE ?? 2048) || 2048;
@@ -793,24 +889,24 @@ export class TaskManager {
     try {
       imageFileId = await this.uploadImageFileForApi(preparedImage);
     } catch (uploadErr) {
-      const st = uploadErr?.response?.status;
-      if (st === 400 || st === 413 || st === 422) {
-        logger.warn('Image file upload rejected; falling back to image_base64', {
-          status: st,
-          detail: uploadErr?.response?.data
-        });
-      } else {
-        throw uploadErr;
-      }
+      logger.warn('Image upload failed unexpectedly', {
+        message: uploadErr?.message,
+        status: uploadErr?.response?.status,
+      });
     }
 
-    const basePayload = {
+    const basePayload = withObjectNamePayload({
       output_format: 'glb',
       model_preference:
         options?.model_preference ??
         import.meta.env.VITE_DEFAULT_IMAGE_TO_3D_MODEL ??
         getDefaultModelForFeature('image-to-3d'),
-    };
+    }, options);
+    const referenceImageFileIds = await this.resolveReferenceImageFileIds(options);
+    if (referenceImageFileIds.length > 0) {
+      basePayload.reference_image_file_ids = referenceImageFileIds;
+      basePayload.use_multiview_mesh = options.use_multiview_mesh !== false;
+    }
     if (options?.texture_resolution != null) {
       basePayload.texture_resolution = options.texture_resolution;
     }
@@ -859,9 +955,7 @@ export class TaskManager {
         throw e;
       }
       if (error.request) {
-        const e = new Error(`Network error: No response from server at ${endpoint}. Ensure the API server is running.`);
-        e.originalError = error;
-        throw e;
+        throw TaskManager.formatNetworkError(endpoint, error);
       }
       throw error;
     }
@@ -896,13 +990,20 @@ export class TaskManager {
     }
 
     const outputFormat = options?.output_format === 'splat' ? 'splat' : 'ply';
-    const basePayload = {
+    const referenceImageFileIds = await this.resolveReferenceImageFileIds(options);
+    const splatModel =
+      options?.model_preference ??
+      import.meta.env.VITE_DEFAULT_IMAGE_TO_SPLAT_MODEL ??
+      (referenceImageFileIds.length >= 1
+        ? 'worldmirror2_reconstruct'
+        : 'triposplat_image_to_splat');
+    const basePayload = withObjectNamePayload({
       output_format: outputFormat,
-      model_preference:
-        options?.model_preference ??
-        import.meta.env.VITE_DEFAULT_IMAGE_TO_SPLAT_MODEL ??
-        'triposplat_image_to_splat',
-    };
+      model_preference: splatModel,
+      ...(referenceImageFileIds.length > 0
+        ? { reference_image_file_ids: referenceImageFileIds }
+        : {}),
+    }, options);
     if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
       basePayload.model_parameters = options.model_parameters;
     }
@@ -978,11 +1079,11 @@ export class TaskManager {
     }
     this.emitTaskProgress({ indeterminate: true, status: 'Uploading mesh…' });
     const meshFileId = await this.uploadMeshFile(modelData, 'model.glb');
-    const body = {
+    const body = withObjectNamePayload({
       mesh_file_id: meshFileId,
       output_format: options.output_format ?? 'glb',
       model_preference: options.model_preference,
-    };
+    }, options);
     if (options.model_parameters && Object.keys(options.model_parameters).length > 0) {
       body.model_parameters = options.model_parameters;
     }
@@ -1010,7 +1111,7 @@ export class TaskManager {
       }
     }
 
-    const payload = {
+    const payload = withObjectNamePayload({
       output_format: 'glb',
       model_preference:
         options?.model_preference ??
@@ -1019,7 +1120,7 @@ export class TaskManager {
       ...(imageFileId
         ? { image_file_id: imageFileId }
         : { image_base64: await this.fileToBase64(preparedImage) }),
-    };
+    }, options);
     if (options?.model_parameters && Object.keys(options.model_parameters).length > 0) {
       payload.model_parameters = options.model_parameters;
     }
@@ -1071,12 +1172,12 @@ export class TaskManager {
     }
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-generation/text-mesh-painting`;
     const meshBase64 = await this.blobToBase64(modelData);
-    const requestData = {
+    const requestData = withObjectNamePayload({
       text_prompt: prompt,
       mesh_base64: meshBase64,
       output_format: options?.output_format ?? 'glb',
       model_preference: options?.model_preference ?? 'trellis_text_mesh_painting'
-    };
+    }, options);
     const response = await axios.post(endpoint, requestData, {
       headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
       timeout: 300000
@@ -1239,7 +1340,7 @@ export class TaskManager {
     console.log('Auto-rigging: submitting generate-rig', rigBody);
 
     this.emitTaskProgress({ indeterminate: true, status: 'Queued on server…' });
-    const response = await axios.post(endpoint, rigBody, {
+    const response = await axios.post(endpoint, withObjectNamePayload(rigBody, options), {
       headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
       ...config,
     });
@@ -1288,20 +1389,24 @@ export class TaskManager {
       }
     }
 
-    const payload = {
+    const referenceImageFileIds = await this.resolveReferenceImageFileIds(options);
+    const payload = withObjectNamePayload({
       model_preference: options?.model_preference ?? 'opennexus_image_to_world',
       world_id: options?.world_id,
-      world_name: options?.world_name || prompt || 'Generated World',
+      world_name: options?.world_name || options?.object_name || prompt || 'Generated World',
       prop_regions: options?.prop_regions ?? [],
       prop_mesh_model_preference:
         options?.prop_mesh_model_preference ?? 'trellis2_image_to_textured_mesh',
       splat_parameters: options?.splat_parameters,
       prop_mesh_parameters: options?.prop_mesh_parameters,
       spawn: options?.spawn,
+      ...(referenceImageFileIds.length > 0
+        ? { reference_image_file_ids: referenceImageFileIds }
+        : {}),
       ...(imageFileId
         ? { image_file_id: imageFileId }
         : { image_base64: await this.fileToBase64(preparedImage) }),
-    };
+    }, options);
 
     const response = await axios.post(endpoint, payload, {
       headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
@@ -1325,15 +1430,23 @@ export class TaskManager {
 
     const meshModel = resolveMeshModelForAvatarFromImage(
       options?.mesh_model_preference ?? options?.model_preference,
+      {
+        referenceCount: options?.reference_image_files?.length ?? 0,
+        useMultiview: options?.use_multiview_mesh,
+      },
     );
 
     let splatJobPromise = null;
     if (options?.include_splat_preview) {
+      const refCount = options?.reference_image_files?.length ?? 0;
       splatJobPromise = this.executeImageToSplat(prompt, imageFile, {
         model_preference:
-          options?.splat_model_preference ?? 'triposplat_image_to_splat',
+          options?.splat_model_preference ??
+          (refCount >= 1 ? 'worldmirror2_reconstruct' : 'triposplat_image_to_splat'),
         output_format: options?.splat_output_format ?? 'ply',
         model_parameters: options?.splat_model_parameters,
+        reference_image_files: options?.reference_image_files,
+        reference_image_file_ids: options?.reference_image_file_ids,
       }).catch((err) => {
         logger.warn('Parallel splat preview failed (mesh+rig continues)', {
           message: err?.message,
@@ -1346,6 +1459,7 @@ export class TaskManager {
     const meshJob = await this.executeImageTo3D(prompt, imageFile, {
       ...options,
       model_preference: meshModel,
+      use_multiview_mesh: options?.use_multiview_mesh !== false,
       model_parameters: {
         decimation_target:
           options?.model_parameters?.decimation_target ?? AVATAR_MESH_DECIMATION_TARGET,
@@ -1424,7 +1538,7 @@ export class TaskManager {
 
     return avatarSdkService.generateAvatarFromPhoto({
       imageFile,
-      name: options?.name || prompt || `Avatar ${new Date().toISOString()}`,
+      name: options?.object_name || options?.name || prompt || `Avatar ${new Date().toISOString()}`,
       description: options?.description || '',
       pipeline: options?.pipeline,
       pipelineSubtype: options?.pipeline_subtype,
@@ -1561,7 +1675,9 @@ export class TaskManager {
             jobStatus.error_message ||
             jobStatus.message ||
             'Job failed';
-          throw new Error(errorMessage);
+          const err = new Error(errorMessage);
+          err.code = 'JOB_TERMINAL_FAILURE';
+          throw err;
         }
 
         const isActiveJob =
@@ -1618,7 +1734,9 @@ export class TaskManager {
                               jobStatus.error_message ||
                               jobStatus.message ||
                               'Job failed';
-          throw new Error(errorMessage);
+          const err = new Error(errorMessage);
+          err.code = 'JOB_TERMINAL_FAILURE';
+          throw err;
         }
         if (status !== 'processing' && status !== 'running' && status !== 'queued' && status !== 'pending') {
           console.warn(`Unknown job status: ${status}, continuing to poll...`);
@@ -1627,6 +1745,9 @@ export class TaskManager {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
       } catch (error) {
+        if (error.code === 'JOB_TERMINAL_FAILURE') {
+          throw error;
+        }
         if (error.message && (error.message.includes('failed') || error.message.includes('error') || error.message.includes('Job failed'))) {
           throw error;
         }
@@ -1638,7 +1759,9 @@ export class TaskManager {
         if (error.code === 'JOB_STATUS_404' || error.all404) {
           consecutive404++;
           if (consecutive404 >= maxConsecutive404) {
-            const msg = 'Job submitted; status endpoint not available. Set VITE_JOB_STATUS_PATH in .env if your API supports job status polling.';
+            const msg = isLocalDev
+              ? 'Job submitted; status endpoint not available. Set VITE_JOB_STATUS_PATH in .env if your API supports job status polling.'
+              : 'Job submitted; status polling is not available on this deployment.';
             console.warn(msg);
             this.updateTaskStatus(taskId, 'running', 10, { job_id: jobId, statusPollingUnavailable: true, message: msg }, null);
             return { job_id: jobId, status: 'submitted', statusPollingUnavailable: true, message: msg };
@@ -1718,9 +1841,40 @@ export class TaskManager {
       if (!task?.id || this.tasks.has(task.id)) continue;
       this.tasks.set(task.id, task);
     }
+    this._pruneStaleTasks({ silent: true });
     if (this.tasks.size > 0) {
       this.emit('tasksRestored', { tasks: this.getAllTasks() });
     }
+  }
+
+  /**
+   * Drop tasks older than JOB_RETENTION_MS (24h, matches API Redis TTL).
+   * @param {{ silent?: boolean }} [options]
+   * @returns {object[]} removed tasks
+   */
+  _pruneStaleTasks(options = {}) {
+    const { silent = false } = options;
+    const { kept, removed } = partitionStaleTasks(this.getAllTasks());
+    if (!removed.length) return removed;
+
+    this.tasks.clear();
+    for (const task of kept) {
+      this.tasks.set(task.id, task);
+    }
+
+    for (const task of removed) {
+      const jobId = resolveTaskJobId(task);
+      if (jobId) markJobDeletedLocally(jobId);
+      if (!silent) {
+        this.emit('taskRemoved', { task, reason: 'stale' });
+      }
+    }
+
+    if (!silent) {
+      this.emit('tasksPruned', { count: removed.length, tasks: removed });
+    }
+    this.schedulePersist();
+    return removed;
   }
 
   schedulePersist() {
@@ -1733,6 +1887,7 @@ export class TaskManager {
   }
 
   persistTasks() {
+    this._pruneStaleTasks({ silent: true });
     writeTaskStorageSnapshot(this.getAllTasks(), this.apiEndpoint);
   }
 
@@ -1811,7 +1966,7 @@ export class TaskManager {
           throw new Error(
             error.response?.data?.detail ||
               error.message ||
-              'Failed to delete job on DGX Spark',
+              (isLocalDev ? 'Failed to delete job on DGX Spark' : 'Failed to delete job on API'),
           );
         }
       }
@@ -1823,6 +1978,114 @@ export class TaskManager {
 
     this.removeTask(taskId);
     return { deletedLocally: true, deletedRemotely, jobId };
+  }
+
+  _dispatchAutoLoadIfNeeded(task, completedResult, source = 'taskCompleted') {
+    const modelUrl = getTaskResultModelUrl(completedResult);
+    const isWorldTask =
+      task?.type === 'image-to-world' ||
+      completedResult?.pipelineStage === 'world_package' ||
+      completedResult?.feature === 'image_to_world';
+    if (!modelUrl && !isWorldTask) return;
+    window.dispatchEvent(
+      new CustomEvent('taskCompleted', {
+        detail: {
+          taskId: task?.id,
+          task,
+          result: completedResult,
+          source,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Adopt a DGX job started elsewhere (e.g. Galaxy XR voice) and poll like a native task.
+   * @param {string} jobId
+   * @param {{ autoLoad?: boolean, source?: string, prompt?: string|null }} [opts]
+   * @returns {Promise<object>}
+   */
+  async adoptJobFromHandoff(jobId, opts = {}) {
+    const {
+      autoLoad = true,
+      source = 'galaxy-xr',
+      prompt = null,
+    } = opts;
+    const normalizedJobId = String(jobId || '').trim();
+    if (!normalizedJobId) {
+      throw new Error('jobId is required');
+    }
+    if (!this.isConnected) {
+      const connected = await this.checkConnection();
+      if (!connected) {
+        throw new Error('Not connected to DGX API');
+      }
+    }
+
+    let jobStatus;
+    try {
+      jobStatus = await this.checkJobStatus(normalizedJobId);
+    } catch (error) {
+      if (error?.jobNotFound || error?.code === 'JOB_NOT_FOUND') {
+        throw new Error(`Job not found on DGX: ${normalizedJobId}`);
+      }
+      throw error;
+    }
+
+    const byJobId = this._indexTasksByJobId();
+    let task = byJobId.get(normalizedJobId) || null;
+    const mapped = taskFromApiJob(jobStatus, task);
+    if (!mapped) {
+      throw new Error(`Could not map DGX job ${normalizedJobId}`);
+    }
+    mapped.handoffSource = source;
+    mapped.origin = 'xr-voice';
+    mapped.syncedFromApi = true;
+    mapped.autoLoadOnComplete = Boolean(autoLoad);
+    if (prompt) mapped.prompt = prompt;
+    this.tasks.set(mapped.id, mapped);
+    this.schedulePersist();
+    if (!task) {
+      this.emit('taskCreated', { task: mapped });
+    } else {
+      this.emit('taskUpdated', { task: mapped });
+    }
+    this.emit('tasksSynced', { tasks: sortTasksForDisplay(this.getAllTasks()) });
+    task = mapped;
+
+    const mappedStatus = mapApiJobStatusToTaskStatus(jobStatus?.status);
+    if (mappedStatus === 'completed') {
+      const completedResult = this._buildCompletedTaskResult(
+        jobStatus,
+        normalizedJobId,
+        task.type,
+      );
+      this.updateTaskStatus(task.id, 'completed', 100, completedResult);
+      this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+      if (autoLoad) {
+        this._dispatchAutoLoadIfNeeded(task, completedResult, 'xrHandoff');
+      }
+      return task;
+    }
+    if (mappedStatus === 'failed') {
+      this.updateTaskStatus(
+        task.id,
+        'failed',
+        task.progress,
+        jobStatus,
+        jobStatus?.error || jobStatus?.message || 'Job failed',
+      );
+      this.emit('taskFailed', { task: this.getTask(task.id) });
+      return task;
+    }
+
+    if (!this._resumingJobs.has(normalizedJobId)) {
+      this._resumingJobs.add(normalizedJobId);
+      void this._resumeTaskPolling(task).finally(() => {
+        this._resumingJobs.delete(normalizedJobId);
+      });
+    }
+    return task;
   }
 
   async syncTasksWithApiHistory(limit = 100) {
@@ -1843,6 +2106,7 @@ export class TaskManager {
     for (const job of jobs) {
       const jobId = job?.job_id;
       if (!jobId || isJobDeletedLocally(jobId)) continue;
+      if (isApiJobStale(job)) continue;
       const existing = byJobId.get(jobId) || null;
       let jobStatus = job;
       if (
@@ -1872,6 +2136,7 @@ export class TaskManager {
       updated.push(mapped);
     }
 
+    this._pruneStaleTasks({ silent: true });
     this.schedulePersist();
     this.emit('tasksSynced', { tasks: sortTasksForDisplay(this.getAllTasks()) });
     return updated;
@@ -1879,8 +2144,10 @@ export class TaskManager {
 
   async resumeInterruptedJobs() {
     if (!this.isConnected) return;
+    this._pruneStaleTasks({ silent: true });
     for (const task of this.getAllTasks()) {
       if (!task.job_id) continue;
+      if (isTaskStale(task)) continue;
       if (task.status !== 'running' && task.status !== 'pending') continue;
       if (this._resumingJobs.has(task.job_id)) continue;
       this._resumingJobs.add(task.job_id);
@@ -1898,6 +2165,9 @@ export class TaskManager {
         const completedResult = this._buildCompletedTaskResult(status, task.job_id, task.type);
         this.updateTaskStatus(task.id, 'completed', 100, completedResult);
         this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+        if (task.autoLoadOnComplete) {
+          this._dispatchAutoLoadIfNeeded(task, completedResult, 'xrHandoff');
+        }
         return;
       }
       if (mappedStatus === 'failed') {
@@ -1933,17 +2203,15 @@ export class TaskManager {
       const completedResult = this._buildCompletedTaskResult(finalResult, task.job_id, task.type);
       this.updateTaskStatus(task.id, 'completed', 100, completedResult);
       this.emit('taskCompleted', { task: this.getTask(task.id), result: completedResult });
+      if (task.autoLoadOnComplete) {
+        this._dispatchAutoLoadIfNeeded(task, completedResult, 'xrHandoff');
+      }
     } catch (error) {
       if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
-        this.updateTaskStatus(
-          task.id,
-          'failed',
-          task.progress ?? 0,
-          null,
-          error.message ||
-            'Job not found on API (expired or deleted on DGX). Submit a new task or clear this entry.',
-        );
-        this.emit('taskFailed', { task: this.getTask(task.id) });
+        const jobId = resolveTaskJobId(task);
+        if (jobId) markJobDeletedLocally(jobId);
+        this.removeTask(task.id);
+        this.emit('taskRemoved', { task, reason: 'expired' });
         return;
       }
       console.warn(`[TaskManager] Failed to resume job ${task.job_id}:`, error?.message || error);

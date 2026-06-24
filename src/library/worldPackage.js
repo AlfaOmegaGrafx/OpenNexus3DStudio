@@ -90,21 +90,76 @@ export function parseWorldPackage(value) {
 
 /**
  * @param {string} manifestUrl
+ * @param {string} [apiEndpoint]
+ * @returns {string[]}
+ */
+export function buildWorldManifestFetchCandidates(manifestUrl, apiEndpoint = '') {
+  const resolved = resolveTaskModelUrl(manifestUrl, apiEndpoint) || ensureAbsoluteUrl(manifestUrl);
+  const jobId = extractJobIdFromManifestUrl(resolved);
+  const candidates = [resolved];
+
+  if (jobId) {
+    const jobBase = resolveTaskModelUrl(`/api/v1/system/jobs/${jobId}`, apiEndpoint);
+    if (jobBase) {
+      candidates.push(`${jobBase}/world/world.manifest.json`);
+      candidates.push(`${jobBase}/download?asset=manifest`);
+    }
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function formatWorldManifestFetchError(status, url, jobId) {
+  if (status === 404 && jobId) {
+    return (
+      `World job ${jobId.slice(0, 8)}… is not available on the DGX API (404). ` +
+      'Completed jobs expire from Redis after ~24h or an API restart. ' +
+      'Re-run Image-to-World, or on DGX run: /home/sifr/3DAIGC-API/venv/bin/python scripts/dgx-rehydrate-world-job.py ' +
+      jobId
+    );
+  }
+  return `Failed to load world manifest (${status}): ${url}`;
+}
+
+/**
+ * @param {string} manifestUrl
  * @returns {Promise<WorldPackage>}
  */
 export async function fetchWorldPackage(manifestUrl, apiEndpoint = '') {
-  const resolved = resolveTaskModelUrl(manifestUrl, apiEndpoint) || ensureAbsoluteUrl(manifestUrl);
-  console.log('[World] Fetching manifest:', resolved);
-  const response = await fetch(resolved, {
-    headers: { Accept: 'application/json', ...get3daigcAuthHeaders() },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load world manifest (${response.status}): ${resolved}`);
+  const candidates = buildWorldManifestFetchCandidates(manifestUrl, apiEndpoint);
+  const jobId = extractJobIdFromManifestUrl(candidates[0] || manifestUrl);
+  let lastStatus = 0;
+  let lastUrl = candidates[0] || manifestUrl;
+
+  for (const resolved of candidates) {
+    console.log('[World] Fetching manifest:', resolved);
+    const response = await fetch(resolved, {
+      headers: { Accept: 'application/json', ...get3daigcAuthHeaders() },
+    });
+    lastStatus = response.status;
+    lastUrl = resolved;
+    if (response.ok) {
+      const json = await response.json();
+      const manifest = parseWorldPackage(json);
+      console.log('[World] Manifest parsed:', manifest.id, manifest.environment?.url);
+      return manifest;
+    }
+    if (response.status !== 404) {
+      throw new Error(formatWorldManifestFetchError(response.status, resolved, jobId));
+    }
   }
-  const json = await response.json();
-  const manifest = parseWorldPackage(json);
-  console.log('[World] Manifest parsed:', manifest.id, manifest.environment?.url);
-  return manifest;
+
+  throw new Error(formatWorldManifestFetchError(lastStatus || 404, lastUrl, jobId));
+}
+
+/**
+ * @param {string} manifestUrl
+ * @returns {string|null}
+ */
+export function extractJobIdFromManifestUrl(manifestUrl) {
+  if (!manifestUrl || typeof manifestUrl !== 'string') return null;
+  const match = manifestUrl.match(/\/api\/v1\/system\/jobs\/([^/?#]+)\/download/i);
+  return match?.[1] || null;
 }
 
 /**
@@ -113,10 +168,8 @@ export async function fetchWorldPackage(manifestUrl, apiEndpoint = '') {
  * @returns {string|null}
  */
 export function inferWorldAssetBaseUrlFromManifestUrl(manifestUrl) {
-  if (!manifestUrl || typeof manifestUrl !== 'string') return null;
-  const match = manifestUrl.match(/\/api\/v1\/system\/jobs\/([^/?#]+)\/download/i);
-  if (!match?.[1]) return null;
-  return `/api/v1/system/jobs/${match[1]}/world/`;
+  const jobId = extractJobIdFromManifestUrl(manifestUrl);
+  return jobId ? `/api/v1/system/jobs/${jobId}/world/` : null;
 }
 
 /**

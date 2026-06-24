@@ -1,14 +1,23 @@
 import React, { useState, useRef } from 'react';
 import { useScene } from '../context/SceneContext';
+import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
 import { getCompressHint } from '../library/glbCompressPresets.js';
+import {
+  getSpatialFabricEnv,
+  normalizeOmbTier,
+  validateGlbBlob,
+} from '../library/spatialFabricAdapter.js';
 
-const GLBExport = () => {
+const GLBExport = ({ apiEndpoint = '' }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [isSpatialBusy, setIsSpatialBusy] = useState(false);
+  const [lastExportBlob, setLastExportBlob] = useState(null);
+  const [ombHint, setOmbHint] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const cardHeaderRef = useRef(null);
   const [exportOptions, setExportOptions] = useState({
     filename: 'opennexus3dstudio_export.glb',
-    forCharacterStudio: true,
+    forOpenNexus3DStudio: true,
     optimize: true,
     includeTextures: true,
     includeAnimations: true,
@@ -17,7 +26,14 @@ const GLBExport = () => {
   });
 
   const { currentModel, exportModel } = useScene();
+  const { sendGlbToMetaverseBrowser, config: spatialConfig } = useSpatialFabric(apiEndpoint);
   const compressHint = getCompressHint(exportOptions.compressQuality);
+
+  const buildViewportExportOptions = (overrides = {}) => ({
+    ...exportOptions,
+    skipDownload: true,
+    ...overrides,
+  });
 
   const handleExport = async () => {
     if (!currentModel) {
@@ -28,7 +44,11 @@ const GLBExport = () => {
     try {
       setIsExporting(true);
 
-      const result = await exportModel('glb', exportOptions);
+      const result = await exportModel('glb', buildViewportExportOptions());
+
+      if (result?.blob instanceof Blob) {
+        setLastExportBlob(result.blob);
+      }
 
       if (result?.compressStats) {
         const s = result.compressStats;
@@ -54,6 +74,90 @@ const GLBExport = () => {
       ...prev,
       [option]: value,
     }));
+  };
+
+  const handleSendToMetaverseBrowser = async () => {
+    if (!currentModel) {
+      alert('No model in viewport to send');
+      return;
+    }
+    if (!apiEndpoint) {
+      alert('Configure API endpoint to send GLB to the Metaverse Browser');
+      return;
+    }
+    try {
+      setIsSpatialBusy(true);
+      const result = await exportModel('glb', buildViewportExportOptions());
+      if (!(result?.blob instanceof Blob)) {
+        throw new Error('Viewport export did not produce a GLB');
+      }
+      const filename = result.filename || exportOptions.filename;
+      const assetStem = filename.replace(/-draco\.glb$/i, '').replace(/\.glb$/i, '');
+      const published = await sendGlbToMetaverseBrowser(
+        result.blob,
+        filename,
+        assetStem,
+      );
+      const omb = normalizeOmbTier(published?.omb);
+      if (omb) setOmbHint(omb);
+      const compressNote = result.compressStats
+        ? `\nCompression: ${result.compressStats.beforeLabel} → ${result.compressStats.afterLabel}`
+        : exportOptions.compressGlb
+          ? ''
+          : '\n(No Draco/WebP compression — enable in settings above to shrink file)';
+      alert(
+        `Sent to Metaverse Browser.\n` +
+          `Asset: ${published?.published?.object_name || assetStem}.glb` +
+          (omb?.recommendedTier ? `\nOMB tier ${omb.recommendedTier}${omb.label ? ` (${omb.label})` : ''}` : '') +
+          compressNote,
+      );
+    } catch (error) {
+      console.error('[GLBExport] send to metaverse failed', error);
+      alert(`Send to Metaverse Browser failed: ${error.message}`);
+    } finally {
+      setIsSpatialBusy(false);
+    }
+  };
+
+  const handleValidateOmb = async () => {
+    if (!currentModel) {
+      alert('No model in viewport');
+      return;
+    }
+    try {
+      setIsSpatialBusy(true);
+      let blob = lastExportBlob;
+      let filename = exportOptions.filename;
+      if (!blob) {
+        const result = await exportModel('glb', buildViewportExportOptions());
+        blob = result?.blob;
+        filename = result?.filename || filename;
+        if (blob instanceof Blob) setLastExportBlob(blob);
+      }
+      if (!(blob instanceof Blob)) {
+        alert('Could not export viewport GLB for validation');
+        return;
+      }
+      const env = getSpatialFabricEnv();
+      if (apiEndpoint) {
+        const report = await validateGlbBlob(apiEndpoint, blob, filename);
+        const omb = normalizeOmbTier(report?.omb) || report?.omb;
+        setOmbHint(omb);
+        alert(
+          `OMB tier ${omb?.recommendedTier ?? report?.omb?.recommended_tier ?? '?'} — ` +
+            `${report?.stats?.triangles?.toLocaleString?.() ?? '?'} triangles`,
+        );
+      } else {
+        setOmbHint(null);
+        alert(
+          `Configure API endpoint to run server-side GLB validation. Fabric: ${env.fabricMsfUrl || 'not set'}`,
+        );
+      }
+    } catch (error) {
+      alert(`OMB validation failed: ${error.message}`);
+    } finally {
+      setIsSpatialBusy(false);
+    }
   };
 
   const handleFilenameChange = (e) => {
@@ -121,8 +225,8 @@ const GLBExport = () => {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={exportOptions.forCharacterStudio}
-                      onChange={(e) => handleOptionChange('forCharacterStudio', e.target.checked)}
+                      checked={exportOptions.forOpenNexus3DStudio}
+                      onChange={(e) => handleOptionChange('forOpenNexus3DStudio', e.target.checked)}
                     />
                     <span>Optimize for OpenNexus3DStudio</span>
                   </label>
@@ -215,6 +319,41 @@ const GLBExport = () => {
                       'Export GLB'
                     )}
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleValidateOmb}
+                    disabled={isSpatialBusy || !currentModel}
+                    className="btn btn-secondary w-full mt-2"
+                    title="Export viewport with current settings and check OMB tier"
+                  >
+                    {isSpatialBusy ? 'Working…' : 'Validate OMB tier'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSendToMetaverseBrowser()}
+                    disabled={isSpatialBusy || !currentModel || !apiEndpoint}
+                    className="btn btn-secondary w-full mt-2"
+                    title="Export viewport GLB with current compression settings and publish to MSF / Open Metaverse Browser"
+                  >
+                    {isSpatialBusy ? 'Sending…' : 'Send To Metaverse Browser'}
+                  </button>
+                  {spatialConfig?.msfPublicUrl ? (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Scene Assembler: {spatialConfig.msfPublicUrl}
+                      {spatialConfig.fabricMsfUrl ? (
+                        <>
+                          <br />
+                          Fabric URL (paste on login): {spatialConfig.fabricMsfUrl}
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {ombHint?.recommendedTier || ombHint?.recommended_tier ? (
+                    <p className="text-xs text-gray-400 mt-2">
+                      OMB hint: Tier {ombHint.recommendedTier ?? ombHint.recommended_tier}
+                      {ombHint.label ? ` (${ombHint.label})` : ''}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             )}

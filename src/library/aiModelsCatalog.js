@@ -19,12 +19,15 @@ export const ALL_MODELS = [
   { value: 'hunyuan3dv21_image_to_raw_mesh', label: 'Hunyuan3D v2.1 Image to Raw Mesh (recommended)', feature: 'image_to_raw_mesh' },
   { value: 'ultrashape_image_to_raw_mesh', label: 'UltraShape Image to Raw Mesh', feature: 'image_to_raw_mesh' },
   { value: 'trellis2_image_to_textured_mesh', label: 'TRELLIS.2 Image to Textured Mesh (recommended)', feature: 'image_to_textured_mesh' },
+  { value: 'pixal3d_image_to_textured_mesh', label: 'Pixal3D Image to Textured Mesh (PBR, high fidelity)', feature: 'image_to_textured_mesh' },
   { value: 'hunyuan3dv21_image_to_textured_mesh', label: 'Hunyuan3D v2.1 Image to Textured Mesh', feature: 'image_to_textured_mesh' },
   { value: 'trellis_image_to_textured_mesh', label: 'TRELLIS v1 Image to Textured Mesh (legacy — avoid on DGX)', feature: 'image_to_textured_mesh' },
   { value: 'trellis2_image_mesh_painting', label: 'TRELLIS.2 Image Mesh Painting (recommended)', feature: 'image_mesh_painting' },
   { value: 'hunyuan3dv21_image_mesh_painting', label: 'Hunyuan3D v2.1 Image Mesh Painting', feature: 'image_mesh_painting' },
   { value: 'trellis_image_mesh_painting', label: 'TRELLIS v1 Image Mesh Painting (legacy)', feature: 'image_mesh_painting' },
-  { value: 'triposplat_image_to_splat', label: 'TripoSplat Image to Gaussian Splat', feature: 'image_to_splat' },
+  { value: 'triposplat_image_to_splat', label: 'TripoSplat Image to Gaussian Splat (1 photo)', feature: 'image_to_splat' },
+  { value: 'worldmirror2_reconstruct', label: 'WorldMirror 2.0 Photos to Splat (2+ photos)', feature: 'image_to_splat' },
+  { value: 'colmap_3dgs_reconstruct', label: 'Photos to Splat (COLMAP — 3+ photos)', feature: 'image_to_splat' },
   {
     value: 'opennexus_image_to_world',
     label: 'Image to World (TripoSplat env + TRELLIS.2 props)',
@@ -217,10 +220,26 @@ export function getMeshModelsForAvatarFromImage() {
 }
 
 /**
+ * Pick splat model from photo count (3+ → COLMAP reconstruction).
+ */
+export function resolveSplatModelForPhotos(primaryCount, referenceCount = 0) {
+  const total = primaryCount + referenceCount;
+  if (total >= 2) {
+    return 'worldmirror2_reconstruct';
+  }
+  return 'triposplat_image_to_splat';
+}
+
+/**
  * Pick a mesh-generation model for avatar-from-image.
  * Ignores stale rig/auto-rig selections left in the task model picker state.
  */
-export function resolveMeshModelForAvatarFromImage(selectedModel) {
+export function resolveMeshModelForAvatarFromImage(selectedModel, options = {}) {
+  const referenceCount = Number(options.referenceCount ?? 0);
+  const useMultiview = options.useMultiview !== false && referenceCount >= 1;
+  if (useMultiview) {
+    return 'trellis_image_to_textured_mesh';
+  }
   const meshModels = getMeshModelsForAvatarFromImage();
   if (selectedModel && meshModels.some((m) => m.value === selectedModel)) {
     if (LEGACY_MODEL_IDS.has(selectedModel)) {

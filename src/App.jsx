@@ -6,6 +6,7 @@ import { SoundProvider } from './context/SoundContext';
 import { Core3DProvider } from './context/Core3DContext';
 import Scene3D from './components/Scene3D';
 import TaskManager from './components/TaskManager';
+import XrAiPanel from './components/XrAiPanel';
 import WorldLibrary from './components/WorldLibrary';
 import CombinedImport from './components/CombinedImport';
 import RenderModeSelector from './components/RenderModeSelector';
@@ -21,6 +22,7 @@ import GlobalAudioControl from './components/GlobalAudioControl';
 import SceneControlsCompact from './components/SceneControlsCompact';
 import { ensureAbsoluteUrl } from './library/taskManager';
 import { getDefaultModelForFeature } from './library/aiModelsCatalog.js';
+import { objectNameFromFilename, normalizeObjectName, promptForObjectName } from './library/objectNameUtils.js';
 import {
   enrichCompletedJobPayload,
   getTaskResultModelUrl,
@@ -33,6 +35,7 @@ import {
 } from './library/taskModelUrl';
 import { exportAvatarPipelineVrm } from './library/avatarPipelineExport.js';
 import { attachSplatPreviewMetadata } from './library/vrmTemplateMetadata.js';
+import { parseJobHandoffFromLocation } from './library/jobHandoff.js';
 
 // Import OpenNexus3DStudio avatar panels (Appearance, Save, Mint, Load, Tools)
 import AppearanceSimple from './pages/AppearanceSimple';
@@ -44,6 +47,8 @@ import BottomDisplayMenu from './components/BottomDisplayMenu';
 import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
+import { showApiStatusPanel } from './library/runtimeUi';
+import { showXrAiPanel } from './library/xrHubConfig';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -65,8 +70,10 @@ function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Sidebar collapse state
   const [openNexusSidebarCollapsed, setOpenNexusSidebarCollapsed] = useState(true); // OpenNexus avatar sidebar — default collapsed
   const combinedImportRef = useRef(null);
+  const xrAiPanelRef = useRef(null);
   const headerRef = useRef(null);
   const sceneControlsRef = useRef(null);
+  const appContentRef = useRef(null);
 
   useLayoutEffect(() => {
     const syncChromeHeights = () => {
@@ -82,6 +89,18 @@ function AppContent() {
       if (chromeTop > 0) {
         document.documentElement.style.setProperty('--app-chrome-top-height', `${chromeTop}px`);
       }
+      const progressHeight = document.querySelector('.task-progress-bar')?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty('--task-progress-height', `${progressHeight}px`);
+
+      const appContentTop = appContentRef.current?.getBoundingClientRect().top ?? 0;
+      if (appContentTop > 0) {
+        document.documentElement.style.setProperty('--app-content-top', `${Math.round(appContentTop)}px`);
+      } else if (chromeTop > 0) {
+        document.documentElement.style.setProperty(
+          '--app-content-top',
+          `${Math.round(chromeTop + progressHeight)}px`,
+        );
+      }
     };
 
     const syncLayout = () => {
@@ -95,6 +114,10 @@ function AppContent() {
     const observer = new ResizeObserver(syncLayout);
     if (headerRef.current) observer.observe(headerRef.current);
     if (sceneControlsRef.current) observer.observe(sceneControlsRef.current);
+    if (appContentRef.current) observer.observe(appContentRef.current);
+
+    const progressBar = document.querySelector('.task-progress-bar');
+    if (progressBar) observer.observe(progressBar);
 
     const barObserver = new ResizeObserver(syncLayout);
     const overlay = document.querySelector('.bottom-menu-overlay');
@@ -214,13 +237,71 @@ function AppContent() {
     setApiEndpoint: setTaskApiEndpoint,
     createAndStartTask,
     removeTask,
-    clearCompletedTasks
+    clearCompletedTasks,
+    adoptJobHandoff,
   } = useTask();
+
+  // XR iframe → adopt DGX job into Task Manager (no URL navigation)
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.data?.type !== 'opennexus.xrHandoff') return;
+      const payload = event.data.payload || {};
+      const jobId = String(payload.job_id || '').trim();
+      if (!jobId) return;
+      (async () => {
+        try {
+          if (!isConnected) {
+            const ok = await forceConnectionCheck();
+            if (!ok) return;
+          }
+          await adoptJobHandoff(jobId, {
+            autoLoad: true,
+            prompt: payload.query || null,
+            source: 'galaxy-xr',
+          });
+          setSidebarCollapsed(false);
+        } catch (error) {
+          console.warn('App: XR iframe handoff failed:', error?.message || error);
+        }
+      })();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isConnected, adoptJobHandoff, forceConnectionCheck]);
 
   // Check if running in Electron
   useEffect(() => {
     setIsElectron(!!window.electronAPI);
   }, []);
+
+  // Galaxy XR voice → adopt DGX job by URL (?jobId=…&autoLoad=1&tasks=1)
+  useEffect(() => {
+    const handoff = parseJobHandoffFromLocation();
+    if (!handoff?.jobId) return undefined;
+    if (handoff.openTasks) {
+      setSidebarCollapsed(false);
+    }
+    let cancelled = false;
+    (async () => {
+      if (!isConnected) {
+        const ok = await forceConnectionCheck();
+        if (!ok || cancelled) return;
+      }
+      try {
+        await adoptJobHandoff(handoff.jobId, {
+          autoLoad: handoff.autoLoad,
+          prompt: handoff.prompt,
+          source: 'galaxy-xr',
+        });
+        console.log('App: adopted XR handoff job', handoff.jobId);
+      } catch (error) {
+        console.warn('App: XR job handoff failed:', error?.message || error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, adoptJobHandoff, forceConnectionCheck]);
 
   const pendingGeneratedModelRef = useRef(null);
 
@@ -327,6 +408,7 @@ function AppContent() {
           ensureForwardFacing: false,
           orientationMode: 'none',
           autoScale: false,
+          autoCenter: false,
           layer: 'player',
           fileExtension: fileExtension || undefined,
           autoRigMeta: isAutoRig ? autoRigMeta : null,
@@ -600,11 +682,22 @@ function AppContent() {
     }
     
     try {
+      let objectName = normalizeObjectName(options?.object_name);
+      if (!objectName) {
+        const hint = imageFile ? (objectNameFromFilename(imageFile.name) || '') : '';
+        objectName = promptForObjectName(hint);
+        if (!objectName) {
+          alert('⚠️ Enter a name for this 3D object before starting.');
+          return;
+        }
+      }
+      const resolvedOptions = { ...options, object_name: objectName };
+
       const result = await createAndStartTask({
         type: taskType,
         prompt,
         imageFile,
-        options
+        options: resolvedOptions
       }, modelData);
       console.log('App: createAndStartTask result:', result);
     } catch (error) {
@@ -657,9 +750,30 @@ function AppContent() {
     (task) => task.status === 'running' || task.status === 'pending',
   );
 
+  useLayoutEffect(() => {
+    const syncProgressHeight = () => {
+      const progressHeight = document.querySelector('.task-progress-bar')?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty('--task-progress-height', `${progressHeight}px`);
+
+      const appContentTop = appContentRef.current?.getBoundingClientRect().top ?? 0;
+      if (appContentTop > 0) {
+        document.documentElement.style.setProperty('--app-content-top', `${Math.round(appContentTop)}px`);
+      }
+    };
+
+    syncProgressHeight();
+    requestAnimationFrame(syncProgressHeight);
+
+    const bar = document.querySelector('.task-progress-bar');
+    if (!bar) return undefined;
+
+    const observer = new ResizeObserver(syncProgressHeight);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [hasRunningTasks, tasks.length]);
+
   return (
     <div className="app">
-      <TaskProgressBar tasks={tasks} />
       <header ref={headerRef} className="app-header">
         {/* Title bar — horizontal inline row on top */}
         <div className="title-bar">
@@ -762,9 +876,11 @@ function AppContent() {
               <button 
                 className="header-btn"
                 onClick={() => {
+                  const objectName = promptForObjectName('');
+                  if (!objectName) return;
                   const userPrompt = window.prompt('Enter text-to-3D prompt:');
                   if (userPrompt) {
-                    handleAITask('text-to-3d', userPrompt);
+                    handleAITask('text-to-3d', userPrompt, null, { object_name: objectName });
                   }
                 }}
                 disabled={!isConnected}
@@ -779,8 +895,13 @@ function AppContent() {
                   input.type = 'file';
                   input.accept = 'image/*';
                   input.onchange = (e) => {
-                    if (e.target.files[0]) {
-                      handleAITask('image-to-3d', 'Convert image to 3D', e.target.files[0], {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const objectName =
+                        promptForObjectName(objectNameFromFilename(file.name) || 'Image mesh');
+                      if (!objectName) return;
+                      handleAITask('image-to-3d', 'Convert image to 3D', file, {
+                        object_name: objectName,
                         model_preference: getDefaultModelForFeature('image-to-3d'),
                       });
                     }
@@ -955,7 +1076,11 @@ function AppContent() {
                     input.accept = 'image/*';
                     input.onchange = (e) => {
                       if (e.target.files[0]) {
-                        handleAITask('mesh-painting', 'Paint mesh', e.target.files[0]);
+                        const objectName = promptForObjectName('Painted mesh');
+                        if (!objectName) return;
+                        handleAITask('mesh-painting', 'Paint mesh', e.target.files[0], {
+                          object_name: objectName,
+                        });
                       }
                     };
                     input.click();
@@ -1082,6 +1207,8 @@ function AppContent() {
         </button>
       </div>
 
+      <TaskProgressBar tasks={tasks} />
+
       {/* OpenNexus3DStudio avatar sidebar — fixed below header + scene-controls */}
       <div className={`opennexus-sidebar ${openNexusSidebarCollapsed ? 'collapsed' : ''}`}>
         <button
@@ -1183,7 +1310,10 @@ function AppContent() {
         )}
       </div>
 
-      <div className={`app-content ${hasRunningTasks ? 'has-progress' : ''} ${!openNexusSidebarCollapsed ? 'has-opennexus' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}>
+      <div
+        ref={appContentRef}
+        className={`app-content ${!openNexusSidebarCollapsed ? 'has-opennexus' : ''} ${sidebarCollapsed ? 'main-sidebar-collapsed' : ''}`}
+      >
         <div
           ref={sidebarScrollRef}
           className={`sidebar ${sidebarCollapsed ? 'collapsed' : 'sidebar-scroll-panel'}`}
@@ -1249,9 +1379,24 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
+                    setSidebarCollapsed(false);
+                    requestAnimationFrame(() => {
+                      xrAiPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                  }}
+                  data-tooltip="XR Voice (DGX)"
+                  title="XR Voice (DGX)"
+                >
+                  🎙️
+                </button>
+                <button 
+                  className="sidebar-icon"
+                  onClick={() => {
+                    const objectName = promptForObjectName('');
+                    if (!objectName) return;
                     const userPrompt = window.prompt('Enter text-to-3D prompt:');
                     if (userPrompt) {
-                      handleAITask('text-to-3d', userPrompt);
+                      handleAITask('text-to-3d', userPrompt, null, { object_name: objectName });
                     }
                   }}
                   data-tooltip="AI Text-to-3D"
@@ -1266,8 +1411,13 @@ function AppContent() {
                     input.type = 'file';
                     input.accept = 'image/*';
                     input.onchange = (e) => {
-                      if (e.target.files[0]) {
-                        handleAITask('image-to-3d', null, e.target.files[0], {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const objectName =
+                          promptForObjectName(objectNameFromFilename(file.name) || 'Image mesh');
+                        if (!objectName) return;
+                        handleAITask('image-to-3d', null, file, {
+                          object_name: objectName,
                           model_preference: getDefaultModelForFeature('image-to-3d'),
                         });
                       }
@@ -1318,12 +1468,13 @@ function AppContent() {
             }}
             isActive={skeletonActive}
           />
-          <GLBExport />
+          <GLBExport apiEndpoint={apiEndpoint} />
           <VRMExport />
           <Core3DPanel />
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
+          {showApiStatusPanel() && (
           <APIStatus 
             endpoint={apiEndpoint}
             isConnected={isConnected}
@@ -1331,13 +1482,19 @@ function AppContent() {
             onEndpointChange={setApiEndpoint}
             onTestConnection={forceConnectionCheck}
           />
+          )}
+          <div ref={xrAiPanelRef}>
+            {showXrAiPanel() && (
+              <XrAiPanel isApiConnected={isConnected} />
+            )}
+          </div>
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}
             isApiConnected={isConnected}
           />
           <WorldLibrary apiEndpoint={apiEndpoint} compact />
-          {/* Debug info */}
+          {import.meta.env.DEV && (
           <div style={{ background: '#333', padding: '0.5rem', margin: '0.25rem 0', borderRadius: '4px', fontSize: '0.7rem' }}>
             <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
             <div>Tasks: {tasks.length}</div>
@@ -1359,6 +1516,7 @@ function AppContent() {
               Force Check Connection
             </button>
           </div>
+          )}
             </>
           )}
         </div>

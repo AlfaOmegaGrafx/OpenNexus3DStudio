@@ -2,6 +2,7 @@
  * Load World Packages into SceneManager layer roots (world / props / player).
  */
 import * as THREE from './three.js';
+import { getViewportFloorAnchorBounds } from './rigBoneUtils.js';
 import {
   applySplatOrientationCorrection,
   disposeSplatMesh,
@@ -223,8 +224,14 @@ export function computeXrFloorAlignmentY(sceneManager) {
     for (const key of FLOOR_ANCHOR_LAYER_KEYS) {
       includeBounds(sceneManager[key]);
     }
-    if (!hasBounds) {
-      includeBounds(sceneManager.currentModel);
+    if (!hasBounds && sceneManager.currentModel) {
+      const avatarFloor = getViewportFloorAnchorBounds(sceneManager.currentModel);
+      if (!avatarFloor.isEmpty()) {
+        box.copy(avatarFloor);
+        hasBounds = true;
+      } else {
+        includeBounds(sceneManager.currentModel);
+      }
     }
   }
 

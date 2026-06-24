@@ -51,7 +51,7 @@ describe('TaskManager', () => {
       const taskData = {
         type: 'text-to-3d',
         prompt: 'A red car',
-        options: {}
+        options: { object_name: 'Red Car' },
       };
 
       const task = taskManager.createTask(taskData);
@@ -59,6 +59,8 @@ describe('TaskManager', () => {
       expect(task).toHaveProperty('id');
       expect(task.type).toBe('text-to-3d');
       expect(task.prompt).toBe('A red car');
+      expect(task.name).toBe('Red Car');
+      expect(task.options.object_name).toBe('Red Car');
       expect(task.status).toBe('pending');
       expect(task.progress).toBe(0);
       expect(taskManager.tasks.has(task.id)).toBe(true);
@@ -72,6 +74,15 @@ describe('TaskManager', () => {
 
       expect(() => taskManager.createTask(taskData)).toThrow('Unsupported task type: unsupported-type');
     });
+
+    it('should reject tasks without object_name', () => {
+      expect(() =>
+        taskManager.createTask({
+          type: 'text-to-3d',
+          prompt: 'A red car',
+        }),
+      ).toThrow(/Object name is required/);
+    });
   });
 
   describe('task management', () => {
@@ -80,7 +91,8 @@ describe('TaskManager', () => {
     beforeEach(() => {
       testTask = taskManager.createTask({
         type: 'text-to-3d',
-        prompt: 'Test prompt'
+        prompt: 'Test prompt',
+        options: { object_name: 'Test Object' },
       });
     });
 
@@ -145,7 +157,8 @@ describe('TaskManager', () => {
     it('should dispose resources correctly', () => {
       taskManager.createTask({
         type: 'text-to-3d',
-        prompt: 'Test'
+        prompt: 'Test',
+        options: { object_name: 'Test' },
       });
       
       expect(taskManager.tasks.size).toBe(1);

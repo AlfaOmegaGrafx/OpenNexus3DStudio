@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useScene } from '../context/SceneContext';
 import { useTask } from '../context/TaskContext';
+import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
 import {
   fetchWorldsIndex,
   listWorldsFromCompletedTasks,
 } from '../library/worldPackage.js';
 import { buildIwsdkXrExploreUrl } from '../library/iwsdkWorldPackage.js';
+import styles from './WorldLibrary.module.css';
 
 /**
  * Pick and load explorable world packages (splat env + mesh props).
@@ -18,6 +20,8 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
   const [indexWarning, setIndexWarning] = useState(null);
   const [error, setError] = useState(null);
   const [manifestDraft, setManifestDraft] = useState('');
+  const [publishingWorldId, setPublishingWorldId] = useState(null);
+  const { openBrowser, publishWorld, config: spatialConfig } = useSpatialFabric(apiEndpoint);
 
   const taskWorlds = useMemo(
     () => listWorldsFromCompletedTasks(tasks, apiEndpoint),
@@ -65,25 +69,33 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
     await enterWorld(url);
   };
 
+  const handlePublishWorldRp1 = async (world) => {
+    try {
+      setError(null);
+      setPublishingWorldId(world.id);
+      console.log('[SpatialFabric] world publish start', {
+        worldId: world.id,
+        manifest: world.manifest,
+      });
+      await publishWorld(world.manifest, world.name);
+    } catch (err) {
+      console.error('[SpatialFabric] world publish failed', err);
+      setError(err?.message || String(err));
+    } finally {
+      setPublishingWorldId(null);
+    }
+  };
+
   return (
-    <div
-      className="world-library"
-      style={{
-        padding: compact ? '0.5rem' : '0.75rem',
-        fontSize: compact ? '0.65rem' : '0.75rem',
-        color: '#ccc',
-        borderTop: '1px solid #333',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <strong style={{ color: '#eee' }}>Worlds</strong>
+    <div className={`world-library ${styles.root} ${compact ? '' : styles.rootExpanded}`}>
+      <div className={styles.header}>
+        <strong className={styles.title}>Worlds</strong>
         {activeWorldId ? (
           <button
             type="button"
-            className="btn btn-sm"
+            className={`btn btn-sm ${styles.clearBtn}`}
             onClick={() => clearWorld()}
             disabled={isLoading}
-            style={{ fontSize: '0.6rem', padding: '0.2rem 0.4rem' }}
           >
             Clear
           </button>
@@ -91,95 +103,120 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
       </div>
 
       {activeWorldId ? (
-        <p style={{ margin: '0 0 0.5rem', color: '#8f8' }}>Active: {activeWorldId}</p>
+        <p className={styles.statusActive} title={activeWorldId}>
+          Active: {activeWorldId}
+        </p>
       ) : (
-        <p style={{ margin: '0 0 0.5rem', color: '#888' }}>No world loaded (avatar stays in scene).</p>
+        <p className={styles.statusIdle}>No world loaded (avatar stays in scene).</p>
       )}
 
       {worlds.length > 0 ? (
-        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.5rem' }}>
-          {worlds.map((world) => (
-            <li key={world.id} style={{ marginBottom: '0.35rem' }}>
-              <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'stretch' }}>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  disabled={isLoading}
-                  onClick={() => enterWorld(world.manifest)}
-                  style={{
-                    flex: 1,
-                    textAlign: 'left',
-                    fontSize: '0.65rem',
-                    background: activeWorldId === world.id ? '#2a4a2a' : undefined,
-                  }}
-                >
-                  {world.name}
-                  {taskWorlds.some((t) => t.id === world.id) ? (
-                    <span style={{ color: '#8af', marginLeft: '0.35rem' }}>(task)</span>
-                  ) : null}
-                </button>
-                <Link
-                  to={buildIwsdkXrExploreUrl(world.manifest, { apiEndpoint, skipDemo: true })}
-                  className="btn btn-sm"
-                  style={{ fontSize: '0.55rem', padding: '0.2rem 0.35rem', whiteSpace: 'nowrap' }}
-                  title="Galaxy XR IWSDK grab (ray + trigger / grip squeeze)"
-                >
-                  XR
-                </Link>
-              </div>
-            </li>
-          ))}
+        <ul className={styles.worldList}>
+          {worlds.map((world) => {
+            const fromTask = taskWorlds.some((t) => t.id === world.id);
+            const displayName = fromTask ? `${world.name} (task)` : world.name;
+            return (
+              <li key={world.id} className={styles.worldItem}>
+                <div className={styles.worldRow}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${styles.worldNameBtn} ${
+                      activeWorldId === world.id ? styles.worldNameBtnActive : ''
+                    }`}
+                    disabled={isLoading}
+                    onClick={() => enterWorld(world.manifest)}
+                    title={displayName}
+                  >
+                    <span className={styles.worldNameText}>{world.name}</span>
+                    {fromTask ? <span className={styles.taskBadge}>(task)</span> : null}
+                  </button>
+                  <Link
+                    to={buildIwsdkXrExploreUrl(world.manifest, { apiEndpoint, skipDemo: true })}
+                    className={`btn btn-sm ${styles.actionBtn}`}
+                    title="Galaxy XR IWSDK grab (ray + trigger / grip squeeze)"
+                  >
+                    XR
+                  </Link>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${styles.actionBtn}`}
+                    title="Publish world mesh props to MSF object library and open Scene Assembler"
+                    disabled={isLoading || publishingWorldId === world.id || !apiEndpoint}
+                    onClick={() => void handlePublishWorldRp1(world)}
+                  >
+                    {publishingWorldId === world.id ? '…' : 'RP1'}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : (
-        <p style={{ margin: '0 0 0.5rem', color: '#666' }}>
+        <p className={styles.emptyHint}>
           Run an <strong>Image to World</strong> task, or add entries to{' '}
           <code>public/worlds/index.json</code>.
         </p>
       )}
 
-      <label style={{ display: 'block', marginBottom: '0.25rem', color: '#aaa' }}>Manifest URL</label>
-      <div style={{ display: 'flex', gap: '0.35rem' }}>
+      <label className={styles.label}>Manifest URL</label>
+      <div className={styles.manifestRow}>
         <input
           type="text"
-          className="input"
+          className={`input ${styles.manifestInput}`}
           value={manifestDraft}
           onChange={(e) => setManifestDraft(e.target.value)}
           placeholder="/__dev_dgx_proxy/api/v1/system/jobs/<id>/download?asset=manifest"
-          style={{ flex: 1, fontSize: '0.6rem', padding: '0.3rem' }}
         />
         <button
           type="button"
-          className="btn btn-sm"
+          className={`btn btn-sm ${styles.manifestBtn}`}
           disabled={isLoading || !manifestDraft.trim()}
           onClick={() => void loadManifestDraft()}
-          style={{ fontSize: '0.6rem' }}
         >
           Load
         </button>
         {manifestDraft.trim() ? (
           <Link
             to={buildIwsdkXrExploreUrl(manifestDraft.trim(), { apiEndpoint, skipDemo: true })}
-            className="btn btn-sm"
-            style={{ fontSize: '0.6rem' }}
+            className={`btn btn-sm ${styles.manifestBtn}`}
           >
             XR
           </Link>
         ) : null}
       </div>
 
-      <p style={{ margin: '0.5rem 0 0', color: '#777', fontSize: '0.55rem' }}>
+      <div className={styles.actionsRow}>
+        <button
+          type="button"
+          className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
+          title="Open Metaverse Browser / RP1 Scene Assembler"
+          onClick={() => void openBrowser()}
+        >
+          Scene Assembler
+        </button>
+      </div>
+
+      {spatialConfig?.msfPublicUrl ? (
+        <p className={styles.meta}>
+          Scene Assembler: {spatialConfig.msfPublicUrl}
+          {spatialConfig.fabricMsfUrl ? (
+            <>
+              <br />
+              Fabric URL (paste on login): {spatialConfig.fabricMsfUrl}
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      <p className={styles.hint}>
         Viewport: SceneManager + Spark (VRM + splat env in same scene). Enter VR on{' '}
         <code>/</code> to experience loaded worlds with your avatar.{' '}
         <strong>XR lab</strong> (<code>/xr</code>) — IWSDK grab regression on mesh props.
       </p>
 
-      {indexWarning ? (
-        <p style={{ margin: '0.5rem 0 0', color: '#aa8', fontSize: '0.6rem' }}>{indexWarning}</p>
-      ) : null}
+      {indexWarning ? <p className={styles.warning}>{indexWarning}</p> : null}
 
-      {error ? (
-        <p style={{ margin: '0.5rem 0 0', color: '#f88', fontSize: '0.6rem' }}>{error}</p>
-      ) : null}
+      {error ? <p className={styles.error}>{error}</p> : null}
     </div>
   );
 }
