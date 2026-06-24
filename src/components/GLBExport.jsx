@@ -26,7 +26,11 @@ const GLBExport = ({ apiEndpoint = '' }) => {
   });
 
   const { currentModel, exportModel } = useScene();
-  const { sendGlbToMetaverseBrowser, config: spatialConfig } = useSpatialFabric(apiEndpoint);
+  const {
+    sendGlbToMetaverseBrowser,
+    config: spatialConfig,
+    sceneAssemblerReady,
+  } = useSpatialFabric(apiEndpoint);
   const compressHint = getCompressHint(exportOptions.compressQuality);
 
   const buildViewportExportOptions = (overrides = {}) => ({
@@ -331,9 +335,13 @@ const GLBExport = ({ apiEndpoint = '' }) => {
                   <button
                     type="button"
                     onClick={() => void handleSendToMetaverseBrowser()}
-                    disabled={isSpatialBusy || !currentModel || !apiEndpoint}
+                    disabled={isSpatialBusy || !currentModel || !apiEndpoint || !sceneAssemblerReady}
                     className="btn btn-secondary w-full mt-2"
-                    title="Export viewport GLB with current compression settings and publish to MSF / Open Metaverse Browser"
+                    title={
+                      sceneAssemblerReady
+                        ? 'Export viewport GLB with current compression settings and publish to MSF / Open Metaverse Browser'
+                        : 'Link MSF Map Service (VITE_MSF_PUBLIC_URL or 3DAIGC API) to publish to Scene Assembler'
+                    }
                   >
                     {isSpatialBusy ? 'Sending…' : 'Send To Metaverse Browser'}
                   </button>
@@ -346,6 +354,11 @@ const GLBExport = ({ apiEndpoint = '' }) => {
                           Fabric URL (paste on login): {spatialConfig.fabricMsfUrl}
                         </>
                       ) : null}
+                    </p>
+                  ) : !sceneAssemblerReady ? (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Metaverse publish requires a linked MSF host — see World Library → OMB spatial
+                      fabric guide.
                     </p>
                   ) : null}
                   {ombHint?.recommendedTier || ombHint?.recommended_tier ? (

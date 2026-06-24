@@ -166,6 +166,16 @@ export function buildMetaverseBrowserUrl(opts = {}) {
   return DEFAULT_OMB_GUIDELINES;
 }
 
+/** @param {object|null|undefined} cfg from mergeSpatialFabricConfig */
+export function isSceneAssemblerConfigured(cfg = {}) {
+  return Boolean(buildSceneAssemblerOpenUrl(cfg));
+}
+
+/** @param {object|null|undefined} cfg */
+export function getOmbGuidelinesUrl(cfg = {}) {
+  return cfg?.ombGuidelines || DEFAULT_OMB_GUIDELINES;
+}
+
 function apiUrl(apiEndpoint, path) {
   const base = (apiEndpoint || '').replace(/\/$/, '');
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
@@ -252,15 +262,34 @@ export async function resolveSpatialFabricConfig(apiEndpoint) {
 }
 
 /**
- * Best URL for Scene Assembler / Metaverse Browser (API config → env → OMB wiki).
+ * Scene Assembler URL only (API config → Vite env). Empty when MSF is not linked.
+ * @param {string} [apiEndpoint]
+ * @param {{ fabricMsfUrl?: string, sceneAssemblerUrl?: string }} [opts]
+ */
+export async function resolveSceneAssemblerUrl(apiEndpoint, opts = {}) {
+  const cfg = await resolveSpatialFabricConfig(apiEndpoint);
+  return buildSceneAssemblerOpenUrl(cfg, opts);
+}
+
+/**
+ * OMB spatial-fabric documentation (for public deploy when MSF is not linked).
+ * @param {string} [apiEndpoint]
+ */
+export async function resolveOmbGuidelinesUrl(apiEndpoint) {
+  const cfg = await resolveSpatialFabricConfig(apiEndpoint);
+  return getOmbGuidelinesUrl(cfg);
+}
+
+/**
+ * Scene Assembler when configured, else OMB guidelines wiki.
+ * Prefer resolveSceneAssemblerUrl + resolveOmbGuidelinesUrl in UI for honest labels.
  * @param {string} [apiEndpoint]
  * @param {{ fabricMsfUrl?: string, sceneAssemblerUrl?: string }} [opts]
  */
 export async function resolveMetaverseBrowserUrl(apiEndpoint, opts = {}) {
-  const cfg = await resolveSpatialFabricConfig(apiEndpoint);
-  const url = buildSceneAssemblerOpenUrl(cfg, opts);
+  const url = await resolveSceneAssemblerUrl(apiEndpoint, opts);
   if (url) return url;
-  return cfg.ombGuidelines;
+  return resolveOmbGuidelinesUrl(apiEndpoint);
 }
 
 export async function fetchSpatialFabricConfig(apiEndpoint) {
@@ -337,8 +366,8 @@ export async function publishGlbBlobAndOpenMetaverseBrowser(
     buildSceneAssemblerOpenUrl(
       await resolveSpatialFabricConfig(apiEndpoint),
       { sceneAssemblerUrl: result.scene_assembler_url },
-    ) || (await resolveMetaverseBrowserUrl(apiEndpoint));
-  openSpatialFabricInBrowser(url);
+    ) || (await resolveSceneAssemblerUrl(apiEndpoint));
+  if (url) openSpatialFabricInBrowser(url);
   return result;
 }
 
@@ -367,8 +396,8 @@ export async function publishJobAndOpenMetaverseBrowser(apiEndpoint, jobId, asse
     buildSceneAssemblerOpenUrl(
       await resolveSpatialFabricConfig(apiEndpoint),
       { sceneAssemblerUrl: result.scene_assembler_url },
-    ) || (await resolveMetaverseBrowserUrl(apiEndpoint));
-  openSpatialFabricInBrowser(url);
+    ) || (await resolveSceneAssemblerUrl(apiEndpoint));
+  if (url) openSpatialFabricInBrowser(url);
   return result;
 }
 
@@ -453,8 +482,8 @@ export async function publishWorldAndOpenMetaverseBrowser(
   });
   const url =
     buildSceneAssemblerOpenUrl(await resolveSpatialFabricConfig(apiEndpoint)) ||
-    (await resolveMetaverseBrowserUrl(apiEndpoint));
-  openSpatialFabricInBrowser(url);
+    (await resolveSceneAssemblerUrl(apiEndpoint));
+  if (url) openSpatialFabricInBrowser(url);
   console.log('[SpatialFabric] world publish complete', {
     manifestId: result.manifestId,
     propCount: result.published.length,

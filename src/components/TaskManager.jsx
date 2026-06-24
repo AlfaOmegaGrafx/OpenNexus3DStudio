@@ -101,7 +101,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const { currentModel } = useScene();
   const { deleteTask, syncTasksFromApi, clearCompletedTasks, getApiEndpoint } = useTask();
   const apiEndpoint = getApiEndpoint();
-  const { openBrowser, publishJob, config: spatialConfig } = useSpatialFabric(apiEndpoint);
+  const {
+    openSceneAssembler,
+    openOmbGuidelines,
+    publishJob,
+    config: spatialConfig,
+    sceneAssemblerReady,
+  } = useSpatialFabric(apiEndpoint);
   const fileInputRef = useRef(null);
   const objectNameInputRef = useRef(null);
   const [objectNamePlaceholder, setObjectNamePlaceholder] = useState(
@@ -662,7 +668,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const handleOpenMetaverseBrowser = async (event) => {
     event?.stopPropagation?.();
     try {
-      await openBrowser();
+      if (sceneAssemblerReady) {
+        await openSceneAssembler();
+      } else {
+        await openOmbGuidelines();
+      }
     } catch (err) {
       alert(err?.message || String(err));
     }
@@ -727,9 +737,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               <button
                 className="btn btn-secondary"
                 onClick={(event) => void handleOpenMetaverseBrowser(event)}
-                title="Open RP1 Scene Assembler / Open Metaverse Browser"
+                title={
+                  sceneAssemblerReady
+                    ? `Open Scene Assembler at ${spatialConfig?.msfPublicUrl || 'MSF'}`
+                    : 'OMB spatial fabric model guidelines (link MSF to open Scene Assembler)'
+                }
               >
-                OMB
+                {sceneAssemblerReady ? 'Assembler' : 'OMB guide'}
               </button>
           </div>
         </div>
@@ -737,6 +751,10 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         {spatialConfig?.msfPublicUrl ? (
           <p style={{ fontSize: '0.55rem', color: '#888', padding: '0 0.75rem 0.35rem', margin: 0 }}>
             Scene Assembler: {spatialConfig.msfPublicUrl}
+          </p>
+        ) : !sceneAssemblerReady ? (
+          <p style={{ fontSize: '0.55rem', color: '#888', padding: '0 0.75rem 0.35rem', margin: 0 }}>
+            Scene Assembler: link MSF via API or VITE_MSF_PUBLIC_URL · OMB guide opens model guidelines
           </p>
         ) : null}
 
@@ -1501,7 +1519,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         </button>
                       )
                     )}
-                    {canPublishRp1 && (
+                    {canPublishRp1 && sceneAssemblerReady && (
                       <button
                         onClick={(event) => void handlePublishRp1(task, event)}
                         disabled={!isApiConnected || isPublishing}
@@ -1521,7 +1539,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         {isPublishing ? '…' : 'Publish RP1'}
                       </button>
                     )}
-                    {!isWorld && (canPublishRp1 || taskJobId) && (
+                    {!isWorld && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
                       <button
                         onClick={(event) => void handleOpenMetaverseBrowser(event)}
                         style={{
@@ -1534,9 +1552,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           borderRadius: '3px',
                           cursor: 'pointer',
                         }}
-                        title="Open RP1 Scene Assembler / Open Metaverse Browser"
+                        title={`Open Scene Assembler at ${spatialConfig?.msfPublicUrl || 'MSF'}`}
                       >
-                        OMB
+                        Assembler
                       </button>
                     )}
                   </div>

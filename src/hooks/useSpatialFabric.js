@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  isSceneAssemblerConfigured,
   openSpatialFabricInBrowser,
   publishGlbBlobAndOpenMetaverseBrowser,
   publishJobAndOpenMetaverseBrowser,
   publishWorldAndOpenMetaverseBrowser,
-  resolveMetaverseBrowserUrl,
+  resolveOmbGuidelinesUrl,
+  resolveSceneAssemblerUrl,
   resolveSpatialFabricConfig,
 } from '../library/spatialFabricAdapter.js';
 
@@ -34,10 +36,38 @@ export function useSpatialFabric(apiEndpoint = '') {
     };
   }, [apiEndpoint]);
 
+  const sceneAssemblerReady = useMemo(
+    () => isSceneAssemblerConfigured(config),
+    [config],
+  );
+
+  const openSceneAssembler = useCallback(
+    async (opts = {}) => {
+      const url = await resolveSceneAssemblerUrl(apiEndpoint, opts);
+      if (!url) {
+        throw new Error(
+          'Scene Assembler is not linked. Set VITE_MSF_PUBLIC_URL or connect to a 3DAIGC API with MSF_PUBLIC_BASE_URL.',
+        );
+      }
+      openSpatialFabricInBrowser(url);
+    },
+    [apiEndpoint],
+  );
+
+  const openOmbGuidelines = useCallback(async () => {
+    const url = await resolveOmbGuidelinesUrl(apiEndpoint);
+    openSpatialFabricInBrowser(url);
+  }, [apiEndpoint]);
+
+  /** Opens Scene Assembler when linked, otherwise OMB guidelines (legacy callers). */
   const openBrowser = useCallback(
     async (opts = {}) => {
-      const url = await resolveMetaverseBrowserUrl(apiEndpoint, opts);
-      openSpatialFabricInBrowser(url);
+      const url = await resolveSceneAssemblerUrl(apiEndpoint, opts);
+      if (url) {
+        openSpatialFabricInBrowser(url);
+        return;
+      }
+      openSpatialFabricInBrowser(await resolveOmbGuidelinesUrl(apiEndpoint));
     },
     [apiEndpoint],
   );
@@ -55,7 +85,7 @@ export function useSpatialFabric(apiEndpoint = '') {
   const sendGlbToMetaverseBrowser = useCallback(
     async (blob, filename, assetName, opts = {}) => {
       if (!apiEndpoint) {
-        throw new Error('Configure API endpoint to send GLB to spatial fabric');
+        throw new Error('Configure API endpoint to send GLB to the Metaverse Browser');
       }
       if (!(blob instanceof Blob)) {
         throw new Error('No GLB data to send');
@@ -87,8 +117,11 @@ export function useSpatialFabric(apiEndpoint = '') {
   return {
     config,
     loading,
-    enabled: Boolean(config?.enabled || config?.msfPublicUrl),
+    sceneAssemblerReady,
+    enabled: sceneAssemblerReady,
     openBrowser,
+    openSceneAssembler,
+    openOmbGuidelines,
     publishJob,
     publishWorld,
     sendGlbToMetaverseBrowser,

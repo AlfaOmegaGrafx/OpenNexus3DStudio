@@ -21,7 +21,13 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
   const [error, setError] = useState(null);
   const [manifestDraft, setManifestDraft] = useState('');
   const [publishingWorldId, setPublishingWorldId] = useState(null);
-  const { openBrowser, publishWorld, config: spatialConfig } = useSpatialFabric(apiEndpoint);
+  const {
+    openSceneAssembler,
+    openOmbGuidelines,
+    publishWorld,
+    config: spatialConfig,
+    sceneAssemblerReady,
+  } = useSpatialFabric(apiEndpoint);
 
   const taskWorlds = useMemo(
     () => listWorldsFromCompletedTasks(tasks, apiEndpoint),
@@ -141,7 +147,12 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
                     type="button"
                     className={`btn btn-sm ${styles.actionBtn}`}
                     title="Publish world mesh props to MSF object library and open Scene Assembler"
-                    disabled={isLoading || publishingWorldId === world.id || !apiEndpoint}
+                    disabled={
+                      isLoading ||
+                      publishingWorldId === world.id ||
+                      !apiEndpoint ||
+                      !sceneAssemblerReady
+                    }
                     onClick={() => void handlePublishWorldRp1(world)}
                   >
                     {publishingWorldId === world.id ? '…' : 'RP1'}
@@ -186,17 +197,28 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
       </div>
 
       <div className={styles.actionsRow}>
-        <button
-          type="button"
-          className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
-          title="Open Metaverse Browser / RP1 Scene Assembler"
-          onClick={() => void openBrowser()}
-        >
-          Scene Assembler
-        </button>
+        {sceneAssemblerReady ? (
+          <button
+            type="button"
+            className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
+            title={`Open RP1 Scene Assembler at ${spatialConfig.msfPublicUrl}`}
+            onClick={() => void openSceneAssembler().catch((err) => alert(err.message))}
+          >
+            Scene Assembler
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`btn btn-sm btn-secondary ${styles.sceneAssemblerBtn}`}
+            title="OMB spatial fabric model guidelines"
+            onClick={() => void openOmbGuidelines()}
+          >
+            OMB spatial fabric guide
+          </button>
+        )}
       </div>
 
-      {spatialConfig?.msfPublicUrl ? (
+      {sceneAssemblerReady && spatialConfig?.msfPublicUrl ? (
         <p className={styles.meta}>
           Scene Assembler: {spatialConfig.msfPublicUrl}
           {spatialConfig.fabricMsfUrl ? (
@@ -205,6 +227,11 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
               Fabric URL (paste on login): {spatialConfig.fabricMsfUrl}
             </>
           ) : null}
+        </p>
+      ) : !sceneAssemblerReady ? (
+        <p className={styles.meta}>
+          Scene Assembler needs a linked MSF host (set <code>VITE_MSF_PUBLIC_URL</code> or connect
+          to 3DAIGC API with <code>MSF_PUBLIC_BASE_URL</code>).
         </p>
       ) : null}
 

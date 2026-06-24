@@ -5,7 +5,9 @@ import {
   canPublishTaskToSpatialFabric,
   deriveSceneAssemblerRootFromMsfUrl,
   formatSpatialFabricApiError,
+  getOmbGuidelinesUrl,
   isFabricMsfFileUrl,
+  isSceneAssemblerConfigured,
   mergeSpatialFabricConfig,
   normalizeOmbTier,
   validateOmbTier,
@@ -47,9 +49,19 @@ describe('spatialFabricAdapter', () => {
     expect(tier.label).toBeTruthy();
   });
 
-  it('buildMetaverseBrowserUrl falls back to OMB guidelines when env unset', () => {
-    const url = buildMetaverseBrowserUrl();
-    expect(url).toContain('omb.wiki');
+  it('buildMetaverseBrowserUrl falls back to OMB guidelines when MSF URL unset', () => {
+    const url = buildSceneAssemblerOpenUrl({});
+    expect(url).toBe('');
+    expect(getOmbGuidelinesUrl({})).toContain('omb.wiki');
+  });
+
+  it('isSceneAssemblerConfigured is false without MSF URL', () => {
+    expect(isSceneAssemblerConfigured({})).toBe(false);
+    expect(
+      isSceneAssemblerConfigured({
+        fabricMsfUrl: 'https://example.com/fabric/demo.msf',
+      }),
+    ).toBe(true);
   });
 
   it('formatSpatialFabricApiError maps job-not-found 404', () => {
