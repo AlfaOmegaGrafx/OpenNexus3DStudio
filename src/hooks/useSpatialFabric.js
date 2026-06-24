@@ -8,6 +8,7 @@ import {
   resolveOmbGuidelinesUrl,
   resolveSceneAssemblerUrl,
   resolveSpatialFabricConfig,
+  mergeSpatialFabricConfig,
 } from '../library/spatialFabricAdapter.js';
 
 /**
@@ -26,7 +27,7 @@ export function useSpatialFabric(apiEndpoint = '') {
         if (!cancelled) setConfig(cfg);
       })
       .catch(() => {
-        if (!cancelled) setConfig(null);
+        if (!cancelled) setConfig(mergeSpatialFabricConfig(null));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

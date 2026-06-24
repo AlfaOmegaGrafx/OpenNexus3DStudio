@@ -118,11 +118,14 @@ export function isFabricMsfFileUrl(url) {
  * @param {{ sceneAssemblerUrl?: string, fabricMsfUrl?: string }} [opts]
  */
 export function buildSceneAssemblerOpenUrl(cfg = {}, opts = {}) {
-  const explicit = opts.sceneAssemblerUrl || cfg.sceneAssemblerUrl || cfg.msfPublicUrl || '';
+  const safeCfg = cfg ?? {};
+  const safeOpts = opts ?? {};
+  const explicit =
+    safeOpts.sceneAssemblerUrl || safeCfg.sceneAssemblerUrl || safeCfg.msfPublicUrl || '';
   let root = explicit.replace(/\/$/, '');
   if (!root) {
     root = deriveSceneAssemblerRootFromMsfUrl(
-      opts.fabricMsfUrl || cfg.fabricMsfUrl || '',
+      safeOpts.fabricMsfUrl || safeCfg.fabricMsfUrl || '',
     );
   }
   if (root && isFabricMsfFileUrl(root)) {
@@ -167,12 +170,12 @@ export function buildMetaverseBrowserUrl(opts = {}) {
 }
 
 /** @param {object|null|undefined} cfg from mergeSpatialFabricConfig */
-export function isSceneAssemblerConfigured(cfg = {}) {
-  return Boolean(buildSceneAssemblerOpenUrl(cfg));
+export function isSceneAssemblerConfigured(cfg) {
+  return Boolean(buildSceneAssemblerOpenUrl(cfg ?? {}));
 }
 
 /** @param {object|null|undefined} cfg */
-export function getOmbGuidelinesUrl(cfg = {}) {
+export function getOmbGuidelinesUrl(cfg) {
   return cfg?.ombGuidelines || DEFAULT_OMB_GUIDELINES;
 }
 

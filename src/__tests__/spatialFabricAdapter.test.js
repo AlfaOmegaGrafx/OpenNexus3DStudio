@@ -57,6 +57,7 @@ describe('spatialFabricAdapter', () => {
 
   it('isSceneAssemblerConfigured is false without MSF URL', () => {
     expect(isSceneAssemblerConfigured({})).toBe(false);
+    expect(isSceneAssemblerConfigured(null)).toBe(false);
     expect(
       isSceneAssemblerConfigured({
         fabricMsfUrl: 'https://example.com/fabric/demo.msf',
