@@ -200,14 +200,19 @@ export async function compressGlbBuffer(arrayBuffer, options = {}) {
 
   const sourceTris = countTriangles(root);
   const safeMode = options.safeMode ?? documentNeedsSafeMode(root);
-  const simplifyEnabled = profile.simplify !== false && profile.simplifyRatio > 0 && !safeMode;
+  let simplifyRatio = profile.simplifyRatio ?? 0.008;
+  if (profile.targetMaxTriangles > 0 && sourceTris > 0) {
+    simplifyRatio = Math.min(simplifyRatio, profile.targetMaxTriangles / sourceTris);
+  }
+  const simplifyEnabled =
+    profile.simplify !== false && simplifyRatio > 0 && !safeMode;
 
   const transforms = [weld({})];
   if (simplifyEnabled) {
     transforms.push(
       simplify({
         simplifier: MeshoptSimplifier,
-        ratio: profile.simplifyRatio,
+        ratio: simplifyRatio,
         error: profile.simplifyError,
         lockBorder: false,
       }),

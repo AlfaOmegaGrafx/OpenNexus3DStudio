@@ -35,6 +35,7 @@ export class GLBExporter {
       compressGlb = false,
       compressQuality = 50,
       compressPreset,
+      skipDownload = false,
     } = options;
 
     const useVrmExtensions = vrmCompatible && modelHasVrmRoot(model);
@@ -87,6 +88,8 @@ export class GLBExporter {
         const compressed = await compressGlbBuffer(glbData, {
           quality: compressQuality,
           preset: compressPreset,
+          targetMaxTriangles: options.targetMaxTriangles,
+          textureEdge: options.textureEdge,
           includeTextures,
         });
         glbData = compressed.buffer;
@@ -100,9 +103,11 @@ export class GLBExporter {
       // Create blob and download
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      
-      this.downloadFile(url, filename);
-      
+
+      if (!skipDownload) {
+        this.downloadFile(url, filename);
+      }
+
       this.emit('exportComplete', { model, filename, blob });
       
       // Clean up
@@ -308,33 +313,38 @@ export class GLBExporter {
   }
 
   /**
-   * Export with CharacterStudio compatibility
+   * Export with OpenNexus3DStudio compatibility
    * @param {Object} model - Model to export
    * @param {Object} options - Export options
    */
-  async exportForCharacterStudio(model, options = {}) {
+  async exportForOpenNexus3DStudio(model, options = {}) {
+    const { metadata: userMetadata, ...rest } = options;
     const characterStudioOptions = {
-      ...options,
-      vrmCompatible: options.vrmCompatible ?? modelHasVrmRoot(model),
-      optimize: true,
-      includeTextures: true,
-      includeAnimations: true,
+      ...rest,
+      vrmCompatible: rest.vrmCompatible ?? modelHasVrmRoot(model),
+      optimize: rest.optimize ?? true,
+      includeTextures: rest.includeTextures ?? true,
+      includeAnimations: rest.includeAnimations ?? true,
+      compressGlb: rest.compressGlb ?? false,
+      compressQuality: rest.compressQuality ?? 50,
+      skipDownload: rest.skipDownload ?? false,
       metadata: {
         source: 'OpenNexus3DStudio',
         target: 'OpenNexus3DStudio',
         compatibility: 'VRM',
-        exportDate: new Date().toISOString()
-      }
+        exportDate: new Date().toISOString(),
+        ...userMetadata,
+      },
     };
 
     return await this.exportToGLB(model, characterStudioOptions);
   }
 
   /**
-   * Validate model for CharacterStudio compatibility
+   * Validate model for OpenNexus3DStudio compatibility
    * @param {Object} model - Model to validate
    */
-  validateForCharacterStudio(model) {
+  validateForOpenNexus3DStudio(model) {
     const issues = [];
     
     // Check for required components

@@ -58,6 +58,18 @@ export function resolveCompressProfile(options = {}) {
     return { ...SAFE, quality: options.quality ?? SAFE.quality };
   }
 
+  if (options.preset?.startsWith('omb-tier-') || options.targetMaxTriangles > 0) {
+    const textureEdge = options.textureEdge ?? options.maxTexturePx ?? 256;
+    return {
+      quality: options.quality ?? 50,
+      simplify: options.simplify !== false,
+      simplifyRatio: options.simplifyRatio ?? 1,
+      simplifyError: options.simplifyError ?? 0.02,
+      targetMaxTriangles: options.targetMaxTriangles ?? 0,
+      textureEdge,
+    };
+  }
+
   const quality = Math.max(0, Math.min(100, options.quality ?? 50));
   const t = quality / 100;
   let interpolated;

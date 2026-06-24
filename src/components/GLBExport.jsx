@@ -3,6 +3,12 @@ import { useScene } from '../context/SceneContext';
 import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
 import { getCompressHint } from '../library/glbCompressPresets.js';
 import {
+  OMB_EXPORT_PRESETS,
+  OMB_GUIDELINES_URL,
+  buildOmbExportOptions,
+  getOmbPresetHint,
+} from '../library/ombExportPresets.js';
+import {
   getSpatialFabricEnv,
   normalizeOmbTier,
   validateGlbBlob,
@@ -23,6 +29,8 @@ const GLBExport = ({ apiEndpoint = '' }) => {
     includeAnimations: true,
     compressGlb: true,
     compressQuality: 50,
+    ombTierPreset: '',
+    ombUsePbr: true,
   });
 
   const { currentModel, exportModel } = useScene();
@@ -32,6 +40,42 @@ const GLBExport = ({ apiEndpoint = '' }) => {
     sceneAssemblerReady,
   } = useSpatialFabric(apiEndpoint);
   const compressHint = getCompressHint(exportOptions.compressQuality);
+  const ombPresetHint = exportOptions.ombTierPreset
+    ? getOmbPresetHint(exportOptions.ombTierPreset, exportOptions.ombUsePbr !== false)
+    : '';
+
+  const handleOmbPresetChange = (presetId) => {
+    if (!presetId) {
+      setExportOptions((prev) => ({
+        ...prev,
+        ombTierPreset: '',
+        targetMaxTriangles: undefined,
+        textureEdge: undefined,
+        compressPreset: undefined,
+        ombTargetTier: undefined,
+      }));
+      return;
+    }
+    const built = buildOmbExportOptions(presetId, {
+      usePbr: exportOptions.ombUsePbr !== false,
+      filename: exportOptions.filename,
+    });
+    if (built) setExportOptions((prev) => ({ ...prev, ...built }));
+  };
+
+  const handleOmbUsePbrChange = (usePbr) => {
+    setExportOptions((prev) => {
+      const next = { ...prev, ombUsePbr: usePbr };
+      if (prev.ombTierPreset) {
+        const built = buildOmbExportOptions(prev.ombTierPreset, {
+          usePbr,
+          filename: prev.filename,
+        });
+        if (built) Object.assign(next, built);
+      }
+      return next;
+    });
+  };
 
   const buildViewportExportOptions = (overrides = {}) => ({
     ...exportOptions,
@@ -226,6 +270,43 @@ const GLBExport = ({ apiEndpoint = '' }) => {
                 </div>
 
                 <div className="option-group">
+                  <label className="block mb-1">OMB Spatial Fabric preset</label>
+                  <select
+                    className="input w-full"
+                    value={exportOptions.ombTierPreset || ''}
+                    onChange={(e) => handleOmbPresetChange(e.target.value)}
+                  >
+                    <option value="">Custom (manual compression)</option>
+                    {OMB_EXPORT_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.label} — {preset.hint}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Targets{' '}
+                    <a href={OMB_GUIDELINES_URL} target="_blank" rel="noopener noreferrer">
+                      OMB model guidelines
+                    </a>{' '}
+                    triangle and texture budgets. Enables Draco + WebP and caps geometry/textures on
+                    export.
+                  </p>
+                  {exportOptions.ombTierPreset ? (
+                    <>
+                      <label className="flex items-center gap-2 mt-2">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.ombUsePbr !== false}
+                          onChange={(e) => handleOmbUsePbrChange(e.target.checked)}
+                        />
+                        <span>PBR materials (normal/metal/rough maps bump tier +1)</span>
+                      </label>
+                      <p className="text-xs text-gray-400 mt-1">{ombPresetHint}</p>
+                    </>
+                  ) : null}
+                </div>
+
+                <div className="option-group">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -267,7 +348,7 @@ const GLBExport = ({ apiEndpoint = '' }) => {
                   </p>
                 </div>
 
-                {exportOptions.compressGlb && (
+                {exportOptions.compressGlb && !exportOptions.ombTierPreset && (
                   <div className="option-group">
                     <label className="block mb-1">
                       Smaller file ↔ Sharper look ({exportOptions.compressQuality})

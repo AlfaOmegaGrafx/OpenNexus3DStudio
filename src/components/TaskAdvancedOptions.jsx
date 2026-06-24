@@ -7,6 +7,11 @@ import {
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
 import { getDefaultAutoRigOutputFormat } from '../library/aiModelsCatalog.js';
+import {
+  OMB_EXPORT_PRESETS,
+  OMB_GUIDELINES_URL,
+  buildOmbTaskOptions,
+} from '../library/ombExportPresets.js';
 
 /**
  * Common + model-specific 3DAIGC parameters (ported from Open3DStudio AdvancedParameters).
@@ -87,6 +92,13 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
     display: 'block',
   };
 
+  const hintStyle = {
+    fontSize: '0.55rem',
+    color: '#777',
+    lineHeight: 1.35,
+    margin: 0,
+  };
+
   return (
     <div style={{ marginBottom: '0.5rem' }}>
       <button
@@ -110,6 +122,46 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
         >
           {!isAutoRig && (
             <>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <label style={labelStyle}>OMB Spatial Fabric preset (generation)</label>
+                <select
+                  style={inputStyle}
+                  value={value?.omb_task_preset ?? ''}
+                  onChange={(e) => {
+                    const tier = e.target.value ? Number(e.target.value) : 0;
+                    if (!tier) {
+                      onChange?.({ ...value, omb_task_preset: '' });
+                      return;
+                    }
+                    const omb = buildOmbTaskOptions(tier);
+                    onChange?.({
+                      ...value,
+                      omb_task_preset: String(tier),
+                      texture_resolution: omb.texture_resolution,
+                      mesh_simplify: omb.mesh_simplify,
+                      model_parameters: {
+                        ...(value?.model_parameters || {}),
+                        ...omb.model_parameters,
+                      },
+                    });
+                  }}
+                >
+                  <option value="">Custom</option>
+                  {OMB_EXPORT_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.tier}>
+                      {preset.label} — {preset.hint}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                  Steers backend decimation and texture resolution toward{' '}
+                  <a href={OMB_GUIDELINES_URL} target="_blank" rel="noopener noreferrer">
+                    OMB tiers
+                  </a>
+                  . Use GLB Export presets for final viewport publish caps.
+                </p>
+              </div>
+
               <div style={{ marginBottom: '0.4rem' }}>
                 <label style={labelStyle}>Texture resolution</label>
                 <select
@@ -117,9 +169,12 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                   value={value?.texture_resolution ?? 1024}
                   onChange={(e) => setField('texture_resolution', Number(e.target.value))}
                 >
+                  <option value={64}>64 (OMB Tier 1)</option>
+                  <option value={128}>128 (OMB Tier 2)</option>
+                  <option value={256}>256 (OMB Tier 3)</option>
                   <option value={512}>512</option>
-                  <option value={1024}>1024</option>
-                  <option value={2048}>2048</option>
+                  <option value={1024}>1024 (OMB Tier 4)</option>
+                  <option value={2048}>2048 (OMB Tier 5)</option>
                 </select>
               </div>
 
@@ -149,6 +204,10 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                   onChange={(e) => setField('mesh_simplify', parseFloat(e.target.value))}
                   style={{ width: '100%' }}
                 />
+                <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                  Backend mesh decimation during AI generation (fewer triangles in the output GLB).
+                  Not the same as GLB Export Draco compression — that runs client-side when you export or send to Metaverse Browser.
+                </p>
               </div>
             </>
           )}

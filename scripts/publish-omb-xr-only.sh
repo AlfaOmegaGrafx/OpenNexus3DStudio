@@ -18,6 +18,7 @@ git add \
   scripts/xr-spark-hub-proxy.mjs \
   src/App.jsx \
   src/components/GLBExport.jsx \
+  src/components/TaskAdvancedOptions.jsx \
   src/components/TaskManager.jsx \
   src/components/WorldLibrary.jsx \
   src/components/WorldLibrary.module.css \
@@ -29,6 +30,10 @@ git add \
   src/library/multiImageInput.js \
   src/library/objectNameUtils.js \
   src/library/rigBoneUtils.js \
+  src/library/glbCompressPresets.js \
+  src/library/glbCompress.js \
+  src/library/glbExporter.js \
+  src/library/ombExportPresets.js \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
   src/library/taskPersistence.js \
@@ -36,6 +41,7 @@ git add \
   src/library/worldPackage.js \
   src/library/worldSceneLoader.js \
   src/library/xrHubConfig.js \
+  src/__tests__/ombExportPresets.test.js \
   src/__tests__/spatialFabricAdapter.test.js \
   src/__tests__/TaskManager.test.js \
   src/__tests__/worldPackage.test.js \
