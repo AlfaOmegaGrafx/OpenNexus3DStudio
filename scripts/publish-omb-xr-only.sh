@@ -32,6 +32,7 @@ git add \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
   src/library/taskPersistence.js \
+  src/library/utils.js \
   src/library/worldPackage.js \
   src/library/worldSceneLoader.js \
   src/library/xrHubConfig.js \
