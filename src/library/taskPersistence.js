@@ -1,14 +1,17 @@
 /**
- * Persist Character Studio task list across refresh and route changes.
+ * Persist OpenNexus3DStudio task list across refresh and route changes.
  */
 
 import { TASK_TYPE_TO_FEATURE } from './aiModelsCatalog.js';
 import { enrichCompletedJobPayload } from './taskModelUrl.js';
+import { resolveObjectNameFromJob } from './objectNameUtils.js';
 
 export const TASK_STORAGE_KEY = 'opennexus3d_tasks_v1';
 export const DELETED_JOBS_STORAGE_KEY = 'opennexus3d_deleted_jobs_v1';
 export const MAX_STORED_TASKS = 100;
 export const MAX_DELETED_JOB_IDS = 500;
+/** Matches 3DAIGC-API Redis job TTL (24h). */
+export const JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 const FEATURE_TO_TASK_TYPE = Object.fromEntries(
   Object.entries(TASK_TYPE_TO_FEATURE)
@@ -37,7 +40,13 @@ const API_STATUS_TO_TASK_STATUS = {
  */
 function toDate(value) {
   if (value instanceof Date) return value;
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const naiveApiIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+    const parsed = new Date(naiveApiIso.test(trimmed) ? `${trimmed}Z` : trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if (typeof value === 'number') {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
@@ -89,6 +98,77 @@ export function applyJobTimestampsToTask(task, job) {
   else if (job.created_at && !task.startedAt) task.startedAt = toDate(job.created_at);
   if (job.completed_at) task.completedAt = toDate(job.completed_at);
   return task;
+}
+
+/** US Eastern — matches 3DAIGC-API job clock (`America/New_York`). */
+export const TASK_JOB_TIMEZONE = 'America/New_York';
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function formatTaskTimestamp(value) {
+  if (!value) return '—';
+  const date = toDate(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TASK_JOB_TIMEZONE,
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).formatToParts(date);
+
+  const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
+  const dateStr = `${part('month')}-${part('day')}-${part('year')}`;
+  const timeStr = `${part('hour')}:${part('minute')}:${part('second')} ${part('dayPeriod')}`.trim();
+  const tz = part('timeZoneName');
+  return tz ? `${dateStr} ${timeStr} ${tz}` : `${dateStr} ${timeStr}`;
+}
+
+/**
+ * @param {object} task
+ * @returns {boolean}
+ */
+export function isTaskStale(task) {
+  if (!task || typeof task !== 'object') return false;
+  const anchor = task.completedAt || task.createdAt;
+  if (!anchor) return false;
+  const ms = toDate(anchor).getTime();
+  if (Number.isNaN(ms)) return false;
+  return Date.now() - ms > JOB_RETENTION_MS;
+}
+
+/**
+ * @param {object} job
+ * @returns {boolean}
+ */
+export function isApiJobStale(job) {
+  if (!job || typeof job !== 'object') return false;
+  const raw = job.completed_at || job.created_at;
+  if (!raw) return false;
+  const ms = toDate(raw).getTime();
+  if (Number.isNaN(ms)) return false;
+  return Date.now() - ms > JOB_RETENTION_MS;
+}
+
+/**
+ * @param {object[]} tasks
+ * @returns {{ kept: object[], removed: object[] }}
+ */
+export function partitionStaleTasks(tasks) {
+  const kept = [];
+  const removed = [];
+  for (const task of tasks || []) {
+    if (isTaskStale(task)) removed.push(task);
+    else kept.push(task);
+  }
+  return { kept, removed };
 }
 
 /**
@@ -143,7 +223,8 @@ export function readTaskStorageSnapshot() {
 export function writeTaskStorageSnapshot(tasks, apiEndpoint = '') {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const serialized = tasks
+    const { kept } = partitionStaleTasks(tasks);
+    const serialized = kept
       .slice(0, MAX_STORED_TASKS)
       .map(serializeTaskForStorage)
       .filter(Boolean);
@@ -237,6 +318,7 @@ export function loadPersistedTasks(apiEndpoint = '') {
   const restored = snapshot.tasks
     .map(deserializeTaskFromStorage)
     .filter((task) => task && typeof task.id === 'string')
+    .filter((task) => !isTaskStale(task))
     .filter((task) => {
       const jobId = resolveTaskJobId(task);
       return !jobId || !isJobDeletedLocally(jobId);
@@ -272,6 +354,7 @@ export function buildTaskPromptFromJob(job) {
   const candidates = [
     inputs.world_name,
     inputs.prompt,
+    inputs.text_prompt,
     inputs.text,
     job?.metadata?.feature_type,
     job?.feature,
@@ -288,6 +371,8 @@ export function buildTaskPromptFromJob(job) {
  * @returns {string}
  */
 export function buildTaskNameFromJob(job) {
+  const objectName = resolveObjectNameFromJob(job);
+  if (objectName) return objectName;
   const type = featureToTaskType(job?.feature);
   const label = type.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const prompt = buildTaskPromptFromJob(job);
@@ -339,13 +424,17 @@ export function taskFromApiJob(jobStatus, existing = null) {
         (jobStatus?.completed_at ? toDate(jobStatus.completed_at) : updatedAt)
       : existing?.completedAt || null;
 
+  const objectName = resolveObjectNameFromJob(jobStatus);
+  const mergedOptions = { ...(existing?.options || {}) };
+  if (objectName) mergedOptions.object_name = objectName;
+
   return {
     id: existing?.id || `job_${jobId}`,
     type,
     name: existing?.name || buildTaskNameFromJob(jobStatus),
     prompt,
     imageFile: null,
-    options: existing?.options || {},
+    options: mergedOptions,
     status,
     progress: status === 'completed' ? 100 : status === 'failed' ? existing?.progress || 0 : existing?.progress || 10,
     progressIndeterminate: status === 'running' || status === 'pending',
@@ -360,5 +449,8 @@ export function taskFromApiJob(jobStatus, existing = null) {
         ? jobStatus?.error || jobStatus?.message || existing?.error || 'Job failed'
         : existing?.error || null,
     syncedFromApi: true,
+    origin: existing?.origin || null,
+    handoffSource: existing?.handoffSource || null,
+    autoLoadOnComplete: existing?.autoLoadOnComplete ?? false,
   };
 }

@@ -30,6 +30,7 @@ git add \
   src/library/objectNameUtils.js \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
+  src/library/taskPersistence.js \
   src/library/worldPackage.js \
   src/library/worldSceneLoader.js \
   src/library/xrHubConfig.js \
