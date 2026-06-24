@@ -23,6 +23,7 @@ git add \
   src/hooks/useSpatialFabric.js \
   src/library/aiModelsCatalog.js \
   src/library/multiImageInput.js \
+  src/library/objectNameUtils.js \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
   src/library/worldPackage.js \
