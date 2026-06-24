@@ -34,6 +34,7 @@ git add \
   src/library/glbCompress.js \
   src/library/glbExporter.js \
   src/library/ombExportPresets.js \
+  src/library/runtimeUi.js \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
   src/library/taskPersistence.js \
@@ -49,6 +50,7 @@ git add \
   src/__tests__/xrHubConfig.test.js \
   src/__tests__/jobHandoff.test.js \
   src/__tests__/multiImageInput.test.js \
-  src/__tests__/objectNameUtils.test.js
+  src/__tests__/objectNameUtils.test.js \
+  src/__tests__/runtimeUi.test.js
 
 echo "Staged OMB/XR slice. Review with: git diff --cached --stat"

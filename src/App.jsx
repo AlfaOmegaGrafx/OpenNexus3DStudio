@@ -36,6 +36,11 @@ import {
 import { exportAvatarPipelineVrm } from './library/avatarPipelineExport.js';
 import { attachSplatPreviewMetadata } from './library/vrmTemplateMetadata.js';
 import { parseJobHandoffFromLocation } from './library/jobHandoff.js';
+import {
+  AI_BACKEND_UNAVAILABLE_MSG,
+  canBrowseAiTaskCatalog,
+  dispatchOpenTaskCatalog,
+} from './library/runtimeUi.js';
 
 // Import OpenNexus3DStudio avatar panels (Appearance, Save, Mint, Load, Tools)
 import AppearanceSimple from './pages/AppearanceSimple';
@@ -649,6 +654,20 @@ function AppContent() {
     }
   }, [loadModel]);
 
+  const beginAiTaskOrBrowseCatalog = useCallback(
+    (taskType) => {
+      if (isConnected) return true;
+      if (canBrowseAiTaskCatalog()) {
+        dispatchOpenTaskCatalog(taskType);
+        setSidebarCollapsed(false);
+        return false;
+      }
+      alert(AI_BACKEND_UNAVAILABLE_MSG);
+      return false;
+    },
+    [isConnected],
+  );
+
   // Handle AI generation tasks
   const handleAITask = useCallback(async (taskType, prompt, imageFile = null, options = {}) => {
     console.log('App: handleAITask called with:', { taskType, prompt, imageFile, options });
@@ -876,6 +895,7 @@ function AppContent() {
               <button 
                 className="header-btn"
                 onClick={() => {
+                  if (!beginAiTaskOrBrowseCatalog('text-to-3d')) return;
                   const objectName = promptForObjectName('');
                   if (!objectName) return;
                   const userPrompt = window.prompt('Enter text-to-3D prompt:');
@@ -883,14 +903,15 @@ function AppContent() {
                     handleAITask('text-to-3d', userPrompt, null, { object_name: objectName });
                   }
                 }}
-                disabled={!isConnected}
-                title="Text to 3D"
+                disabled={!isConnected && !canBrowseAiTaskCatalog()}
+                title={isConnected ? 'Text to 3D' : 'Browse Text-to-3D models'}
               >
                 ✨ Text-3D
               </button>
               <button 
                 className="header-btn"
                 onClick={() => {
+                  if (!beginAiTaskOrBrowseCatalog('image-to-3d')) return;
                   const input = document.createElement('input');
                   input.type = 'file';
                   input.accept = 'image/*';
@@ -908,8 +929,8 @@ function AppContent() {
                   };
                   input.click();
                 }}
-                disabled={!isConnected}
-                title="Image to 3D"
+                disabled={!isConnected && !canBrowseAiTaskCatalog()}
+                title={isConnected ? 'Image to 3D' : 'Browse Image-to-3D models'}
               >
                 🖼️ Image-3D
               </button>
@@ -1392,6 +1413,7 @@ function AppContent() {
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
+                    if (!beginAiTaskOrBrowseCatalog('text-to-3d')) return;
                     const objectName = promptForObjectName('');
                     if (!objectName) return;
                     const userPrompt = window.prompt('Enter text-to-3D prompt:');
@@ -1399,14 +1421,15 @@ function AppContent() {
                       handleAITask('text-to-3d', userPrompt, null, { object_name: objectName });
                     }
                   }}
-                  data-tooltip="AI Text-to-3D"
-                  title="AI Text-to-3D"
+                  data-tooltip={isConnected ? 'AI Text-to-3D' : 'Browse Text-to-3D models'}
+                  title={isConnected ? 'AI Text-to-3D' : 'Browse Text-to-3D models'}
                 >
                   🎭
                 </button>
                 <button 
                   className="sidebar-icon"
                   onClick={() => {
+                    if (!beginAiTaskOrBrowseCatalog('image-to-3d')) return;
                     const input = document.createElement('input');
                     input.type = 'file';
                     input.accept = 'image/*';
@@ -1424,8 +1447,8 @@ function AppContent() {
                     };
                     input.click();
                   }}
-                  data-tooltip="AI Image-to-3D"
-                  title="AI Image-to-3D"
+                  data-tooltip={isConnected ? 'AI Image-to-3D' : 'Browse Image-to-3D models'}
+                  title={isConnected ? 'AI Image-to-3D' : 'Browse Image-to-3D models'}
                 >
                   🤖
                 </button>

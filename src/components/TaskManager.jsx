@@ -10,6 +10,7 @@ import {
   getDefaultModelForFeature,
   getDefaultRigModeForTaskType,
   getModelLabel,
+  getModelsForTaskType as getCatalogModelsForTaskType,
   getPropMeshModelsForWorld,
   PREFERRED_PIPELINES,
   resolveAutoRigModelForTask,
@@ -35,6 +36,11 @@ import {
   objectNameFromFilename,
   slugifyObjectName,
 } from '../library/objectNameUtils.js';
+import {
+  AI_BACKEND_UNAVAILABLE_MSG,
+  canBrowseAiTaskCatalog,
+  OPEN_TASK_CATALOG_EVENT,
+} from '../library/runtimeUi.js';
 import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
@@ -117,8 +123,20 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     import.meta.env.VITE_AVATARSDK_CLIENT_ID && import.meta.env.VITE_AVATARSDK_CLIENT_SECRET
   );
   const canStartAnyTask = isApiConnected || avatarSdkReady;
+  const canBrowseCatalog = canBrowseAiTaskCatalog();
   const normalizedNewObjectName = normalizeObjectName(newObjectName);
   const canSubmitNewTask = Boolean(normalizedNewObjectName);
+  const canOpenNewTaskForm = canStartAnyTask || canBrowseCatalog;
+
+  useEffect(() => {
+    const onBrowse = (event) => {
+      const taskType = event?.detail?.taskType || 'text-to-3d';
+      setNewTaskType(taskType);
+      setShowNewTask(true);
+    };
+    window.addEventListener(OPEN_TASK_CATALOG_EVENT, onBrowse);
+    return () => window.removeEventListener(OPEN_TASK_CATALOG_EVENT, onBrowse);
+  }, []);
 
   useEffect(() => {
     if (!showNewTask) return undefined;
@@ -137,12 +155,14 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   }, [newTaskType, showNewTask]);
   
-  // Get models filtered by task type
+  // Get models filtered by task type (full catalog when offline; API subset when connected).
   const getModelsForTaskType = (taskType) => {
+    if (!isApiConnected) {
+      return getCatalogModelsForTaskType(taskType);
+    }
     const feature = TASK_TYPE_TO_FEATURE[taskType];
     if (!feature) return [];
-    
-    return availableModels.filter(model => model.feature === feature);
+    return availableModels.filter((model) => model.feature === feature);
   };
   
   // Get default model for task type
@@ -286,6 +306,10 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const handleSubmitTask = (e) => {
     e.preventDefault();
+    if (!canStartAnyTask) {
+      alert(canBrowseCatalog ? AI_BACKEND_UNAVAILABLE_MSG : 'Configure DGX API or AvatarSDK before starting tasks.');
+      return;
+    }
     console.log('TaskManager: handleSubmitTask called');
     console.log('TaskManager: newTaskPrompt:', newTaskPrompt);
     console.log('TaskManager: newTaskType:', newTaskType);
@@ -716,7 +740,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   console.log('TaskManager: isApiConnected:', isApiConnected);
                   setShowNewTask(!showNewTask);
                 }}
-                disabled={!canStartAnyTask}
+                disabled={!canOpenNewTaskForm}
               >
                 + New
               </button>
@@ -782,7 +806,53 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           </div>
         )}
 
-        {!canStartAnyTask && (
+        {!canStartAnyTask && !showNewTask && (
+          <div style={{ 
+            background: canBrowseCatalog ? '#1a2a3a' : '#fff3cd', 
+            color: canBrowseCatalog ? '#9cd' : '#856404', 
+            borderRadius: '4px', 
+            fontSize: '0.65rem', 
+            padding: '0.5rem 0.75rem', 
+            margin: '0 0.75rem 0.5rem',
+            border: canBrowseCatalog ? '1px solid #345' : '1px solid #ffc107'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+              {canBrowseCatalog ? 'AI catalog preview' : '⚠️ No AI Provider Available'}
+            </div>
+            <div style={{ fontSize: '0.6rem', lineHeight: '1.4' }}>
+              {canBrowseCatalog ? (
+                <>
+                  Press <strong>+ New</strong> or use <strong>Text-3D</strong> / <strong>Image-3D</strong> to
+                  browse supported models. {AI_BACKEND_UNAVAILABLE_MSG}
+                </>
+              ) : (
+                <>
+                  Configure either DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>) or AvatarSDK credentials (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_ID</code> / <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_SECRET</code>).
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showNewTask && !canStartAnyTask && canBrowseCatalog && (
+          <div
+            style={{
+              background: '#1a2a3a',
+              color: '#9cd',
+              borderRadius: '4px',
+              fontSize: '0.6rem',
+              padding: '0.45rem 0.75rem',
+              margin: '0 0.75rem 0.5rem',
+              border: '1px solid #345',
+              lineHeight: 1.4,
+            }}
+          >
+            Catalog preview — model list matches a connected DGX deployment. Start is disabled until
+            you self-host and connect 3DAIGC-API.
+          </div>
+        )}
+
+        {!canStartAnyTask && !canBrowseCatalog && !showNewTask && (
           <div style={{ 
             background: '#fff3cd', 
             color: '#856404', 
@@ -823,7 +893,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               Workflows use DGX-verified defaults: TRELLIS.2 for image→3D;{' '}
               <strong>SkinTokens</strong> for <em>Auto Rigging → full rig</em>;{' '}
               <strong>UniRig</strong> for <em>Avatar from Image → template VRM</em> (not SkinTokens).
-              Models list updates from the API when connected.
+              {isApiConnected
+                ? ' Models list updates from the API when connected.'
+                : canBrowseCatalog
+                  ? ' Showing full supported-model catalog (preview — connect 3DAIGC-API to run).'
+                  : ''}
             </p>
             {(newTaskType === 'image-to-3d' || newTaskType === 'auto-rigging') && (
               <p style={{ fontSize: '0.55rem', color: '#8f8', margin: '0 0 0.5rem', lineHeight: 1.35 }}>
@@ -1298,8 +1372,16 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   type="submit"
                   className="btn btn-primary"
                   data-testid="task-start-btn"
-                  disabled={!canSubmitNewTask}
-                  title={canSubmitNewTask ? 'Start generation' : 'Enter an object name first'}
+                  disabled={!canSubmitNewTask || !canStartAnyTask}
+                  title={
+                    !canStartAnyTask
+                      ? canBrowseCatalog
+                        ? AI_BACKEND_UNAVAILABLE_MSG
+                        : 'Connect API or AvatarSDK to start'
+                      : canSubmitNewTask
+                        ? 'Start generation'
+                        : 'Enter an object name first'
+                  }
                   onClick={() => console.log('TaskManager: Submit button clicked')}
                   style={{ flex: 1 }}
                 >

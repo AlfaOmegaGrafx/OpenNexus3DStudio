@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { formatApiEndpointForDisplay, isLikelyPrivateApiEndpoint, showApiStatusPanel } from '../library/runtimeUi';
+import { formatApiEndpointForDisplay, isLikelyPrivateApiEndpoint, showApiStatusPanel, canBrowseAiTaskCatalog } from '../library/runtimeUi';
 describe('runtimeUi', () => {
   it('flags private hosts', () => {
     expect(isLikelyPrivateApiEndpoint('http://10.0.0.158:7842')).toBe(true);
@@ -17,6 +17,11 @@ describe('runtimeUi', () => {
     expect(showApiStatusPanel()).toBe(false);
     vi.stubEnv('VITE_PUBLIC_DEMO', '');
     expect(showApiStatusPanel()).toBe(true);
+  });
+
+  it('canBrowseAiTaskCatalog when VITE_PUBLIC_DEMO is set', () => {
+    vi.stubEnv('VITE_PUBLIC_DEMO', '1');
+    expect(canBrowseAiTaskCatalog()).toBe(true);
   });
 
   afterEach(() => {

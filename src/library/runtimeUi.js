@@ -20,6 +20,24 @@ export function showApiStatusPanel() {
 export const AI_BACKEND_UNAVAILABLE_MSG =
   'AI generation is not available on this site. Run your own instance and connect a backend API.';
 
+/** Browsing the model catalog does not require a live API (Vercel demo, marketing). */
+export const OPEN_TASK_CATALOG_EVENT = 'openTaskCatalog';
+
+/**
+ * Open Task Manager new-task form with a task type pre-selected (catalog browse).
+ * @param {string} [taskType]
+ */
+export function dispatchOpenTaskCatalog(taskType = 'text-to-3d') {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent(OPEN_TASK_CATALOG_EVENT, { detail: { taskType } }),
+  );
+}
+
+export function canBrowseAiTaskCatalog() {
+  return import.meta.env.VITE_PUBLIC_DEMO === '1' || import.meta.env.PROD;
+}
+
 /**
  * Whether an API endpoint string looks like a private / internal host.
  * @param {string} endpoint
