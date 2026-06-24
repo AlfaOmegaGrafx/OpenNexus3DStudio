@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 git add \
+  package.json \
+  package-lock.json \
   .env.example \
   docs/api/api.md \
   docs/SPATIAL_FABRIC_INTEGRATION.md \

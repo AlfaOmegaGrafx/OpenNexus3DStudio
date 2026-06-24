@@ -54,6 +54,7 @@
     "@mediapipe/holistic": "^0.5.1675471629",
     "@pixiv/three-vrm": "^3.4.4",
     "@solana/web3.js": "^1.98.4",
+    "@sparkjsdev/spark": "^2.1.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@web3-react/core": "^8.2.3",
     "@web3-react/injected-connector": "^6.0.7",
