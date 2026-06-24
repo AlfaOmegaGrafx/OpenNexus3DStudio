@@ -22,6 +22,7 @@ git add \
   src/components/XrAiPanel.css \
   src/hooks/useSpatialFabric.js \
   src/library/aiModelsCatalog.js \
+  src/library/jobHandoff.js \
   src/library/multiImageInput.js \
   src/library/objectNameUtils.js \
   src/library/spatialFabricAdapter.js \
@@ -34,6 +35,8 @@ git add \
   src/__tests__/worldPackage.test.js \
   src/__tests__/worldSceneLoader.test.js \
   src/__tests__/xrHubConfig.test.js \
-  src/__tests__/multiImageInput.test.js
+  src/__tests__/jobHandoff.test.js \
+  src/__tests__/multiImageInput.test.js \
+  src/__tests__/objectNameUtils.test.js
 
 echo "Staged OMB/XR slice. Review with: git diff --cached --stat"
