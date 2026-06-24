@@ -28,6 +28,7 @@ git add \
   src/library/jobHandoff.js \
   src/library/multiImageInput.js \
   src/library/objectNameUtils.js \
+  src/library/rigBoneUtils.js \
   src/library/spatialFabricAdapter.js \
   src/library/taskManager.js \
   src/library/taskPersistence.js \

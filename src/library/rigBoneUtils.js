@@ -207,6 +207,55 @@ export function getViewportLayoutBounds(root) {
   return meshBox.union(boneBox);
 }
 
+
+/** Template VRM rig from DGX (avatar-from-image). */
+export function isTemplateRigExport(root) {
+  if (!root) return false;
+  const rigInfo = root.userData?.autoRigMeta?.rig_info;
+  return (
+    rigInfo?.rig_mode === 'template' ||
+    rigInfo?.rig_type === 'humanoid_template' ||
+    rigInfo?.generation_method === 'humanoid_vrm_template'
+  );
+}
+
+/**
+ * Bounds for floor anchoring — mesh feet for skinned template rigs (bone joints can sit
+ * above the sole); union layout for other AIGC rigged exports.
+ * @param {import('three').Object3D|null|undefined} root
+ */
+export function getViewportFloorAnchorBounds(root) {
+  const empty = new THREE.Box3();
+  if (!root) return empty;
+
+  const skinned = findPrimarySkinnedMesh(root);
+  if (
+    (root.userData?.preserveExportedOrientation || isTemplateRigExport(root)) &&
+    skinned
+  ) {
+    const deformed = getSkinnedDisplayWorldBounds(skinned);
+    const boneBox = getBoneWorldBounds(root);
+    if (!deformed.isEmpty()) {
+      if (!boneBox.isEmpty()) {
+        return deformed.clone().union(boneBox);
+      }
+      return deformed;
+    }
+    const meshBox = getMeshLayoutBounds(root);
+    if (!meshBox.isEmpty()) return meshBox;
+  }
+
+  if (
+    (root.userData?.fromAigc || root.userData?.preserveExportedOrientation) &&
+    (modelHasSkinnedMesh(root) || countModelBones(root) > 0)
+  ) {
+    const layout = getViewportLayoutBounds(root);
+    if (!layout.isEmpty()) return layout;
+  }
+
+  return getMeshLayoutBounds(root);
+}
+
 /**
  * @param {import('three').Object3D} object
  * @param {import('three').Vector3} worldDelta
