@@ -12,6 +12,7 @@ Before any git commit or push:
 3. **Scripts that write MCP config** (`update-playwright-mcp.*`) must read tokens from **environment variables**, never string literals
 4. **Pre-commit hook:** run `sh scripts/install-secret-guard-hook.sh` after clone if hooks are missing
 5. **Scan before push:** `bash scripts/scan-repo-secrets.sh .` (PC) or on DGX after sync
+6. **GitHub audit (2026-06-24):** Both `AlfaOmegaGrafx/OpenNexus3DStudio` and `AlfaOmegaGrafx/3DAIGC-API` `main` are clean — no `.env`/tokens on GitHub. OpenNexus stale branches with `.env` were deleted. Canonical: `memory-bank/github-security-audit-2026-06-24.md`. Never commit `~/.config/rp1-spatial-fabric/rp1.env` or real `VITE_*` secrets.
 
 If `git filter-repo` was used, force-push cleaned history only — never push local secret files.
 

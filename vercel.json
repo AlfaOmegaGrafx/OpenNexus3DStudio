@@ -5,7 +5,8 @@
   "framework": "vite",
   "env": {
     "VITE_ASSET_PATH": "https://m3-org.github.io/loot-assets/",
-    "VITE_PUBLIC_DEMO": "1"
+    "VITE_PUBLIC_DEMO": "1",
+    "VITE_XR_HUB_URL": "https://dgx-spark.tail6121eb.ts.net:8088"
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "github": {

@@ -182,7 +182,7 @@ function logContractResult(result) {
     console.log('[API-Contract] PASS', payload);
   } else {
     console.error(
-      '[API-Contract] FAIL — fix export on DGX (UniRig/Blender GLB); client will not repair rig',
+      '[API-Contract] FAIL — fix export on DGX (template rig / Blender GLB); client runs targeted mesh repair only when needed',
       payload,
     );
   }
