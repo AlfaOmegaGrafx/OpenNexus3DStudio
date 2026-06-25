@@ -1,6 +1,8 @@
 ## public assets
 
 public/character-assets/
+# Junction/symlink to ../loot-assets (see scripts/link-loot-assets.ps1, npm run get-assets)
+public/loot-assets/
 
 ### Linux ###
 *~
@@ -418,6 +420,8 @@ certs/
 **/.env.default
 !.env.example
 !**/.env.example
+!.env.production.example
+!**/.env.production.example
 
 **/*.pem
 **/*.pem.disabled

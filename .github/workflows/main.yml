@@ -24,6 +24,9 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Build
+        env:
+          VITE_ASSET_PATH: https://m3-org.github.io/loot-assets/
+          VITE_PUBLIC_DEMO: '1'
         run: npm run build
 
       - name: Deploy to GitHub Pages

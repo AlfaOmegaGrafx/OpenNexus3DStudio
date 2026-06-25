@@ -1,0 +1,5 @@
+# Loot assets source (do not vendor in this repo)
+repo=https://github.com/m3-org/loot-assets
+clone=https://github.com/m3-org/loot-assets.git
+branch=main
+pages=https://m3-org.github.io/loot-assets/

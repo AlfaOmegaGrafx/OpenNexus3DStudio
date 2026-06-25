@@ -72,13 +72,16 @@ export class VRMExporter {
       // Clone textures to prevent immutable texture errors
       this.cloneTexturesForExport(model);
 
-      // Optionally enforce forward orientation (VRM expects -Z forward)
+      // Uploaded VRM: do not rebind or yaw — export authored bind as displayed.
+      const isUploadedVrm = Boolean(model.userData?.vrm || model.userData?.vrmBindPassthrough);
+
       let originalQuaternion = null;
-      if (ensureForwardMinusZ) {
+      let exportYawApplied = false;
+      if (ensureForwardMinusZ && !isUploadedVrm) {
         originalQuaternion = model.quaternion.clone();
         try {
-          // Many sources use +Z; rotate 180deg around Y to face -Z
           model.rotateY(Math.PI);
+          exportYawApplied = true;
         } catch (_) {}
       }
 
@@ -203,7 +206,7 @@ export class VRMExporter {
       });
 
       // Restore orientation after export
-      if (ensureForwardMinusZ && originalQuaternion) {
+      if (exportYawApplied && originalQuaternion) {
         model.quaternion.copy(originalQuaternion);
       }
       
