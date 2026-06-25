@@ -10,7 +10,9 @@ import {
 } from '../library/ombExportPresets.js';
 import {
   getSpatialFabricEnv,
+  getSyncSceneAssemblerUrl,
   normalizeOmbTier,
+  preopenSpatialFabricTab,
   validateGlbBlob,
 } from '../library/spatialFabricAdapter.js';
 
@@ -135,6 +137,7 @@ const GLBExport = ({ apiEndpoint = '' }) => {
     }
     try {
       setIsSpatialBusy(true);
+      const preopenedTab = preopenSpatialFabricTab(getSyncSceneAssemblerUrl());
       const result = await exportModel('glb', buildViewportExportOptions());
       if (!(result?.blob instanceof Blob)) {
         throw new Error('Viewport export did not produce a GLB');
@@ -145,6 +148,7 @@ const GLBExport = ({ apiEndpoint = '' }) => {
         result.blob,
         filename,
         assetStem,
+        { preopenedTab },
       );
       const omb = normalizeOmbTier(published?.omb);
       if (omb) setOmbHint(omb);

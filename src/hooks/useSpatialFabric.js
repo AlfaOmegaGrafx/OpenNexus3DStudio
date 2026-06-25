@@ -50,14 +50,14 @@ export function useSpatialFabric(apiEndpoint = '') {
           'Scene Assembler is not linked. Set VITE_MSF_PUBLIC_URL or connect to a 3DAIGC API with MSF_PUBLIC_BASE_URL.',
         );
       }
-      openSpatialFabricInBrowser(url);
+      openSpatialFabricInBrowser(url, opts.preopenedTab);
     },
     [apiEndpoint],
   );
 
-  const openOmbGuidelines = useCallback(async () => {
+  const openOmbGuidelines = useCallback(async (opts = {}) => {
     const url = await resolveOmbGuidelinesUrl(apiEndpoint);
-    openSpatialFabricInBrowser(url);
+    openSpatialFabricInBrowser(url, opts.preopenedTab);
   }, [apiEndpoint]);
 
   /** Opens Scene Assembler when linked, otherwise OMB guidelines (legacy callers). */
@@ -65,20 +65,23 @@ export function useSpatialFabric(apiEndpoint = '') {
     async (opts = {}) => {
       const url = await resolveSceneAssemblerUrl(apiEndpoint, opts);
       if (url) {
-        openSpatialFabricInBrowser(url);
+        openSpatialFabricInBrowser(url, opts.preopenedTab);
         return;
       }
-      openSpatialFabricInBrowser(await resolveOmbGuidelinesUrl(apiEndpoint));
+      openSpatialFabricInBrowser(
+        await resolveOmbGuidelinesUrl(apiEndpoint),
+        opts.preopenedTab,
+      );
     },
     [apiEndpoint],
   );
 
   const publishJob = useCallback(
-    async (jobId, assetName) => {
+    async (jobId, assetName, opts = {}) => {
       if (!apiEndpoint) {
         throw new Error('Configure API endpoint to publish to spatial fabric');
       }
-      return publishJobAndOpenMetaverseBrowser(apiEndpoint, jobId, assetName);
+      return publishJobAndOpenMetaverseBrowser(apiEndpoint, jobId, assetName, opts);
     },
     [apiEndpoint],
   );
@@ -103,14 +106,14 @@ export function useSpatialFabric(apiEndpoint = '') {
   );
 
   const publishWorld = useCallback(
-    async (manifestUrl, worldName) => {
+    async (manifestUrl, worldName, opts = {}) => {
       if (!apiEndpoint) {
         throw new Error('Configure API endpoint to publish worlds to spatial fabric');
       }
       if (!manifestUrl) {
         throw new Error('World manifest URL is required');
       }
-      return publishWorldAndOpenMetaverseBrowser(apiEndpoint, manifestUrl, worldName);
+      return publishWorldAndOpenMetaverseBrowser(apiEndpoint, manifestUrl, worldName, opts);
     },
     [apiEndpoint],
   );

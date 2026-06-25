@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTask } from '../context/TaskContext';
 import { useScene } from '../context/SceneContext';
 import avatarSdkService from '../services/avatarSdkService.js';
@@ -30,7 +30,7 @@ import {
 } from '../library/worldPackage.js';
 import { formatTaskDurationMs, getTaskElapsedMs, resolveTaskJobId } from '../library/taskPersistence.js';
 import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
-import { canPublishTaskToSpatialFabric } from '../library/spatialFabricAdapter.js';
+import { canPublishTaskToSpatialFabric, getSyncSceneAssemblerUrl, preopenSpatialFabricTab } from '../library/spatialFabricAdapter.js';
 import {
   normalizeObjectName,
   objectNameFromFilename,
@@ -53,6 +53,7 @@ import {
   supportsMultiImageInput,
 } from '../library/multiImageInput.js';
 import TaskAdvancedOptions from './TaskAdvancedOptions.jsx';
+import './TaskManager.css';
 
 export { ALL_MODELS, TASK_TYPE_TO_FEATURE };
 
@@ -104,6 +105,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const [syncMessage, setSyncMessage] = useState(null);
   const [publishingJobId, setPublishingJobId] = useState(null);
   const [availableModels, setAvailableModels] = useState(ALL_MODELS);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const cardHeaderRef = useRef(null);
   const { currentModel } = useScene();
   const { deleteTask, syncTasksFromApi, clearCompletedTasks, getApiEndpoint } = useTask();
   const apiEndpoint = getApiEndpoint();
@@ -128,11 +131,34 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const canSubmitNewTask = Boolean(normalizedNewObjectName);
   const canOpenNewTaskForm = canStartAnyTask || canBrowseCatalog;
 
+  const { activeTasks, completedTasks } = useMemo(() => {
+    const active = [];
+    const completed = [];
+    for (const task of tasks) {
+      if (task.status === 'completed' || task.status === 'failed') {
+        completed.push(task);
+      } else {
+        active.push(task);
+      }
+    }
+    return { activeTasks: active, completedTasks: completed };
+  }, [tasks]);
+
   useEffect(() => {
     const onBrowse = (event) => {
       const taskType = event?.detail?.taskType || 'text-to-3d';
       setNewTaskType(taskType);
       setShowNewTask(true);
+      setIsExpanded(true);
+      if (cardHeaderRef.current) {
+        setTimeout(() => {
+          cardHeaderRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+            inline: 'nearest',
+          });
+        }, 0);
+      }
     };
     window.addEventListener(OPEN_TASK_CATALOG_EVENT, onBrowse);
     return () => window.removeEventListener(OPEN_TASK_CATALOG_EVENT, onBrowse);
@@ -691,19 +717,24 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const handleOpenMetaverseBrowser = async (event) => {
     event?.stopPropagation?.();
+    const preopenedTab = preopenSpatialFabricTab(getSyncSceneAssemblerUrl());
     try {
       if (sceneAssemblerReady) {
-        await openSceneAssembler();
+        console.log('[SpatialFabric] Opening Scene Assembler');
+        await openSceneAssembler({ preopenedTab });
       } else {
-        await openOmbGuidelines();
+        console.log('[SpatialFabric] Opening OMB guidelines (MSF not linked)');
+        await openOmbGuidelines({ preopenedTab });
       }
     } catch (err) {
+      console.error('[SpatialFabric] Open Scene Assembler failed', err);
       alert(err?.message || String(err));
     }
   };
 
   const handlePublishRp1 = async (task, event) => {
     event.stopPropagation();
+    const preopenedTab = preopenSpatialFabricTab(getSyncSceneAssemblerUrl());
     const jobId = resolveTaskJobId(task);
     if (!jobId) {
       alert('No DGX job id on this task — sync from DGX or wait for completion.');
@@ -713,9 +744,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     try {
       const assetName = slugifyObjectName(
         task.options?.object_name || task.name,
-        taskJobId ? `job-${taskJobId}` : 'opennexus-mesh',
+        jobId ? `job-${jobId}` : 'opennexus-mesh',
       );
-      await publishJob(jobId, assetName);
+      await publishJob(jobId, assetName, { preopenedTab });
     } catch (err) {
       console.error('[SpatialFabric] TaskManager publish failed', err);
       alert(err?.message || String(err));
@@ -724,14 +755,309 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   };
 
+  const renderTaskItem = (task) => {
+    const taskJobId = resolveTaskJobId(task);
+    const isViewportLoading = viewportLoadingJobId && taskJobId === viewportLoadingJobId;
+    const isViewportActive = viewportActiveJobId && taskJobId === viewportActiveJobId;
+    const isViewportFailed = viewportFailedJobId && taskJobId === viewportFailedJobId;
+    return (
+      <div
+                key={task.id}
+                className="task-item"
+                role={task.status === 'completed' && task.result ? 'button' : undefined}
+                tabIndex={task.status === 'completed' && task.result ? 0 : undefined}
+                onClick={(event) => handleTaskRowClick(task, event)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    dispatchLoadTask(task, 'taskRowKey');
+                  }
+                }}
+                title={
+                  task.status === 'completed' && task.result
+                    ? isViewportLoading
+                      ? 'Loading into viewport…'
+                      : 'Click to open in viewport'
+                    : undefined
+                }
+                style={{
+                padding: '0.375rem',
+                border: isViewportFailed
+                  ? '1px solid #dc3545'
+                  : isViewportActive
+                    ? '1px solid #28a745'
+                    : '1px solid #444',
+                borderRadius: '4px',
+                backgroundColor: isViewportLoading
+                  ? '#333a35'
+                  : isViewportFailed
+                    ? '#3a2a2a'
+                    : isViewportActive
+                      ? '#2a332a'
+                      : '#2a2a2a',
+                cursor: task.status === 'completed' && task.result ? 'pointer' : 'default',
+                opacity: viewportLoadingJobId && !isViewportLoading ? 0.75 : 1,
+              }}>
+                <div className="flex justify-between items-center mb-0.5">
+                  <div style={{ flex: 1 }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold" style={{ fontSize: '0.75rem' }}>{task.name}</span>
+                      <span className={`status ${getStatusColor(task.status)}`} style={{ 
+                        fontSize: '0.6rem', 
+                        padding: '0.1rem 0.3rem',
+                        borderRadius: '3px'
+                      }}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400" style={{ fontSize: '0.6rem' }}>
+                      {task.type}
+                      {task.options?.model_preference
+                        ? ` • ${getModelLabel(task.options.model_preference)}`
+                        : ''}
+                      {renderTaskTiming(task)}
+                      {resolveTaskJobId(task) ? (
+                        <span style={{ color: '#666' }}>
+                          {' '}
+                          • job {resolveTaskJobId(task).slice(0, 8)}…
+                          {task.handoffSource === 'galaxy-xr' ? ' • XR' : ''}
+                          {task.syncedFromApi ? ' • DGX' : ''}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDeleteTask(task);
+                    }}
+                    className="btn btn-danger"
+                    disabled={deletingTaskId === task.id}
+                    title={
+                      resolveTaskJobId(task)
+                        ? 'Delete from this browser and DGX Spark'
+                        : 'Delete from this browser'
+                    }
+                    style={{ 
+                      padding: '0.1rem 0.35rem', 
+                      fontSize: '0.6rem',
+                      minWidth: 'auto'
+                    }}
+                  >
+                    {deletingTaskId === task.id ? '…' : 'Delete'}
+                  </button>
+                </div>
+
+                {task.status === 'running' && (
+                  <div className="mb-0.5">
+                    <div
+                      className={`progress${task.progressIndeterminate ? ' progress-indeterminate' : ''}`}
+                      style={{ height: '3px' }}
+                    >
+                      <div
+                        className="progress-bar"
+                        style={
+                          task.progressIndeterminate || task.progress == null || task.progress <= 0
+                            ? undefined
+                            : { width: `${Math.min(100, task.progress)}%` }
+                        }
+                      />
+                    </div>
+                    <div
+                      className="text-xs text-gray-400"
+                      style={{ fontSize: '0.55rem', marginTop: '2px' }}
+                    >
+                      {task.progressIndeterminate || task.progress == null || task.progress <= 0
+                        ? 'Working…'
+                        : `${Math.round(task.progress)}%`}
+                      {task.statusMessage ? ` · ${task.statusMessage}` : ''}
+                    </div>
+                  </div>
+                )}
+
+                {task.prompt && (
+                  <p className="text-xs text-gray-300 mb-0.5" style={{ fontSize: '0.65rem' }}>
+                    "{task.prompt.length > 60 ? task.prompt.substring(0, 60) + '...' : task.prompt}"
+                  </p>
+                )}
+
+                {task.error && (
+                  <div className="text-xs text-red-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
+                    Error: {task.error}
+                  </div>
+                )}
+
+                {(task.result || (task.status === 'completed' && resolveTaskJobId(task))) && (() => {
+                  const loadPayload = normalizeTaskLoadPayload(task);
+                  const isFullWorld = isFullWorldPackageTaskResult(loadPayload);
+                  const isSplatEnv = isSplatEnvironmentTaskResult(loadPayload);
+                  const isWorld = isFullWorld || isSplatEnv;
+                  const modelUrl = getTaskResultModelUrl(loadPayload);
+                  const meshUrl = getTaskResultMeshUrl(loadPayload);
+                  const canPublishRp1 = canPublishTaskToSpatialFabric(task, loadPayload, {
+                    isSplatOnly: isSplatEnv && !meshUrl,
+                    hasMesh: Boolean(meshUrl),
+                    meshUrl,
+                    isFullWorld,
+                  });
+                  const taskJobId = resolveTaskJobId(task);
+                  const isPublishing = publishingJobId && taskJobId === publishingJobId;
+                  return (
+                  <div className="text-xs text-green-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
+                    {isViewportLoading
+                      ? '⏳ Loading in viewport…'
+                      : isViewportFailed
+                        ? '✗ Viewport load failed'
+                        : isViewportActive
+                          ? '● In viewport'
+                          : '✓ Completed'}
+                    {isWorld ? (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          dispatchLoadTask(task, 'loadWorldButton');
+                        }}
+                        style={{
+                          marginLeft: '0.5rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isFullWorld ? 'Load World' : 'Load Splat'}
+                      </button>
+                    ) : (
+                      modelUrl && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            dispatchLoadTask(task, 'loadModelButton');
+                          }}
+                          style={{
+                            marginLeft: '0.5rem',
+                            padding: '0.1rem 0.3rem',
+                            fontSize: '0.6rem',
+                            background: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Load Model
+                        </button>
+                      )
+                    )}
+                    {canPublishRp1 && sceneAssemblerReady && (
+                      <button
+                        onClick={(event) => void handlePublishRp1(task, event)}
+                        disabled={!isApiConnected || isPublishing}
+                        style={{
+                          marginLeft: '0.35rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: '#6f42c1',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: isApiConnected && !isPublishing ? 'pointer' : 'not-allowed',
+                          opacity: isApiConnected ? 1 : 0.55,
+                        }}
+                        title="Publish completed mesh GLB to MSF / RP1 object library and open Scene Assembler"
+                      >
+                        {isPublishing ? '…' : 'Publish RP1'}
+                      </button>
+                    )}
+                    {!isWorld && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
+                      <button
+                        onClick={(event) => void handleOpenMetaverseBrowser(event)}
+                        style={{
+                          marginLeft: '0.35rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                        title={`Open Scene Assembler at ${spatialConfig?.msfPublicUrl || 'MSF'}`}
+                      >
+                        Assembler
+                      </button>
+                    )}
+                  </div>
+                  );
+                })()}
+
+                {isViewportFailed && viewportFailedMessage ? (
+                  <div
+                    className="text-xs mt-0.5"
+                    style={{ fontSize: '0.6rem', color: '#f88' }}
+                    title={viewportFailedMessage}
+                  >
+                    {viewportFailedMessage}
+                  </div>
+                ) : null}
+
+                {/* Show task-specific result information */}
+                {task.result && task.type === 'mesh-segmentation' && task.result.segments && (
+                  <div className="text-xs text-gray-300 mt-0.5" style={{ fontSize: '0.6rem' }}>
+                    Segments: {task.result.segments.length} parts detected
+                  </div>
+                )}
+
+                {task.result && task.type === 'auto-rigging' && task.result.metadata && (
+                  <div className="text-xs text-gray-300 mt-0.5" style={{ fontSize: '0.6rem' }}>
+                    Bones: {task.result.metadata.boneCount || 'N/A'} | 
+                    Animations: {task.result.metadata.animationCount || 'N/A'}
+                  </div>
+                )}
+      </div>
+    );
+  };
+
   return (
     <div className="task-manager">
       <div className="card">
-        <div className="card-header">
-          <h3 className="card-title" style={{ margin: 0 }}>
-              Tasks {tasks.length > 0 && <span style={{ fontSize: '0.7rem', color: '#888' }}>({tasks.length})</span>}
-            </h3>
-            <div className="flex gap-1">
+        <div className="card-header task-manager-header" ref={cardHeaderRef}>
+          <button
+            type="button"
+            className="expand-icon-button"
+            onClick={() => {
+              const next = !isExpanded;
+              setIsExpanded(next);
+              if (next && cardHeaderRef.current) {
+                setTimeout(() => {
+                  cardHeaderRef.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                    inline: 'nearest',
+                  });
+                }, 0);
+              }
+            }}
+            title={isExpanded ? 'Collapse Tasks' : 'Expand Tasks'}
+            aria-expanded={isExpanded}
+            data-testid="task-manager-expand-btn"
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
+          <h3 className="card-title task-manager-title">
+            Tasks
+            {tasks.length > 0 && (
+              <span className="task-manager-count">({tasks.length})</span>
+            )}
+          </h3>
+        </div>
+
+        {isExpanded && (
+        <div className="task-manager-body">
+            <div className="task-manager-toolbar">
               <button 
                 className="btn btn-primary"
                 data-testid="task-manager-new-btn"
@@ -769,8 +1095,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               >
                 {sceneAssemblerReady ? 'Assembler' : 'OMB guide'}
               </button>
-          </div>
-        </div>
+            </div>
 
         {spatialConfig?.msfPublicUrl ? (
           <p style={{ fontSize: '0.55rem', color: '#888', padding: '0 0.75rem 0.35rem', margin: 0 }}>
@@ -1399,278 +1724,34 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           </div>
         )}
 
-        <div className="task-list" style={{ padding: '0 0.75rem 0.3rem' }}>
+        <div className="task-manager-lists">
           {tasks.length === 0 ? (
-            <p className="text-center text-gray-400" style={{ fontSize: '0.6rem', padding: '0.15rem 0' }}>No tasks yet</p>
+            <p className="task-list-empty">No tasks yet</p>
           ) : (
-            tasks.map((task) => {
-              const taskJobId = resolveTaskJobId(task);
-              const isViewportLoading = viewportLoadingJobId && taskJobId === viewportLoadingJobId;
-              const isViewportActive = viewportActiveJobId && taskJobId === viewportActiveJobId;
-              const isViewportFailed = viewportFailedJobId && taskJobId === viewportFailedJobId;
-              return (
-              <div
-                key={task.id}
-                className="task-item"
-                role={task.status === 'completed' && task.result ? 'button' : undefined}
-                tabIndex={task.status === 'completed' && task.result ? 0 : undefined}
-                onClick={(event) => handleTaskRowClick(task, event)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    dispatchLoadTask(task, 'taskRowKey');
-                  }
-                }}
-                title={
-                  task.status === 'completed' && task.result
-                    ? isViewportLoading
-                      ? 'Loading into viewport…'
-                      : 'Click to open in viewport'
-                    : undefined
-                }
-                style={{
-                padding: '0.375rem',
-                marginBottom: '0.375rem',
-                border: isViewportFailed
-                  ? '1px solid #dc3545'
-                  : isViewportActive
-                    ? '1px solid #28a745'
-                    : '1px solid #444',
-                borderRadius: '4px',
-                backgroundColor: isViewportLoading
-                  ? '#333a35'
-                  : isViewportFailed
-                    ? '#3a2a2a'
-                    : isViewportActive
-                      ? '#2a332a'
-                      : '#2a2a2a',
-                cursor: task.status === 'completed' && task.result ? 'pointer' : 'default',
-                opacity: viewportLoadingJobId && !isViewportLoading ? 0.75 : 1,
-              }}>
-                <div className="flex justify-between items-center mb-0.5">
-                  <div style={{ flex: 1 }}>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold" style={{ fontSize: '0.75rem' }}>{task.name}</span>
-                      <span className={`status ${getStatusColor(task.status)}`} style={{ 
-                        fontSize: '0.6rem', 
-                        padding: '0.1rem 0.3rem',
-                        borderRadius: '3px'
-                      }}>
-                        {task.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400" style={{ fontSize: '0.6rem' }}>
-                      {task.type}
-                      {task.options?.model_preference
-                        ? ` • ${getModelLabel(task.options.model_preference)}`
-                        : ''}
-                      {renderTaskTiming(task)}
-                      {resolveTaskJobId(task) ? (
-                        <span style={{ color: '#666' }}>
-                          {' '}
-                          • job {resolveTaskJobId(task).slice(0, 8)}…
-                          {task.handoffSource === 'galaxy-xr' ? ' • XR' : ''}
-                          {task.syncedFromApi ? ' • DGX' : ''}
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDeleteTask(task);
-                    }}
-                    className="btn btn-danger"
-                    disabled={deletingTaskId === task.id}
-                    title={
-                      resolveTaskJobId(task)
-                        ? 'Delete from this browser and DGX Spark'
-                        : 'Delete from this browser'
-                    }
-                    style={{ 
-                      padding: '0.1rem 0.35rem', 
-                      fontSize: '0.6rem',
-                      minWidth: 'auto'
-                    }}
-                  >
-                    {deletingTaskId === task.id ? '…' : 'Delete'}
-                  </button>
+            <>
+              {activeTasks.length > 0 ? (
+                <div className="task-list task-list--active">
+                  {activeTasks.map((task) => renderTaskItem(task))}
                 </div>
-
-                {task.status === 'running' && (
-                  <div className="mb-0.5">
-                    <div
-                      className={`progress${task.progressIndeterminate ? ' progress-indeterminate' : ''}`}
-                      style={{ height: '3px' }}
-                    >
-                      <div
-                        className="progress-bar"
-                        style={
-                          task.progressIndeterminate || task.progress == null || task.progress <= 0
-                            ? undefined
-                            : { width: `${Math.min(100, task.progress)}%` }
-                        }
-                      />
-                    </div>
-                    <div
-                      className="text-xs text-gray-400"
-                      style={{ fontSize: '0.55rem', marginTop: '2px' }}
-                    >
-                      {task.progressIndeterminate || task.progress == null || task.progress <= 0
-                        ? 'Working…'
-                        : `${Math.round(task.progress)}%`}
-                      {task.statusMessage ? ` · ${task.statusMessage}` : ''}
-                    </div>
-                  </div>
-                )}
-
-                {task.prompt && (
-                  <p className="text-xs text-gray-300 mb-0.5" style={{ fontSize: '0.65rem' }}>
-                    "{task.prompt.length > 60 ? task.prompt.substring(0, 60) + '...' : task.prompt}"
-                  </p>
-                )}
-
-                {task.error && (
-                  <div className="text-xs text-red-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
-                    Error: {task.error}
-                  </div>
-                )}
-
-                {(task.result || (task.status === 'completed' && resolveTaskJobId(task))) && (() => {
-                  const loadPayload = normalizeTaskLoadPayload(task);
-                  const isFullWorld = isFullWorldPackageTaskResult(loadPayload);
-                  const isSplatEnv = isSplatEnvironmentTaskResult(loadPayload);
-                  const isWorld = isFullWorld || isSplatEnv;
-                  const modelUrl = getTaskResultModelUrl(loadPayload);
-                  const meshUrl = getTaskResultMeshUrl(loadPayload);
-                  const canPublishRp1 = canPublishTaskToSpatialFabric(task, loadPayload, {
-                    isSplatOnly: isSplatEnv && !meshUrl,
-                    hasMesh: Boolean(meshUrl),
-                    meshUrl,
-                    isFullWorld,
-                  });
-                  const taskJobId = resolveTaskJobId(task);
-                  const isPublishing = publishingJobId && taskJobId === publishingJobId;
-                  return (
-                  <div className="text-xs text-green-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
-                    {isViewportLoading
-                      ? '⏳ Loading in viewport…'
-                      : isViewportFailed
-                        ? '✗ Viewport load failed'
-                        : isViewportActive
-                          ? '● In viewport'
-                          : '✓ Completed'}
-                    {isWorld ? (
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          dispatchLoadTask(task, 'loadWorldButton');
-                        }}
-                        style={{
-                          marginLeft: '0.5rem',
-                          padding: '0.1rem 0.3rem',
-                          fontSize: '0.6rem',
-                          background: '#28a745',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {isFullWorld ? 'Load World' : 'Load Splat'}
-                      </button>
-                    ) : (
-                      modelUrl && (
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            dispatchLoadTask(task, 'loadModelButton');
-                          }}
-                          style={{
-                            marginLeft: '0.5rem',
-                            padding: '0.1rem 0.3rem',
-                            fontSize: '0.6rem',
-                            background: '#28a745',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '3px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Load Model
-                        </button>
-                      )
-                    )}
-                    {canPublishRp1 && sceneAssemblerReady && (
-                      <button
-                        onClick={(event) => void handlePublishRp1(task, event)}
-                        disabled={!isApiConnected || isPublishing}
-                        style={{
-                          marginLeft: '0.35rem',
-                          padding: '0.1rem 0.3rem',
-                          fontSize: '0.6rem',
-                          background: '#6f42c1',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: isApiConnected && !isPublishing ? 'pointer' : 'not-allowed',
-                          opacity: isApiConnected ? 1 : 0.55,
-                        }}
-                        title="Publish completed mesh GLB to MSF / RP1 object library and open Scene Assembler"
-                      >
-                        {isPublishing ? '…' : 'Publish RP1'}
-                      </button>
-                    )}
-                    {!isWorld && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
-                      <button
-                        onClick={(event) => void handleOpenMetaverseBrowser(event)}
-                        style={{
-                          marginLeft: '0.35rem',
-                          padding: '0.1rem 0.3rem',
-                          fontSize: '0.6rem',
-                          background: '#6c757d',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                        }}
-                        title={`Open Scene Assembler at ${spatialConfig?.msfPublicUrl || 'MSF'}`}
-                      >
-                        Assembler
-                      </button>
-                    )}
-                  </div>
-                  );
-                })()}
-
-                {isViewportFailed && viewportFailedMessage ? (
-                  <div
-                    className="text-xs mt-0.5"
-                    style={{ fontSize: '0.6rem', color: '#f88' }}
-                    title={viewportFailedMessage}
-                  >
-                    {viewportFailedMessage}
-                  </div>
-                ) : null}
-
-                {/* Show task-specific result information */}
-                {task.result && task.type === 'mesh-segmentation' && task.result.segments && (
-                  <div className="text-xs text-gray-300 mt-0.5" style={{ fontSize: '0.6rem' }}>
-                    Segments: {task.result.segments.length} parts detected
-                  </div>
-                )}
-
-                {task.result && task.type === 'auto-rigging' && task.result.metadata && (
-                  <div className="text-xs text-gray-300 mt-0.5" style={{ fontSize: '0.6rem' }}>
-                    Bones: {task.result.metadata.boneCount || 'N/A'} | 
-                    Animations: {task.result.metadata.animationCount || 'N/A'}
-                  </div>
-                )}
+              ) : null}
+              <div className="task-completed-panel">
+                <div className="task-completed-header">
+                  Completed
+                  <span className="task-completed-count">({completedTasks.length})</span>
+                </div>
+                <div className="task-completed-scroll">
+                  {completedTasks.length === 0 ? (
+                    <p className="task-list-empty task-list-empty--inset">No completed tasks</p>
+                  ) : (
+                    completedTasks.map((task) => renderTaskItem(task))
+                  )}
+                </div>
               </div>
-            );
-            })
+            </>
           )}
         </div>
+        </div>
+        )}
       </div>
     </div>
   );

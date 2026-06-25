@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildMetaverseBrowserUrl,
   buildSceneAssemblerOpenUrl,
@@ -10,6 +10,9 @@ import {
   isSceneAssemblerConfigured,
   mergeSpatialFabricConfig,
   normalizeOmbTier,
+  getSyncSceneAssemblerUrl,
+  openSpatialFabricInBrowser,
+  preopenSpatialFabricTab,
   validateOmbTier,
 } from '../library/spatialFabricAdapter.js';
 
@@ -29,12 +32,61 @@ describe('spatialFabricAdapter', () => {
   });
 
   it('mergeSpatialFabricConfig derives public URL from fabric when missing', () => {
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', '');
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', '');
     const merged = mergeSpatialFabricConfig({
       enabled: true,
       fabric_msf_url: 'https://dgx.example.com/fabric/sample.msf',
     });
     expect(merged.msfPublicUrl).toBe('https://dgx.example.com');
     expect(merged.fabricMsfUrl).toBe('https://dgx.example.com/fabric/sample.msf');
+  });
+
+  it('buildSceneAssemblerOpenUrl prefers browser env over API Tailscale URL', () => {
+    const url = buildSceneAssemblerOpenUrl(
+      { msfPublicUrl: 'https://10.0.0.32:8453' },
+      { sceneAssemblerUrl: 'https://dgx-spark.tail6121eb.ts.net/' },
+    );
+    expect(url).toBe('https://10.0.0.32:8453');
+  });
+
+  it('openSpatialFabricInBrowser uses preopened tab after async publish', () => {
+    const replace = vi.fn();
+    const tab = { closed: false, location: { replace, href: 'about:blank' }, focus: vi.fn() };
+    openSpatialFabricInBrowser('https://10.0.0.32:8453', tab);
+    expect(replace).toHaveBeenCalledWith('https://10.0.0.32:8453');
+  });
+
+  it('preopenSpatialFabricTab opens Scene Assembler URL on click', () => {
+    const open = vi.fn(() => ({ closed: false }));
+    vi.stubGlobal('window', { open });
+    preopenSpatialFabricTab('https://10.0.0.32:8453');
+    expect(open).toHaveBeenCalledWith('https://10.0.0.32:8453', '_blank');
+  });
+
+  it('openSpatialFabricInBrowser does not hijack current tab when preopened tab exists', () => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { assign }, open: vi.fn(() => null) });
+    const tabLocation = {
+      href: '',
+      replace: vi.fn(() => {
+        throw new Error('blocked');
+      }),
+    };
+    Object.defineProperty(tabLocation, 'href', {
+      get: () => '',
+      set: () => {
+        throw new Error('blocked');
+      },
+    });
+    const tab = { closed: false, location: tabLocation, focus: vi.fn() };
+    expect(() => openSpatialFabricInBrowser('https://10.0.0.32:8453', tab)).toThrow(/did not open automatically/);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('getSyncSceneAssemblerUrl reads VITE_MSF_PUBLIC_URL', () => {
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', 'https://10.0.0.32:8453');
+    expect(getSyncSceneAssemblerUrl()).toBe('https://10.0.0.32:8453');
   });
 
   it('normalizeOmbTier maps API snake_case', () => {

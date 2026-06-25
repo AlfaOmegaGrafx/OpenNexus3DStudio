@@ -120,8 +120,12 @@ export function isFabricMsfFileUrl(url) {
 export function buildSceneAssemblerOpenUrl(cfg = {}, opts = {}) {
   const safeCfg = cfg ?? {};
   const safeOpts = opts ?? {};
+  // Browser-reachable VITE_MSF_PUBLIC_URL wins over API scene_assembler_url (often Tailscale).
   const explicit =
-    safeOpts.sceneAssemblerUrl || safeCfg.sceneAssemblerUrl || safeCfg.msfPublicUrl || '';
+    safeCfg.msfPublicUrl
+    || safeOpts.sceneAssemblerUrl
+    || safeCfg.sceneAssemblerUrl
+    || '';
   let root = explicit.replace(/\/$/, '');
   if (!root) {
     root = deriveSceneAssemblerRootFromMsfUrl(
@@ -138,10 +142,23 @@ export function buildSceneAssemblerOpenUrl(cfg = {}, opts = {}) {
  * Merge API config with Vite env fallbacks.
  * @param {object|null|undefined} apiConfig
  */
+function rewriteFabricUrlToPublicBase(fabricUrl, publicBase) {
+  if (!fabricUrl || !publicBase) return fabricUrl || '';
+  try {
+    const path = new URL(fabricUrl).pathname + new URL(fabricUrl).search;
+    return `${publicBase.replace(/\/$/, '')}${path}`;
+  } catch {
+    return fabricUrl;
+  }
+}
+
 export function mergeSpatialFabricConfig(apiConfig) {
   const env = getSpatialFabricEnv();
-  let msfPublicUrl = (apiConfig?.public_base_url || env.msfPublicUrl || '').replace(/\/$/, '');
-  const fabricMsfUrl = (apiConfig?.fabric_msf_url || env.fabricMsfUrl || '').replace(/\/$/, '');
+  let msfPublicUrl = (env.msfPublicUrl || apiConfig?.public_base_url || '').replace(/\/$/, '');
+  let fabricMsfUrl = (env.fabricMsfUrl || apiConfig?.fabric_msf_url || '').replace(/\/$/, '');
+  if (msfPublicUrl && fabricMsfUrl && env.msfPublicUrl) {
+    fabricMsfUrl = rewriteFabricUrlToPublicBase(fabricMsfUrl, msfPublicUrl);
+  }
   if (!msfPublicUrl && fabricMsfUrl) {
     msfPublicUrl = deriveSceneAssemblerRootFromMsfUrl(fabricMsfUrl);
   }
@@ -370,7 +387,7 @@ export async function publishGlbBlobAndOpenMetaverseBrowser(
       await resolveSpatialFabricConfig(apiEndpoint),
       { sceneAssemblerUrl: result.scene_assembler_url },
     ) || (await resolveSceneAssemblerUrl(apiEndpoint));
-  if (url) openSpatialFabricInBrowser(url);
+  if (url) openSpatialFabricInBrowser(url, opts.preopenedTab);
   return result;
 }
 
@@ -393,14 +410,14 @@ export async function publishJobToSpatialFabric(apiEndpoint, jobId, assetName) {
  * @param {string} jobId
  * @param {string} [assetName]
  */
-export async function publishJobAndOpenMetaverseBrowser(apiEndpoint, jobId, assetName) {
+export async function publishJobAndOpenMetaverseBrowser(apiEndpoint, jobId, assetName, opts = {}) {
   const result = await publishJobToSpatialFabric(apiEndpoint, jobId, assetName);
   const url =
     buildSceneAssemblerOpenUrl(
       await resolveSpatialFabricConfig(apiEndpoint),
       { sceneAssemblerUrl: result.scene_assembler_url },
     ) || (await resolveSceneAssemblerUrl(apiEndpoint));
-  if (url) openSpatialFabricInBrowser(url);
+  if (url) openSpatialFabricInBrowser(url, opts.preopenedTab);
   return result;
 }
 
@@ -479,6 +496,7 @@ export async function publishWorldAndOpenMetaverseBrowser(
   apiEndpoint,
   manifestUrl,
   worldName,
+  opts = {},
 ) {
   const result = await publishWorldPropsToSpatialFabric(apiEndpoint, manifestUrl, {
     assetNamePrefix: worldName,
@@ -486,7 +504,7 @@ export async function publishWorldAndOpenMetaverseBrowser(
   const url =
     buildSceneAssemblerOpenUrl(await resolveSpatialFabricConfig(apiEndpoint)) ||
     (await resolveSceneAssemblerUrl(apiEndpoint));
-  if (url) openSpatialFabricInBrowser(url);
+  if (url) openSpatialFabricInBrowser(url, opts.preopenedTab);
   console.log('[SpatialFabric] world publish complete', {
     manifestId: result.manifestId,
     propCount: result.published.length,
@@ -508,7 +526,58 @@ export async function validateGlbBlob(apiEndpoint, blob, filename = 'export.glb'
   return data;
 }
 
-export function openSpatialFabricInBrowser(url) {
+export function getSyncSceneAssemblerUrl() {
+  return buildSceneAssemblerOpenUrl(mergeSpatialFabricConfig(null)) || '';
+}
+
+/**
+ * Call synchronously from a click handler before async publish (keeps user-gesture for popups).
+ * When initialUrl is set, opens Scene Assembler immediately in the new tab.
+ * @param {string} [initialUrl] Scene Assembler root (from getSyncSceneAssemblerUrl())
+ * @returns {Window|null}
+ */
+export function preopenSpatialFabricTab(initialUrl = null) {
+  if (typeof window === 'undefined') return null;
+  let target = String(initialUrl || '').trim();
+  if (target && isFabricMsfFileUrl(target)) {
+    target = deriveSceneAssemblerRootFromMsfUrl(target) || '';
+  }
+  try {
+    // Do not use noopener — parent must navigate this tab after async publish completes.
+    return window.open(target || 'about:blank', '_blank');
+  } catch {
+    return null;
+  }
+}
+
+function navigateSpatialFabricTab(tab, target) {
+  if (!tab || tab.closed) return false;
+  try {
+    const current = tab.location?.href;
+    if (current === target) {
+      tab.focus?.();
+      return true;
+    }
+    tab.location.replace(target);
+    tab.focus?.();
+    return true;
+  } catch {
+    try {
+      tab.location.href = target;
+      tab.focus?.();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * @param {string} [url]
+ * @param {Window|null} [preopenedTab] from preopenSpatialFabricTab() on the same click
+ * @param {{ fallbackSameTab?: boolean }} [opts]
+ */
+export function openSpatialFabricInBrowser(url, preopenedTab = null, opts = {}) {
   let target = url || buildMetaverseBrowserUrl();
   if (isFabricMsfFileUrl(target)) {
     const root = deriveSceneAssemblerRootFromMsfUrl(target);
@@ -517,7 +586,33 @@ export function openSpatialFabricInBrowser(url) {
       target = root;
     }
   }
-  if (target) window.open(target, '_blank', 'noopener,noreferrer');
+  if (!target) {
+    throw new Error('Scene Assembler URL is not configured.');
+  }
+  if (navigateSpatialFabricTab(preopenedTab, target)) {
+    return;
+  }
+  const opened = window.open(target, '_blank', 'noopener,noreferrer');
+  if (opened) {
+    return;
+  }
+  if (preopenedTab && !preopenedTab.closed) {
+    console.warn(
+      '[SpatialFabric] Publish succeeded but could not navigate the preopened tab. Open manually:',
+      target,
+    );
+    throw new Error(
+      `Published to RP1, but Scene Assembler did not open automatically. Open manually: ${target}`,
+    );
+  }
+  if (opts.fallbackSameTab !== false && typeof window !== 'undefined') {
+    console.warn('[SpatialFabric] Popup blocked; opening Scene Assembler in this tab:', target);
+    window.location.assign(target);
+    return;
+  }
+  throw new Error(
+    `Browser blocked opening Scene Assembler. Open manually: ${target}`,
+  );
 }
 
 const SPLAT_MESH_EXTENSIONS = new Set(['ply', 'splat', 'spz', 'ksplat', 'sog']);

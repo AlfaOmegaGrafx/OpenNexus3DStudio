@@ -8,6 +8,7 @@ import {
   listWorldsFromCompletedTasks,
 } from '../library/worldPackage.js';
 import { buildIwsdkXrExploreUrl } from '../library/iwsdkWorldPackage.js';
+import { getSyncSceneAssemblerUrl, preopenSpatialFabricTab } from '../library/spatialFabricAdapter.js';
 import styles from './WorldLibrary.module.css';
 
 /**
@@ -79,11 +80,12 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
     try {
       setError(null);
       setPublishingWorldId(world.id);
+      const preopenedTab = preopenSpatialFabricTab(getSyncSceneAssemblerUrl());
       console.log('[SpatialFabric] world publish start', {
         worldId: world.id,
         manifest: world.manifest,
       });
-      await publishWorld(world.manifest, world.name);
+      await publishWorld(world.manifest, world.name, { preopenedTab });
     } catch (err) {
       console.error('[SpatialFabric] world publish failed', err);
       setError(err?.message || String(err));
