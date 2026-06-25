@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Remove accidental duplicates on DGX after PC → DGX sync.
-# Run from CharacterStudio repo root on DGX:
+# Run from OpenNexus3DStudio repo root on DGX:
 #   bash scripts/prune-sync-duplicates.sh
 #
 # Safe to re-run. Only deletes known duplicate patterns — never MONETIZATION_ROADMAP.md.
@@ -54,10 +54,15 @@ for nested in \
   scripts/scripts/scripts \
   src/components/components \
   src/components/components/components \
+  src/context/context \
+  src/context/context/context \
   src/pages/pages \
   src/pages/pages/pages \
+  src/services/services \
+  src/services/services/services \
   src/library/library \
-  src/__tests__/__tests__
+  src/__tests__/__tests__ \
+  'Pitch Deck/Pitch Deck'
 do
   rm_if_exists "$nested"
 done

@@ -5,8 +5,8 @@ import { useDragToScroll } from '../hooks/useDragToScroll';
 import { TokenBox } from '../components/token-box/TokenBox';
 import {
   bootstrapLootCharacter,
-  LOOT_MODELS_MANIFEST_URL,
-  toPublicAssetUrl,
+  normalizeLootAssetUrl,
+  resolveLootModelsManifestUrl,
 } from '../library/lootAssetsConfig';
 import colorPickerIcon from '../images/color-palette.png';
 import randomizeIcon from '../images/randomize.png';
@@ -58,8 +58,9 @@ export const TraitPage = {
 /** @param {string} manifestPath */
 function normalizeManifestRef(manifestPath) {
   const s = String(manifestPath || '').trim();
-  if (s.startsWith('http') || s.startsWith('/')) return s;
-  return toPublicAssetUrl(s);
+  if (!s) return s;
+  if (s.startsWith('http')) return s;
+  return normalizeLootAssetUrl(s);
 }
 
 const AppearanceSimple = ({ onNavigate }) => {
@@ -103,7 +104,7 @@ const AppearanceSimple = ({ onNavigate }) => {
       fromManifest.unshift({
         id: 'Loot',
         name: 'Loot (modular)',
-        manifest: LOOT_MODELS_MANIFEST_URL,
+        manifest: resolveLootModelsManifestUrl(),
         manifestRef: './loot-assets/models/manifest.json',
       });
     }
@@ -183,7 +184,7 @@ const AppearanceSimple = ({ onNavigate }) => {
         }
         const manifestUrl = pack.manifest.startsWith('/')
           ? pack.manifest
-          : toPublicAssetUrl(pack.manifestRef || pack.manifest);
+          : normalizeLootAssetUrl(pack.manifestRef || pack.manifest);
 
         const isModularLoot = manifestUrl.includes('/models/manifest.json');
         if (isModularLoot) {
@@ -463,7 +464,7 @@ const AppearanceSimple = ({ onNavigate }) => {
                     >
                       <TokenBox
                         size={48}
-                        icon={toPublicAssetUrl(traitGroup.fullIconSvg || traitGroup.iconSvg)}
+                        icon={normalizeLootAssetUrl(traitGroup.fullIconSvg || traitGroup.iconSvg)}
                         rarity={selectedTraitGroup?.trait === traitGroup.trait ? 'mythic' : 'none'}
                       />
                       <div className={styles.editorText}>{traitGroup.name || traitGroup.trait}</div>
@@ -580,7 +581,7 @@ const AppearanceSimple = ({ onNavigate }) => {
                       >
                         <TokenBox
                           size={56}
-                          icon={toPublicAssetUrl(trait.fullThumbnail || trait.thumbnail)}
+                          icon={normalizeLootAssetUrl(trait.fullThumbnail || trait.thumbnail)}
                           rarity={active ? 'mythic' : 'none'}
                         />
                         {canRemove && (
@@ -693,7 +694,7 @@ const MorphTraitView = ({
                 >
                   <TokenBox
                     size={56}
-                    icon={toPublicAssetUrl(morphTrait.fullThumbnail || morphTrait.thumbnail)}
+                    icon={normalizeLootAssetUrl(morphTrait.fullThumbnail || morphTrait.thumbnail)}
                     rarity={active ? 'mythic' : 'none'}
                   />
                   <SubTraitRemoveBadge

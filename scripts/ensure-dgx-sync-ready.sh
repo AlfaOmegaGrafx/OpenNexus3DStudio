@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate DGX CharacterStudio tree after PC sync. Safe to re-run.
+# Validate DGX OpenNexus3DStudio tree after PC sync. Safe to re-run.
 # Usage: bash scripts/ensure-dgx-sync-ready.sh
 
 set -euo pipefail
@@ -43,7 +43,8 @@ for nested in \
   src/components/components \
   src/pages/pages \
   src/pages/pages/pages \
-  src/library/library; do
+  src/library/library \
+  'Pitch Deck/Pitch Deck'; do
   if [[ -e "$nested" ]]; then
     warn "nested duplicate still present: $nested"
   fi

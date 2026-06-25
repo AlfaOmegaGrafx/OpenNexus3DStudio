@@ -20,7 +20,7 @@ import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
 import GlobalAudioControl from './components/GlobalAudioControl';
 import SceneControlsCompact from './components/SceneControlsCompact';
-import { ensureAbsoluteUrl } from './library/taskManager';
+import { ensureAbsoluteUrl, normalizeApiBaseUrl } from './library/taskManager';
 import { getDefaultModelForFeature } from './library/aiModelsCatalog.js';
 import { objectNameFromFilename, normalizeObjectName, promptForObjectName } from './library/objectNameUtils.js';
 import {
@@ -53,7 +53,7 @@ import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
 import { showApiStatusPanel } from './library/runtimeUi';
-import { showXrAiPanel } from './library/xrHubConfig';
+import { showXrAiPanel, OPEN_XR_AI_PANEL_EVENT } from './library/xrHubConfig';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -68,7 +68,7 @@ function filePathToFileUrl(fp) {
 function AppContent() {
   const [isElectron, setIsElectron] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState(() =>
-    ensureAbsoluteUrl(import.meta.env.VITE_API_ENDPOINT ?? ''),
+    normalizeApiBaseUrl(import.meta.env.VITE_API_ENDPOINT ?? ''),
   );
   const [skeletonActive, setSkeletonActive] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('appearance'); // Panel state - default to appearance
@@ -1402,6 +1402,7 @@ function AppContent() {
                   onClick={() => {
                     setSidebarCollapsed(false);
                     requestAnimationFrame(() => {
+                      window.dispatchEvent(new CustomEvent(OPEN_XR_AI_PANEL_EVENT));
                       xrAiPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     });
                   }}

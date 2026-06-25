@@ -59,7 +59,7 @@ const SceneControlsDemoPage = () => {
           <h2>3D Viewport with Enhanced Controls</h2>
           <div className="viewport-container">
             <Scene3D 
-              showCharacterStudioOverlay={true}
+              showOpenNexus3DStudioOverlay={true}
               renderMode="solid"
             />
           </div>

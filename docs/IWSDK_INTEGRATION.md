@@ -1,6 +1,6 @@
 # IWSDK Integration Reference
 
-Reference for [Immersive Web SDK (IWSDK)](https://github.com/facebook/immersive-web-sdk) in Character Studio: what is installed, what is optional, and when to add more packages.
+Reference for [Immersive Web SDK (IWSDK)](https://github.com/facebook/immersive-web-sdk) in OpenNexus3DStudio: what is installed, what is optional, and when to add more packages.
 
 **Official docs:** [iwsdk.dev](https://iwsdk.dev/) · [API](https://iwsdk.dev/api/) · [AI / MCP](https://iwsdk.dev/ai/)
 
@@ -20,10 +20,10 @@ Main VRM authoring stays on **`/`** (`SceneManager`). **`/xr`** is an IWSDK-only
 
 ## Install location
 
-Run all `npm install` commands from the **CharacterStudio** folder (the directory that contains `package.json`):
+Run all `npm install` commands from the **OpenNexus3DStudio** folder (the directory that contains `package.json`):
 
 ```text
-c:\Users\alfao\Documents\GitHub\CharacterStudio\
+c:\Users\alfao\Documents\GitHub\OpenNexus3DStudio\
 ├─ package.json
 └─ node_modules\
    └─ @iwsdk\...
@@ -126,7 +126,7 @@ See [Getting Started (AI)](https://iwsdk.dev/ai/) and [MCP Tools](https://iwsdk.
 
 | Package | Purpose | Why skip |
 |---------|---------|----------|
-| `@iwsdk/create` | `npm create @iwsdk@latest` — scaffolds a **new** app | Character Studio already exists |
+| `@iwsdk/create` | `npm create @iwsdk@latest` — scaffolds a **new** app | OpenNexus3DStudio already exists |
 
 ---
 
@@ -135,7 +135,7 @@ See [Getting Started (AI)](https://iwsdk.dev/ai/) and [MCP Tools](https://iwsdk.
 | Path | Component | Notes |
 |------|-----------|--------|
 | `/xr` | `src/pages/IwsdkImmersive.jsx` | IWSDK `World` only — no SceneManager |
-| `/` | `src/App.jsx` | Existing Character Studio |
+| `/` | `src/App.jsx` | Existing OpenNexus3DStudio |
 
 Bootstrap: `src/library/iwsdkWorld.js` (`createIwsdkWorld`, `disposeIwsdkWorld`).
 
@@ -169,7 +169,7 @@ Face tracking in Chrome XR remains a separate concern (relay / future `expressio
 ## Architecture intent (short)
 
 ```text
-Character Studio (React + SceneManager)  →  authoring, tasks, VRM tools
+OpenNexus3DStudio (React + SceneManager)  →  authoring, tasks, VRM tools
 IWSDK immersive mode                     →  presence: locomotion, grab, spatial UI, worlds
 Galaxy XR Chrome WebXR                   →  target runtime for immersive mode
 ```

@@ -472,7 +472,7 @@ export function startNativeFacePlayback(input, options = {}) {
     void unlockFaceRecordingAudioPlayback();
   }
   try {
-    window.__characterStudioNativeFace?.resetExpressionNeutral?.();
+    window.__characterStud__characterStudioNativeFaceonNeutral?.();
   } catch {
     /* ignore */
   }

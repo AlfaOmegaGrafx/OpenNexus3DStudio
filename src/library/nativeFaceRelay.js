@@ -54,8 +54,7 @@ export function isNativeFaceRelayEnabledInUrl() {
 function applyRelayPayload(obj) {
   if (!obj || typeof obj !== 'object') return;
   if (!window.__characterStudioNativeFace?.push) return;
-  window.__characterStudioNativeFace.push(obj);
-  _lastRelayPushTs = typeof obj.t === 'number' ? obj.t : Date.now();
+  window.__characterStud__characterStudioNativeFacelastRelayPushTs = typeof obj.t === 'number' ? obj.t : Date.now();
 }
 
 /**

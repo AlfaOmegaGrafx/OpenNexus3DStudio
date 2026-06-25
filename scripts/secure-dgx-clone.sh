@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sync DGX clone to cleaned GitHub main; preserve local .env and roadmap.
 set -euo pipefail
-REPO="${1:-$HOME/OpenNexus3DStudio/CharacterStudio}"
+REPO="${1:-$HOME/OpenNexus3DStudio}"
 cd "$REPO"
 echo "=== Securing DGX clone: $REPO ==="
 BACKUP_DIR=$(mktemp -d)

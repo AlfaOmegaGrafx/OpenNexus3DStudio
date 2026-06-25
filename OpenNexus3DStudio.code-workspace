@@ -1,0 +1,13 @@
+{
+  "name": "OpenNexus3DStudio",
+  "folders": [
+    {
+      "name": "OpenNexus3DStudio",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "window.title": "OpenNexus3DStudio${separator}${activeEditorShort}",
+    "editor.formatOnSave": false
+  }
+}

@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Overview
 
-The manifest files are essential if you want to mod Character Studio with your own assets and selection screens. They are found in various parts of the project, and basically are the main file other than art assets that you would need to modify to make an avatar builder program. For more info go to the full documentation page for any manifest in the sidebar.
+The manifest files are essential if you want to mod OpenNexus3DStudio with your own assets and selection screens. They are found in various parts of the project, and basically are the main file other than art assets that you would need to modify to make an avatar builder program. For more info go to the full documentation page for any manifest in the sidebar.
 
 
 ## [Character Selection](./character-select.md)
@@ -356,12 +356,7 @@ This is an experimental feature for prepopulating and customizing personalities 
 
 ## [Generating Manifest Files](./generate-manifest-files.md)
 
-Some useful scripts for generating manifest files for use in https://github.com/M3-org/characterstudio. YMMV.
-
-
-<details>
-
-## Adding Your Own Traits
+Some useful scripts for generating manifest files for use in https://github.com/M3-org/chagithub.com/M3-org/characterstudio## Adding Your Own Traits
 
 This is for the typical usecase of creating your own avatar builder with your traits, like you see on the left side of the screenshot below.
 

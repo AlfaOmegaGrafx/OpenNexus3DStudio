@@ -1,7 +1,7 @@
 # Create an Avatar
 
 
-There's a few ways to make an avatar with Character Studio:
+There's a few ways to make an avatar with OpenNexus3DStudio:
 
 - Select from preloaded assets
 - Drag and drop your own 3D models and textures
@@ -19,7 +19,7 @@ If you want to create your own preloaded asset configuration, check the manifest
 
 > Note: Files must be in VRM format, recommended to use version 0.0 for now
 
-Character Studio also features the ability to overwrite textures in a similar way as well. Select the trait you want to overwrite the texture of then drag and drop the image file into the browser window to change. It would help if the image had a matching UV of the base mesh.
+OpenNexus3DStudio also features the ability to overwrite textures in a similar way as well. Select the trait you want to overwrite the texture of then drag and drop the image file into the browser window to change. It would help if the image had a matching UV of the base mesh.
 
 
 https://www.youtube.com/watch?v=zhpFK4Htxdo
@@ -30,7 +30,7 @@ Note: Make sure to click the category you are overwriting the trait for before d
 
 > WIP
 
-Character Studio has the ability to assemble and export VRMs by loading a JSON file containing information about the traits. This process has been custom tailored for batch assembling Anata VRMs and isn't really fully fleshed out for general purpose yet.
+OpenNexus3DStudio has the ability to assemble and export VRMs by loading a JSON file containing information about the traits. This process has been custom tailored for batch assembling Anata VRMs and isn't really fully fleshed out for general purpose yet.
 
 We are exploring ways to read owned assets from a connected wallet in order to configure avatars and wearables programmatically. One idea is to load POAPs and other whitelisted collections as [badges / pins](https://sketchfab.com/3d-models/3d-skill-role-badges-and-pins-e3329ed59b874aad98586657a5f11630) you can attach as wearables for your wearables. 
 

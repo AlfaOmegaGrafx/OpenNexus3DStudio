@@ -165,7 +165,7 @@ const APIStatus = ({ endpoint, isConnected, onEndpointChange, onTestConnection }
                     marginBottom: 0,
                   }}
                 >
-                  This public deployment does not include a private AI backend. Character Studio and asset loading still work.
+                  This public deployment does not include a private AI backend. OpenNexus3DStudio and asset loading still work.
                 </p>
               )}
             </div>

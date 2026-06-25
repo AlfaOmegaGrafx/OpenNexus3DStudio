@@ -4,11 +4,11 @@ sidebar_position: 1
 
 # Getting Started with Manifest Files
 
-This guide will help you set up your first character collection for Character Studio. We'll walk through creating a manifest file that tells the studio how to display and organize your 3D models, textures, and other assets.
+This guide will help you set up your first character collection for OpenNexus3DStudio. We'll walk through creating a manifest file that tells the studio how to display and organize your 3D models, textures, and other assets.
 
 ## What is a Manifest File?
 
-A manifest file is like a recipe that tells Character Studio:
+A manifest file is like a recipe that tells OpenNexus3DStudio:
 - Where to find your 3D models and textures
 - How to organize them into categories (like body, clothing, hair)
 - How they should interact with each other (like clothes covering the body)
@@ -234,17 +234,17 @@ Go back to traits and connect decals to desired trait model, example:
 
 1. Save your `manifest.json` file
 2. Place it in your `character-assets` folder
-3. Load it in Character Studio to test
+3. Load it in OpenNexus3DStudio to test
 
-## Adding Your Collection to Character Studio
+## Adding Your Collection to OpenNexus3DStudio
 
-Now that you've created your character collection manifest, you need to add it to the main manifest file that Character Studio uses to load all available collections.
+Now that you've created your character collection manifest, you need to add it to the main manifest file that OpenNexus3DStudio uses to load all available collections.
 
 ### Step 1: Find the Main Manifest File
 
 The main manifest file is located at:
 ```
-CharacterStudio/public/manifest.json
+OpenNexus3DStudio/public/manifest.json
 ```
 
 ### Step 2: Add Your Collection
@@ -308,7 +308,7 @@ Here's how the main manifest might look with multiple collections:
 
 ## Additional Manifest Sections
 
-The main manifest file (`CharacterStudio/public/manifest.json`) can include several optional sections that provide additional functionality for all character collections:
+The main manifest file (`OpenNexus3DStudio/public/manifest.json`) can include several optional sections that provide additional functionality for all character collections:
 
 ### 1. LoRAs (Low-Rank Adaptations)
 This section defines how to capture images for training AI models with your characters. It includes:
@@ -356,7 +356,7 @@ For more details, see the [Animation Documentation](./character-traits.md#animat
 ### 3D Models
 - Export your models in VRM format
 - Make sure your models are properly scaled
-- Test your models in Character Studio before adding them to the manifest
+- Test your models in OpenNexus3DStudio before adding them to the manifest
 
 ### Textures and Colors
 - Use PNG format for textures
@@ -385,7 +385,7 @@ For more details, see the [Animation Documentation](./character-traits.md#animat
 - Check if the color values are in the correct format (#RRGGBB)
 - Verify that the trait IDs match between traits and color collections
 
-### Collection doesn't appear in Character Studio
+### Collection doesn't appear in OpenNexus3DStudio
 - Make sure your collection is properly added to the main manifest file
 - Verify that all paths in the main manifest are correct
 - Check that your collection's manifest file is in the right location

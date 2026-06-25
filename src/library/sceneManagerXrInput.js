@@ -63,28 +63,11 @@ function shouldPreferHand(xrInputSources, handedness) {
   return !!hand;
 }
 
-function readSelectPressed(inputSource) {
-  const gp = inputSource?.gamepad;
-  if (!gp?.buttons?.length) return false;
-  const trigger = gp.buttons[0];
-  if (trigger?.pressed || (typeof trigger?.value === 'number' && trigger.value > 0.45)) {
-    return true;
-  }
-  if (isHandTrackingSource(inputSource) && gp.buttons.length >= 5) {
-    const pinch = gp.buttons[4];
-    if (pinch?.pressed || (typeof pinch?.value === 'number' && pinch.value > 0.45)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function readSqueezePressed(inputSource) {
-  const gp = inputSource?.gamepad;
-  if (!gp?.buttons?.length || gp.buttons.length < 2) return false;
-  const grip = gp.buttons[1];
-  return !!(grip?.pressed || (typeof grip?.value === 'number' && grip.value > 0.45));
-}
+import {
+  readButtonEdge,
+  readSqueezePressed,
+  readTriggerPressed,
+} from './sceneManagerXrGamepadButtons.js';
 
 function poseFromSpace(frame, space, referenceSpace) {
   if (!frame || !space || !referenceSpace) return null;
@@ -137,12 +120,14 @@ export class SceneManagerXrInput {
       const key = handedness;
       const prev = this._prev.get(key) || { select: false, squeeze: false };
 
-      const selectPressed = readSelectPressed(src);
+      const selectPressed = readTriggerPressed(src);
       const squeezePressed = readSqueezePressed(src);
-      const selectStart = selectPressed && !prev.select;
-      const selectEnd = !selectPressed && prev.select;
-      const squeezeStart = squeezePressed && !prev.squeeze;
-      const squeezeEnd = !squeezePressed && prev.squeeze;
+      const selectEdge = readButtonEdge(selectPressed, prev.select);
+      const squeezeEdge = readButtonEdge(squeezePressed, prev.squeeze);
+      const selectStart = selectEdge.start;
+      const selectEnd = selectEdge.end;
+      const squeezeStart = squeezeEdge.start;
+      const squeezeEnd = squeezeEdge.end;
 
       this._prev.set(key, { select: selectPressed, squeeze: squeezePressed });
 

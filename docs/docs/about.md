@@ -41,9 +41,9 @@ The people behind this project actively contribute in groups like [M3](https://m
 
 
 ```bash
-# Clone the repo and change directory into it
-git clone https://github.com/M3-org/CharacterStudio
-cd CharacterStudio
+# Clone OpenNexus3DStudio (avatar/VRM workflows evolved from upstream M3-org Character Studio)
+git clone https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio
+cd OpenNexus3DStudio
 
 # Install dependencies with legacy peer deps flag to ignore React errors
 npm install --legacy-peer-deps

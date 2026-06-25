@@ -1,0 +1,21 @@
+{
+  "appId": "com.opennexus3dstudio.app",
+  "productName": "OpenNexus3DStudio",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "build/**/*",
+    "public/electron.js",
+    "node_modules/**/*"
+  ],
+  "mac": {
+    "category": "public.app-category.graphics-design"
+  },
+  "win": {
+    "target": "nsis"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}

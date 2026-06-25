@@ -24,10 +24,11 @@ const VRMImport = ({ onVRMImported }) => {
 
       // Load and process the VRM file
       const vrm = await loader.loadVRM(file, {
-        normalize: true,
-        addDefaultMaterials: true,
-        processBlendShapes: true,
-        setupBones: true
+        passthrough: true,
+        normalize: false,
+        addDefaultMaterials: false,
+        processBlendShapes: false,
+        setupBones: false
       });
 
       // Get VRM metadata

@@ -7,6 +7,7 @@ const INTERNAL_USER_DATA_KEYS = [
   'autoRigMeta',
   'preserveExportedOrientation',
   'fromAigc',
+  'vrmNormalized',
 ];
 
 /**

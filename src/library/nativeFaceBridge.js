@@ -94,7 +94,7 @@ export function getNativeFaceWeightsMaxAgeMs(xrPresenting = false) {
 }
 
 /**
- * Attach `window.__characterStudioNativeFace` for WebView injection.
+ * Attach `window.__characterStud__characterStudioNativeFacenjection.
  * Idempotent: safe to call multiple times.
  */
 /** True when running inside the CS XR Face APK WebView (`AndroidXRBridge` injected). */
@@ -192,8 +192,7 @@ export function initNativeFaceBridge() {
     getFresh: (maxAgeMs) => getNativeFaceWeightsIfFresh(maxAgeMs ?? DEFAULT_MAX_AGE_MS)
   };
 
-  window.__characterStudioNativeFace = api;
-  installOnNativeFaceDataHook(api);
+  window.__characterStudioNativeFace = __characterStudioNativeFaceataHook(api);
   notifyAndroidXrBridgeReady();
 
   for (const item of pendingFromNative) {

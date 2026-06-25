@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Character Select
 
-There's a manifest.json file for the character select screen located in the public folder of the repo, for example `CharacterStudio/public/character-assets/manifest.json`. Think of each of these as a new character template, like picking a class in an MMO or choosing your fighter in a video game.
+There's a manifest.json file for the character select screen located in the public folder of the repo, for example `OpenNexus3DStudio/public/character-assets/manifest.json`. Think of each of these as a new character template, like picking a class in an MMO or choosing your fighter in a video game.
 
 ![image](/img/B1DdAF3oa.png)
 

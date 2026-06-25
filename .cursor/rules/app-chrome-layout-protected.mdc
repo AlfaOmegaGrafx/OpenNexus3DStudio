@@ -1,0 +1,34 @@
+---
+description: App chrome layout (header, task bar, side rails) is a locked good state — do not regress
+alwaysApply: true
+---
+
+# App chrome layout — protected (do not regress)
+
+**User-confirmed good state (2026-06-18).** Read `memory-bank/app-chrome-layout-protected-state.md` before editing header, task progress, or side rail layout.
+
+## Invariants
+
+| Area | Rule |
+|------|------|
+| Task progress | In **document flow** after `.scene-controls-row`; never `position: fixed` over header |
+| App content | No `.has-progress` margin hack — flex layout handles progress bar height |
+| Right rail top | `.opennexus-sidebar` uses measured `--app-content-top` on `:root`, not chrome calc alone |
+| CSS vars | Do **not** define `--app-content-top` on `.app` (shadows measured px value) |
+| Collapsed rails | Mirror left/right via shared `--collapsed-rail-*` tokens and paired selectors |
+| Z-index | Side panels ≤ 998; fix overlap by adjusting `top`, not raising panel z-index |
+
+## Forbidden without explicit user request
+
+- Fixed task bar with hardcoded `top` (e.g. `52px`) or z-index above header band.
+- Right rail `top: var(--app-chrome-top-height)` without `--app-content-top`.
+- Asymmetric collapsed-rail `padding-top` on one side only.
+- Removing `TaskAdvancedOptions` import from `TaskManager.jsx`.
+
+## Protected files
+
+`App.jsx`, `App.css`, `TaskProgressBar.jsx`, `TaskProgressBar.css`, `TaskManager.jsx` (import)
+
+## Before merging layout touches
+
+Visual check: both rails collapsed — icon rows align; running task — bar below scene-controls, header clickable, rails still aligned.

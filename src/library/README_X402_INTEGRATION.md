@@ -1,10 +1,10 @@
 # x402 Protocol & Thirdweb Wallet Integration
 
-This document describes the integrated x402 payment protocol and Thirdweb wallet solutions in Character Studio.
+This document describes the integrated x402 payment protocol and Thirdweb wallet solutions in OpenNexus3DStudio.
 
 ## Overview
 
-Character Studio now supports:
+OpenNexus3DStudio now supports:
 1. **Base x402 Protocol** - Native Base network micropayments ($0.001-0.005 per request)
 2. **Thirdweb x402 Facilitator** - Multi-chain micropayments (170+ EVM chains + Solana)
 3. **Thirdweb Smart Wallets** - ERC-4337 Account Abstraction with gas sponsorship

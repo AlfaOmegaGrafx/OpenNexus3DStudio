@@ -1,6 +1,6 @@
-# OpenXR face tracking (Android XR) and Character Studio
+# OpenXR face tracking (Android XR) and OpenNexus3DStudio
 
-This document ties **native OpenXR** face data to the **web** Character Studio app when the browser does not expose WebXR **`expression-tracking`** / **`XRFrame.expressions`** (common on current Chrome builds; see remote-log diagnostics).
+This document ties **native OpenXR** face data to the **web** OpenNexus3DStudio app when the browser does not expose WebXR **`expression-tracking`** / **`XRFrame.expressions`** (common on current Chrome builds; see remote-log diagnostics).
 
 ## Local spec copies (this repository)
 
@@ -36,7 +36,7 @@ The folder **`OpenXR/`** at the repo root holds PDFs for offline reading (includ
 
 ## Jetpack XR / ARCore face (Google stack)
 
-On Android XR, Google documents **[ARCore face tracking for Jetpack XR](https://developer.android.com/develop/xr/jetpack-xr-sdk/arcore/face)** with **`FaceTrackingMode.BLEND_SHAPES`** and the same style of **68 blend shapes** as in the tables above. The Character Studio wrapper APK implements this path in **`native/android-xr-face-bridge/XrFaceTrackingEngine.kt`** (foreground service + HTTP relay for Chrome WebXR) and forwards weights into **`nativeFaceBridge.js`** (no raw OpenXR C required for that route).
+On Android XR, Google documents **[ARCore face tracking for Jetpack XR](https://developer.android.com/develop/xr/jetpack-xr-sdk/arcore/face)** with **`FaceTrackingMode.BLEND_SHAPES`** and the same style of **68 blend shapes** as in the tables above. The OpenNexus3DStudio wrapper APK implements this path in **`native/android-xr-face-bridge/XrFaceTrackingEngine.kt`** (foreground service + HTTP relay for Chrome WebXR) and forwards weights into **`nativeFaceBridge.js`** (no raw OpenXR C required for that route).
 
 ## Native OpenXR runtime loop (C API) — optional
 
@@ -106,7 +106,7 @@ From Kotlin/Java WebView:
 
 ```java
 webView.evaluateJavascript(
-  "__characterStudioNativeFace.push(" + jsonString + ");",
+  "__characterStud__characterStudioNativeFacetring + ");",
   null
 );
 ```

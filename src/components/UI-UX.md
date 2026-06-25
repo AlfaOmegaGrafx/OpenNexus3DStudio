@@ -430,4 +430,4 @@ sceneManager.scene.traverse((object) => {
 4. **Add custom rendering modes** for specialized workflows
 5. **Optimize performance** for large models and complex scenes
 
-The enhanced SceneManager provides a solid foundation for professional 3D model visualization and manipulation in your CharacterStudio application!
+The enhanced SceneManager provides a solid foundation for professional 3D model visualization and manipulation in your OpenNexus3DStudio application!

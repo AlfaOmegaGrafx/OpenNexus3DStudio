@@ -1,6 +1,6 @@
 /**
  * AssetManager - Handles file operations and asset management
- * Similar to the asset management in CharacterStudio
+ * Similar to the asset management in OpenNexus3DStudio
  */
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';

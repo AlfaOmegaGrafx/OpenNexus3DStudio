@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { buildXrHubEmbedUrl, getXrHubEmbedUrl } from '../library/xrHubConfig.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { buildXrHubEmbedUrl, getXrHubEmbedUrl, OPEN_XR_AI_PANEL_EVENT } from '../library/xrHubConfig.js';
 import './XrAiPanel.css';
 
 /**
@@ -11,6 +11,23 @@ export default function XrAiPanel({ isApiConnected }) {
   const hubIframeUrl = buildXrHubEmbedUrl(hubUrl);
   const [expanded, setExpanded] = useState(false);
   const cardHeaderRef = useRef(null);
+
+  useEffect(() => {
+    const onOpen = () => {
+      setExpanded(true);
+      if (cardHeaderRef.current) {
+        setTimeout(() => {
+          cardHeaderRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+            inline: 'nearest',
+          });
+        }, 0);
+      }
+    };
+    window.addEventListener(OPEN_XR_AI_PANEL_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_XR_AI_PANEL_EVENT, onOpen);
+  }, []);
 
   if (!hubUrl) return null;
 

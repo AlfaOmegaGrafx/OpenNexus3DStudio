@@ -223,12 +223,20 @@ export function isTemplateRigExport(root) {
  * Bounds for floor anchoring — mesh feet for skinned template rigs (bone joints can sit
  * above the sole); union layout for other AIGC rigged exports.
  * @param {import('three').Object3D|null|undefined} root
+ * @param {{ meshFeetOnly?: boolean }} [options]
  */
-export function getViewportFloorAnchorBounds(root) {
+export function getViewportFloorAnchorBounds(root, options = {}) {
   const empty = new THREE.Box3();
   if (!root) return empty;
 
   const skinned = findPrimarySkinnedMesh(root);
+  if (options.meshFeetOnly && skinned) {
+    const deformed = getSkinnedDisplayWorldBounds(skinned);
+    if (!deformed.isEmpty()) return deformed;
+    const meshBox = getMeshLayoutBounds(root);
+    if (!meshBox.isEmpty()) return meshBox;
+  }
+
   if (
     (root.userData?.preserveExportedOrientation || isTemplateRigExport(root)) &&
     skinned
@@ -358,6 +366,125 @@ function getRigFacingForward(root) {
 }
 
 /**
+ * Horizontal center at foot height for mesh vs rig alignment.
+ * @param {import('three').Box3} meshBox
+ * @param {import('three').Object3D|null|undefined} root
+ */
+function getMeshFootCenter(meshBox, target = new THREE.Vector3()) {
+  target.set(
+    (meshBox.min.x + meshBox.max.x) * 0.5,
+    meshBox.min.y,
+    (meshBox.min.z + meshBox.max.z) * 0.5,
+  );
+  return target;
+}
+
+/**
+ * @param {import('three').Object3D|null|undefined} root
+ * @param {import('three').Vector3} [target]
+ */
+function getRigFootCenter(root, target = new THREE.Vector3()) {
+  const left = findBoneByName(
+    root,
+    'LeftFoot',
+    'mixamorig:LeftFoot',
+    'LeftAnkle',
+    'mixamorig:LeftAnkle',
+    'LeftToeBase',
+    'mixamorig:LeftToeBase',
+  );
+  const right = findBoneByName(
+    root,
+    'RightFoot',
+    'mixamorig:RightFoot',
+    'RightAnkle',
+    'mixamorig:RightAnkle',
+    'RightToeBase',
+    'mixamorig:RightToeBase',
+  );
+  if (left && right) {
+    const lw = left.getWorldPosition(new THREE.Vector3());
+    const rw = right.getWorldPosition(new THREE.Vector3());
+    return target.set(
+      (lw.x + rw.x) * 0.5,
+      Math.min(lw.y, rw.y),
+      (lw.z + rw.z) * 0.5,
+    );
+  }
+  const boneBox = getBoneWorldBounds(root);
+  const center = boneBox.getCenter(new THREE.Vector3());
+  return target.set(center.x, boneBox.min.y, center.z);
+}
+
+/**
+ * Whether a preserved AIGC export still needs skinned-mesh node repair.
+ * @param {import('three').Object3D|null|undefined} root
+ */
+export function needsSkinnedMeshRigRepair(root) {
+  if (!root || !modelHasSkinnedMesh(root)) return false;
+  if (root.userData?.vrm || root.userData?.vrmNormalized) return false;
+
+  if (root.userData?.avatarFromImage || isTemplateRigExport(root)) {
+    return true;
+  }
+
+  if (root.userData?.aigcRigContract?.status === 'fail') {
+    return true;
+  }
+
+  const skinned = findPrimarySkinnedMesh(root);
+  if (!skinned) return false;
+
+  root.updateMatrixWorld(true);
+  skinned.skeleton?.update();
+
+  const needsNodeReset =
+    skinned.position.lengthSq() > 1e-6 ||
+    Math.abs(skinned.rotation.x) > 0.02 ||
+    Math.abs(skinned.rotation.y) > 0.02 ||
+    Math.abs(skinned.rotation.z) > 0.02 ||
+    Math.abs(skinned.scale.x - 1) > 0.02 ||
+    Math.abs(skinned.scale.y - 1) > 0.02 ||
+    Math.abs(skinned.scale.z - 1) > 0.02;
+  if (needsNodeReset) return true;
+
+  const meshBox = getSkinnedDisplayWorldBounds(skinned);
+  const boneBox = getBoneWorldBounds(root);
+  if (meshBox.isEmpty() || boneBox.isEmpty()) return false;
+
+  const meshSize = meshBox.getSize(new THREE.Vector3());
+  const feetDelta = Math.abs(boneBox.min.y - meshBox.min.y);
+  const feetThreshold = Math.max(meshSize.y * 0.03, 0.015);
+  if (feetDelta > feetThreshold) return true;
+
+  const meshFoot = getMeshFootCenter(meshBox);
+  const rigFoot = getRigFootCenter(root);
+  const xzDelta = Math.hypot(rigFoot.x - meshFoot.x, rigFoot.z - meshFoot.z);
+  const xzThreshold = Math.max(Math.max(meshSize.x, meshSize.z) * 0.04, 0.02);
+  if (xzDelta > xzThreshold) return true;
+
+  return false;
+}
+
+/**
+ * Snap model root so mesh feet sit on y=0 (handles above and below floor).
+ * @param {import('three').Object3D|null|undefined} root
+ * @returns {number} Vertical shift applied to root.position.y
+ */
+export function anchorModelFeetToFloor(root) {
+  if (!root) return 0;
+  root.updateMatrixWorld(true);
+  const box = getViewportFloorAnchorBounds(root, { meshFeetOnly: true });
+  if (box.isEmpty() || !isFinite(box.min.y)) return 0;
+  const shift = -box.min.y;
+  if (Math.abs(shift) < 0.001) return 0;
+  root.position.y += shift;
+  root.updateMatrixWorld(true);
+  rebindSkinnedMeshes(root);
+  return shift;
+}
+
+/**
  * UniRig/AIGC GLBs often ship a correct armature with a detached skinned mesh node
  * (mesh floating / yaw 180° while bones are on the floor). Adjust the mesh node only.
  * @param {import('three').Object3D|null|undefined} root
@@ -432,14 +559,16 @@ export function alignSkinnedMeshToRig(root) {
   const meshCenter = meshBox.getCenter(new THREE.Vector3());
   const meshSize = meshBox.getSize(new THREE.Vector3());
 
-  // Feet-to-feet vertical alignment (center match misses floating mesh exports).
+  // Feet-to-feet vertical alignment; foot centers for horizontal (torso center can miss ankles).
   const feetDeltaY = boneBox.min.y - meshBox.min.y;
+  const meshFoot = getMeshFootCenter(meshBox);
+  const rigFoot = getRigFootCenter(root);
   const delta = new THREE.Vector3(
-    boneCenter.x - meshCenter.x,
+    rigFoot.x - meshFoot.x,
     feetDeltaY,
-    boneCenter.z - meshCenter.z,
+    rigFoot.z - meshFoot.z,
   );
-  const shiftThreshold = Math.max(meshSize.y * 0.04, 0.03);
+  const shiftThreshold = Math.max(meshSize.y * 0.02, 0.012);
 
   if (Math.abs(delta.x) > shiftThreshold || Math.abs(delta.y) > shiftThreshold || Math.abs(delta.z) > shiftThreshold) {
     applyWorldTranslation(skinned, delta);
@@ -761,7 +890,11 @@ export function normalizeRiggedModelTransforms(root, options = {}) {
     Boolean(root.userData?.preserveExportedOrientation);
 
   if (preserveExport) {
+    if (modelHasSkinnedMesh(root) && needsSkinnedMeshRigRepair(root)) {
+      alignSkinnedMeshToRig(root);
+    }
     rebindSkinnedMeshes(root);
+    anchorModelFeetToFloor(root);
     logRigAlignmentDiagnostics(root, options.label || 'viewport');
     return;
   }
@@ -773,6 +906,7 @@ export function normalizeRiggedModelTransforms(root, options = {}) {
     if (modelHasSkinnedMesh(root)) {
       alignSkinnedMeshToRig(root);
     }
+    anchorModelFeetToFloor(root);
   } else if (modelHasSkinnedMesh(root)) {
     alignSkinnedMeshToArmature(root);
     updateSkeletonDisplayCorrection(root);

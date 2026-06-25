@@ -61,7 +61,7 @@ The animation files are referenced via `animationPath` in the manifest.json file
   ],
 ...
 ```
-Pro tip: The first animation file in the list is really important for batch processing manifest.json files when using Character Studio as a way to assemble many VRMs.
+Pro tip: The first animation file in the list is really important for batch processing manifest.json files when using OpenNexus3DStudio as a way to assemble many VRMs.
 
 1. The first animation file is used when taking screenshots of VRMs so you can get a preview of what the collection looks like before exporting the actual files (which can take much longer).
 

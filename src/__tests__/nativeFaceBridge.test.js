@@ -53,8 +53,7 @@ describe('nativeFaceBridge', () => {
     vi.useFakeTimers();
     vi.setSystemTime(60_000);
     initNativeFaceBridge();
-    const api = window.__characterStudioNativeFace;
-    expect(api).toBeDefined();
+    const api = window.__characterStud__characterStudioNativeFacei).toBeDefined();
     api.push({ weights: { jaw_drop: 0.5 }, t: 60_000 });
     const rec = getNativeFaceWeightsIfFresh(1_000_000);
     expect(rec?.jaw_drop).toBeCloseTo(0.5);
@@ -62,7 +61,7 @@ describe('nativeFaceBridge', () => {
 
   it('initNativeFaceBridge push parses JSON string', () => {
     initNativeFaceBridge();
-    window.__characterStudioNativeFace.push(JSON.stringify({ jaw_drop: '0.25' }));
+    window.__characterStudioNativeFace.pu__characterStudioNativeFacep: '0.25' }));
     const rec = getNativeFaceWeightsIfFresh(400);
     expect(rec?.jaw_drop).toBeCloseTo(0.25);
   });
@@ -70,15 +69,11 @@ describe('nativeFaceBridge', () => {
   it('initNativeFaceBridge getFresh mirrors module helper', () => {
     initNativeFaceBridge();
     pushNativeFaceWeights({ a: 1 });
-    expect(window.__characterStudioNativeFace.getFresh(400)).not.toBeNull();
-  });
-
-  it('push maps openxrParameters to WebXR keys (jaw_drop) when OPENXR_WEB_ENABLED', () => {
+    expect(window.__characterStudioNativeFace.getFresh(400)).no__characterStudioNativeFacepush maps openxrParameters to WebXR keys (jaw_drop) when OPENXR_WEB_ENABLED', () => {
     initNativeFaceBridge();
     const arr = new Array(68).fill(0);
     arr[24] = 0.9;
-    window.__characterStudioNativeFace.push({ openxrParameters: arr });
-    const rec = getNativeFaceWeightsIfFresh(400);
+    window.__characterStudioNativeFace.push({ openxrParameters: arr });__characterStudioNativeFaceaceWeightsIfFresh(400);
     if (OPENXR_WEB_ENABLED) {
       expect(rec?.jaw_drop).toBeCloseTo(0.9);
     } else {
@@ -109,8 +104,7 @@ describe('nativeFaceBridge', () => {
     arr[24] = 0.9;
     window.__characterStudioNativeFace.push({
       openxrParameters: arr,
-      weights: { jaw_drop: 0.1 }
-    });
+      weigh__characterStudioNativeFace);
     const rec = getNativeFaceWeightsIfFresh(400);
     expect(rec?.jaw_drop).toBeCloseTo(0.1);
   });

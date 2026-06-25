@@ -1,0 +1,188 @@
+.phygitalVerify {
+  min-height: 100dvh;
+  background: linear-gradient(165deg, #0a0a12 0%, #1a1a2e 45%, #0f1419 100%);
+  color: #e8e8ec;
+  padding: 1.25rem 1rem 2.5rem;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.brand {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8ec5ff;
+  margin: 0 0 0.35rem;
+}
+
+.title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: #9aa0a6;
+  margin: 0.35rem 0 0;
+}
+
+.mockBanner {
+  background: rgba(255, 193, 7, 0.12);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  color: #ffd966;
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.card {
+  background: rgba(42, 42, 42, 0.85);
+  border: 1px solid #3a3a4a;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.card h2 {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 0 0.75rem;
+}
+
+.serial {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+
+.statusAuthentic {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(40, 167, 69, 0.2);
+  color: #6fcf97;
+  border: 1px solid rgba(40, 167, 69, 0.4);
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #333;
+}
+
+.metaRow:last-child {
+  border-bottom: none;
+}
+
+.metaLabel {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.metaValue {
+  text-align: right;
+  word-break: break-word;
+}
+
+.metaRowSpaced {
+  margin-top: 0.75rem;
+}
+
+.assetList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.assetItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #333;
+  font-size: 0.85rem;
+}
+
+.assetItem:last-child {
+  border-bottom: none;
+}
+
+.assetFormat {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: #8ec5ff;
+}
+
+.downloadBtn {
+  background: #007acc;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.downloadBtn:disabled,
+.downloadBtn.disabled {
+  background: #444;
+  color: #888;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.plannedTag {
+  font-size: 0.7rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+.notFound {
+  text-align: center;
+  color: #ccc;
+  max-width: 420px;
+  margin: 2rem auto;
+}
+
+.backLink {
+  display: inline-block;
+  margin-top: 1.5rem;
+  color: #8ec5ff;
+  font-size: 0.85rem;
+}
+
+.loading {
+  text-align: center;
+  color: #888;
+  padding: 3rem 1rem;
+}
+
+.tapHint {
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 0.75rem;
+  text-align: center;
+}

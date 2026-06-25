@@ -17,7 +17,7 @@ fi
 SCAN_FILES=$(git diff --cached --name-only | grep -vE '^scripts/security-replace-text\.txt$|^scripts/security-purge-paths\.txt$' || true)
 if [ -n "$SCAN_FILES" ]; then
   PATTERNS='THIRDWEB_SECRET_KEY=[a-zA-Z0-9_]{20,}|VITE_AVATARSDK_CLIENT_SECRET=[A-Za-z0-9]{20,}|PLAYWRIGHT_MCP_EXTENSION_TOKEN=[a-zA-Z0-9_-]{10,}|ghp_[a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,}'
-  if git diff --cached -U0 --no-color -- $SCAN_FILES 2>/dev/null | grep -iE "$PATTERNS" >/dev/null 2>&1; then
+  if git diff --cached -U0 --no-color -- $SCAN_FILES 2>/dev/null | grep '^+' | grep -v '^+++' | grep -iE "$PATTERNS" >/dev/null 2>&1; then
     echo "ERROR: Staged diff matches secret patterns. Remove credentials before committing."
     exit 1
   fi

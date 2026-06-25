@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev",
+      "type": "npm",
+      "script": "dev",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "xr-hub-proxy",
+      "type": "npm",
+      "script": "xr-hub-proxy",
+      "problemMatcher": []
+    },
+    {
+      "label": "dev:surface",
+      "type": "npm",
+      "script": "dev:surface",
+      "problemMatcher": []
+    },
+    {
+      "label": "test:run",
+      "type": "npm",
+      "script": "test:run",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Character Studio',
+  title: 'OpenNexus3DStudio',
   tagline: 'VRM Avatar Toolkit',
   favicon: 'img/favicon.ico',
 
@@ -81,7 +81,7 @@ const config = {
       navbar: {
         title: 'Home',
         logo: {
-          alt: 'Character Studio',
+          alt: 'OpenNexus3DStudio',
           src: 'img/m3-solid.svg',
         },
 	hideOnScroll: true,
@@ -94,13 +94,13 @@ const config = {
           },
           {to: '/blog', label: 'Blog', position: 'left'},
           {
-            href: 'https://m3-org.github.io/CharacterStudio/',
-            label: 'Demo',
+            href: 'https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio',
+            label: 'GitHub',
             position: 'right',
           },
           {
-            href: 'https://github.com/m3-org/CharacterStudio',
-            label: 'GitHub',
+            href: 'https://github.com/M3-org/CharacterStudio',
+            label: 'Upstream (Character Studio)',
             position: 'right',
           },
         ],
@@ -116,7 +116,7 @@ const config = {
                 to: '/docs/about',
               },
 	      {
-		label: 'Demo',
+		label: 'M3 upstream demo',
 		href: 'https://m3-org.github.io/CharacterStudio/',
 	      },
             ],

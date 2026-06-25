@@ -51,7 +51,7 @@ describe.skipIf(!API_ENDPOINT)('TaskManager - Real API Execution Tests', () => {
       const task = taskManager.createTask({
         type: 'text-to-3d',
         prompt: 'A simple test cube',
-        options: {}
+        options: { object_name: 'Test Cube' },
       })
 
       expect(task).toBeDefined()
@@ -79,7 +79,7 @@ describe.skipIf(!API_ENDPOINT)('TaskManager - Real API Execution Tests', () => {
       const task = badManager.createTask({
         type: 'text-to-3d',
         prompt: 'test',
-        options: {}
+        options: { object_name: 'Test' },
       })
 
       await expect(badManager.startTask(task.id)).rejects.toThrow()
@@ -97,7 +97,7 @@ describe.skipIf(!API_ENDPOINT)('TaskManager - Real API Execution Tests', () => {
       const task = taskManager.createTask({
         type: 'text-to-3d',
         prompt: 'Lifecycle test',
-        options: {}
+        options: { object_name: 'Lifecycle Test' },
       })
 
       expect(task.status).toBe('pending')

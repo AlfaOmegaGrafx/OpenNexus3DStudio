@@ -1,0 +1,32 @@
+---
+description: VRM upload passthrough is a locked good state — block image-to-avatar / debug regressions
+alwaysApply: true
+---
+
+# VRM upload — protected (do not regress)
+
+**User-confirmed good state (2026-06-18).** Read `memory-bank/vrm-upload-protected-state.md` and `docs/VRM_UPLOAD_DISPLAY_EXPORT.md` before editing upload/display/export paths.
+
+## Invariants
+
+| Area | Rule |
+|------|------|
+| Upload | `passthrough: true` → scene-root yaw only if needed; **no** scale, rebind, rename, AIGC repair |
+| Flags | `userData.vrmBindPassthrough` + `userData.vrmNormalized` on uploaded VRM |
+| Display | Skip `processModel` / `normalizeRiggedModelTransforms` repair for passthrough VRM |
+| Skeleton | Fixed `SKELETON_JOINT_SPHERE_RADIUS` (0.012); uniform; overlay `depthTest: false` |
+| Export | No blind π yaw; no rebind that breaks passthrough bind |
+
+## Forbidden without explicit user request
+
+- Wiring **image-to-avatar**, **avatar-from-image**, or **`fromAigc`** rig fixes into VRM upload/load paths.
+- Shared debug changes in `sceneManager.js`, `rigBoneUtils.js`, `vrmLoader.js` that lack `vrm` / `vrmBindPassthrough` guards.
+- Re-enabling hips-only rotation or per-skin rebind on multi-skin VRM0 uploads.
+
+## Protected files
+
+`vrmLoader.js`, `sceneManager.js`, `rigBoneUtils.js`, `VRMExporter.js`, `characterManager.js`, `vrmManager.js`, `load-utils.js`, `modelOrientationUtils.js`
+
+## Before merging touches to protected files
+
+Re-test multi-skin VRM0 upload + skeleton mode + export round-trip. Grep remote log for `[VRM] Upload passthrough` (good) vs armature-only rotation / `alignSkinnedMeshToRig` on VRM (bad).

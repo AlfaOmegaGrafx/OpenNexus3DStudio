@@ -14,68 +14,77 @@ Whenever you **create, edit, or delete** files under this repo, **apply scp sync
 3. **After DGX-owned changes** — run automatically when Surface SSH works:
    ```bash
    cd /home/sifr/OpenNexus3DStudio
-   bash scripts/sync-to-pc.sh
+   bash scripts/sync-changes-to-pc.sh --retry-until-complete
    ```
-   Use `--include-src` only when `src/` was edited on DGX (lock first per sync rules).
+   Use full `bash scripts/sync-to-pc.sh` only for a **full** resync (first clone, large drift, or when incremental finds nothing but files are missing).
+   Use `--include-src` only when `src/` was edited on DGX (lock first per sync rules):
+   ```bash
+   bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete
+   ```
    After milestones, also push agent context:
    ```bash
-   bash scripts/sync-to-pc.sh --include-agent-context
+   bash scripts/sync-changes-to-pc.sh --include-agent-context --retry-until-complete
    bash scripts/sync-sessionmem-team.sh
    ```
-4. **Run `bash scripts/ensure-dgx-sync-ready.sh`** after PC→DGX syncs or doc cleanup.
+4. **After Surface → DGX sync** (PC pushed new scripts/docs) — run:
+   ```bash
+   bash scripts/ensure-dgx-sync-ready.sh
+   ```
 5. **Do not** nag about sync if you already ran it. Only report if sync **failed**.
+6. **Pitch Deck** — after edits under `Pitch Deck/`, run `bash scripts/sync-changes-to-pc.sh --retry-until-complete` (prune runs automatically when Pitch Deck paths changed). Never `scp -r "Pitch Deck"` to Surface. See `.cursor/rules/pitch-deck-sync-protected.mdc`. **Never** tell the user to run sync — you run it.
+
+## Incremental sync (DGX side — your assignment)
+
+| Script | When to run on DGX |
+|--------|-------------------|
+| `bash scripts/sync-changes-to-pc.sh --retry-until-complete` | **Default after every edit** — git-changed DGX-owned files only |
+| `bash scripts/sync-to-pc.sh` | Full push of all DGX-owned paths (slow; use when incremental is insufficient) |
+| `bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete` | DGX edited `src/` — locks, pushes changed `src/` files only |
+| `bash scripts/sync-changes-to-pc.sh --include-agent-context --retry-until-complete` | Push changed `memory-bank/`, `graphify-out/` |
+
+**Mirror on Surface:** PC uses `.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete` for the same pattern in the opposite direction.
+
+**Shared library:** `scripts/sync-changes-lib.sh` (sourced by `sync-changes-to-pc.sh`; do not run directly).
+
+**Do not pipe** sync output through `head` / `Select-Object -First` — it can stall `scp`.
 
 ## Ownership (which script)
 
-| Changed files | Source of truth | Run on **Surface (PC)** |
-| ------------- | --------------- | ----------------------- |
-| `src/`, scripts, roadmaps | PC | `.\scripts\sync-to-dgx.ps1` |
-| Pitch Deck, README, package.json, docs | DGX | `.\scripts\sync-from-dgx.ps1` |
-| sync-*.ps1, prune-sync-duplicates.sh | DGX | `.\scripts\sync-from-dgx.ps1` |
+| Changed files | Source of truth | Run on **DGX** |
+| ------------- | --------------- | -------------- |
+| `src/`, app scripts (`dgx-rehydrate-*.py`, etc.), roadmaps | PC | *(Surface runs `sync-changes-to-dgx.ps1`)* |
+| Pitch Deck, README, package.json, docs | DGX | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` |
+| `sync-*.ps1`, `sync-changes-*`, `sync-to-pc.sh`, prune/ensure scripts | DGX maintains copies; PC may author | Push from whichever machine edited them |
 
-**Important:** `sync-from-dgx.ps1` does **not** copy `src/` or roadmaps. If you
-edited `src/` on **DGX (Cursor Remote)**, push to Surface before the user can
-test in the browser:
+**Important:** Surface `sync-from-dgx.ps1` does **not** copy `src/` or roadmaps. If you edited `src/` on **DGX**, push before the user can test in the browser:
 
 ```bash
 cd /home/sifr/OpenNexus3DStudio
-bash scripts/sync-to-pc.sh --include-src
-bash scripts/sync-to-pc.sh --include-agent-context   # memory-bank + graphify-out
-bash scripts/sync-sessionmem-team.sh               # SessionMem team folder
+bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete
+bash scripts/sync-changes-to-pc.sh --include-agent-context --retry-until-complete
+bash scripts/sync-sessionmem-team.sh
 ```
 
-Requires OpenSSH on Surface (port 22). Surface has a matching rule:
-`.cursor/rules/surface-sync-reminder.mdc`.
+Requires OpenSSH on Surface (port 22). Surface rule: `.cursor/rules/surface-sync-reminder.mdc`.
 
-## Scripts (PowerShell, from Surface repo root)
-
-```powershell
-# Pull DGX-owned docs/branding + sync workflow scripts
-.\scripts\sync-from-dgx.ps1
-
-# Push PC code + MONETIZATION_ROADMAP.md → DGX (runs ensure on DGX)
-.\scripts\sync-to-dgx.ps1
-
-# Wrapper
-.\scripts\sync-dgx.ps1 -Direction from-dgx
-.\scripts\sync-dgx.ps1 -Direction to-dgx
-
-# Away from home LAN
-.\scripts\sync-from-dgx.ps1 -Remote
-.\scripts\sync-to-dgx.ps1 -Remote
-```
-
-## Optional (on DGX, after PC push)
+## Scripts (bash, from DGX repo root)
 
 ```bash
-cd /home/sifr/OpenNexus3DStudio
+# Preferred — changed DGX-owned files only
+bash scripts/sync-changes-to-pc.sh --retry-until-complete
+
+# Full DGX-owned push
+bash scripts/sync-to-pc.sh
+
+# After PC pushed sync workflow updates
 bash scripts/ensure-dgx-sync-ready.sh
 ```
 
-Push DGX-owned files to Surface when Surface SSH is enabled:
+Surface pulls the same files with:
 
-```bash
-bash scripts/sync-to-pc.sh
+```powershell
+.\scripts\sync-from-dgx.ps1
+.\scripts\sync-from-dgx.ps1 -Remote
 ```
 
 ## Backend (`3DAIGC-API`)
@@ -88,4 +97,4 @@ Surface agent rule (local PC): `.cursor/rules/surface-sync-reminder.mdc`
 
 ## Equal role on DGX
 
-DGX agent has the **same execute permissions** as Surface: edit files, run `sync-to-pc.sh` automatically after edits, SSH to Surface when needed. Never offer options — do it or report a blocker.
+DGX agent has the **same execute permissions** as Surface: edit files, run `sync-changes-to-pc.sh` automatically after edits, SSH to Surface when needed. Never offer options — do it or report a blocker.

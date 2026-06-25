@@ -26,6 +26,8 @@ The repo is **Vercel deploy-ready** for a public viewport demo (VRM upload, trai
 
 Import the GitHub repo in Vercel; no `VITE_API_ENDPOINT` required for the public demo. Full AI generation stays on local dev + self-hosted [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API).
 
+**Phygital passport (mock):** `/verify/ST-DEMO-0001` — digital twin passport UI preview; see [docs/PHYGITAL_NFC_APPAREL_ROADMAP.md](docs/PHYGITAL_NFC_APPAREL_ROADMAP.md).
+
 ## 🚀 Core Principles
 - **All Local**: No data leaves your device. 
 - **Open Source**: Apache2.0 licensed.
@@ -57,7 +59,7 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
 
 ### What's not done yet
 
-- **Full XR world building** — persistent splat environments with mesh props, collision, grab, and locomotion in the main `/` WebXR session (IWSDK Option A Phases 3–5 shipped on SceneManager; `/xr` lab remains for IWSDK regression)
+- **Splat-only world RP1** — World Library **RP1** needs mesh props in the manifest; pure Gaussian environments need a prop-generation path for OMB publish
 - **Gaussian-VRM / RGBAvatar body pipelines** — scan-based full-body avatars and highest-fidelity head attachment; separate from viewport TripoSplat preview (not the same code path as `image-to-splat`).
 
 ### Where it lives (architecture)
@@ -70,10 +72,15 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
 [Future XR worlds]       IWSDK Option A interaction + world packages (not a second app)
 ```
 
-`/xr` remains an **IWSDK lab** for grab/locomotion regression; the **main app** (`/`) runs the same interaction stack via SceneManager (Phases 3–5: rays, distance/proximity grab, thumbstick locomotion) alongside loaded worlds and VRM.
+`/xr` remains an **IWSDK lab** for grab/locomotion regression; the **main app** (`/`) runs IWSDK Option A on SceneManager — distance/proximity grab (trigger), grip → context menu / pan, thumbstick locomotion — alongside loaded splat worlds and VRM.
 
 **Further reading**
 
+- [NVIDIA XR AI + 3DAIGC (DGX)](docs/NVIDIA_XR_AI_INTEGRATION.md) — voice VLM → mesh jobs on Galaxy XR
+- [Dev machine topology](docs/DEV_MACHINE_TOPOLOGY.md) — Surface + DGX Spark roles, incremental sync, Galaxy XR URLs
+- [World package format](docs/WORLD_PACKAGE.md) — splats, props, Redis rehydrate for image-to-world jobs
+- [Spatial fabric / RP1](docs/SPATIAL_FABRIC_INTEGRATION.md) — Task Manager vs World Library publish
+- [Phygital NFC roadmap](docs/PHYGITAL_NFC_APPAREL_ROADMAP.md) — mock `/verify/:serialId` (Phase 0)
 - [Avatar pipeline (client)](docs/AVATAR_PIPELINE.md) — avatar-from-image, optional splat preview, Arc2Avatar direction
 - [Avatar pipeline (API)](https://github.com/AlfaOmegaGrafx/3DAIGC-API/blob/main/docs/AVATAR_PIPELINE.md) — endpoints, template rig, splat-generation
 - [IWSDK Option A Migration Blueprint](docs/IWSDK_OPTION_A_MIGRATION_BLUEPRINT.md) — Spark + world package stack, XR world building order
@@ -262,7 +269,7 @@ OpenNexus3DStudio requires asset packs for avatar traits. You can:
 
 #### OpenNexus3DStudio Avatar Components
 - `CharacterManager`: Core character management with VRM support
-- `CharacterStudioBridge`: Legacy bridge class for GLB import into avatar workflows (internal API name)
+- `OpenNexus3DStudioBridge`: Legacy bridge class for GLB import into avatar workflows (internal API name)
 - Uses `Shared3DViewer` and `Universal3DViewer` (developed by OpenNexus3DStudio)
 - `AnimationManager`: Handles character animations and bone remapping
 - `BlinkManager`: Automatic eye blinking system
@@ -327,7 +334,7 @@ VITE_AVATARSDK_PIPELINE_SUBTYPE=male
 
 # Thirdweb Configuration (for blockchain features)
 VITE_THIRDWEB_CLIENT_ID=your_thirdweb_client_id
-VITE_THIRDWEB_SECRET_KEY=your_thirdweb_secret_key
+VITE_THIRDWEB_SECRET_KEY=your_secret_key
 
 # Base x402 Configuration (when SDK is available)
 VITE_BASE_X402_API_KEY=your_base_api_key
@@ -436,3 +443,15 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - [TripoStudio](https://studio.tripo3d.ai/) for inspiration
 - [Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio) for the foundation
 - [M3-org](https://github.com/M3-org) for the upstream avatar-trait foundation and inspiration
+- [Character Studio](https://github.com/M3-org/CharacterStudio) (M3-org, MIT) — upstream open-source avatar toolkit this project evolved from
+
+## Legal & Trademark Information
+
+### Software Licensing
+The underlying source code of OpenNexus3DStudio is licensed under the [MIT License](LICENSE).
+
+### Trademark & Brand Asset Reservation
+The names **"Space-Time"**, **"OpenNexus3DStudio"**, the "Space-Time" orbital clock logo artwork, and all associated apparel designs, product names, graphics, and phygital concept assets are proprietary intellectual property.
+
+* **No Trademark License:** The open-source license applied to the source code **does not** grant any rights, implied or explicit, to use the "Space-Time" brand name, logo, or trade dress for commercial or non-commercial redistributions.
+* **Modification Requirement:** If you fork this repository or modify the code to distribute your own software or services, you **must** remove all "Space-Time" branding, logos, and references, and rebrand your version entirely under a unique name.

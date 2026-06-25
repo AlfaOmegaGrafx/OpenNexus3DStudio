@@ -4,7 +4,7 @@ Copy-paste this document (or sections) into **Android Studio AI Assistant** when
 
 ## Product goal
 
-We are building **Character Studio** — a web app (React + Three.js + VRM) that runs in **Chrome WebXR** on **Galaxy XR / Android XR**. We need **live facial blend shapes** on the VRM avatar during **immersive AR/VR**.
+We are building **OpenNexus3DStudio** — a web app (React + Three.js + VRM) that runs in **Chrome WebXR** on **Galaxy XR / Android XR**. We need **live facial blend shapes** on the VRM avatar during **immersive AR/VR**.
 
 **Problem:** Chrome on Android XR does **not** grant WebXR **`expression-tracking`** / `XRFrame.expressions`, so the web app cannot read the face from inside Chrome.
 
@@ -12,7 +12,7 @@ We are building **Character Studio** — a web app (React + Three.js + VRM) that
 
 1. Runs **native face tracking** (Jetpack XR + optional OpenXR `XR_ANDROID_face_tracking`).
 2. While the user is in **Chrome WebXR**, **POSTs face JSON** to the dev PC over LAN.
-3. Chrome loads the same Character Studio URL with **`?nativeFaceRelay=1`** and applies weights to the VRM (same code path as native WebView injection).
+3. Chrome loads the same OpenNexus3DStudio URL with **`?nativeFaceRelay=1`** and applies weights to the VRM (same code path as native WebView injection).
 
 This is a **dev workflow** today (Vite relay on PC). Production would need WebXR expressions, a hosted relay, or a native immersive host.
 
@@ -33,7 +33,7 @@ This is a **dev workflow** today (Vite relay on PC). Production would need WebXR
     ?nativeFaceRelay=1 → nativeFaceBridge.js → VRM morph targets
 ```
 
-**WebView path (works without relay):** APK loads Character Studio in `WebView` → `evaluateJavascript("__characterStudioNativeFace.push(...)")`. **WebView does not support `navigator.xr`**, so AR/VR must use Chrome.
+**WebView path (works without relay):** APK loads OpenNexus3DStudio in `WebView` → `evaluateJavascript("__characterStudioNativeFace.push(...)")`. **WebView does not support `navigator.xr`**, so AR/VR must use Chrome.
 
 **Chrome path (needs relay):** User uses menu **⋮ → Open in Chrome for WebXR (+ face)**. APK must **keep face tracking alive** while Chrome is foreground (PiP + `FaceKeeperActivity` + foreground service).
 

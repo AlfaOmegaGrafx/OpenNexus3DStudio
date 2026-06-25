@@ -1,6 +1,6 @@
 /**
  * VRMExporter - VRM model export for OpenNexus3DStudio
- * Based on CharacterStudio's VRM export patterns
+ * Based on upstream M3-org Character Studio VRM export patterns
  */
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';

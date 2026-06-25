@@ -149,6 +149,15 @@ describe('taskModelUrl', () => {
     expect(percent).toBe(100);
   });
 
+  it('extractJobProgress marks failed jobs as terminal failure', () => {
+    const { failed, indeterminate } = extractJobProgress({
+      status: 'failed',
+      error: 'Worker process exited before model load completed',
+    });
+    expect(failed).toBe(true);
+    expect(indeterminate).toBe(false);
+  });
+
   it('enrichCompletedJobPayload promotes nested result URLs to top level', () => {
     const enriched = enrichCompletedJobPayload(
       {

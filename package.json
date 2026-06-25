@@ -9,6 +9,10 @@
     "dev:iwsdk": "iwsdk dev up --open --foreground",
     "dev:runtime": "vite --host",
     "dev:vite": "vite --host",
+    "xr-hub-proxy": "node scripts/xr-spark-hub-proxy.mjs",
+    "msf-proxy": "node scripts/msf-spark-proxy.mjs",
+    "dev:spark-proxies": "concurrently -n msf,xr -c blue,magenta \"npm run msf-proxy\" \"npm run xr-hub-proxy\"",
+    "verify:dev-proxies": "node scripts/verify-dev-proxies.mjs",
     "dev:iwsdk:status": "iwsdk dev status",
     "dev:iwsdk:down": "iwsdk dev down",
     "iwsdk:adapter-sync": "iwsdk adapter sync",
@@ -119,28 +123,7 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
+    "node": ">=20.19.0 || >=22.12.0 || >=24.0.0"
   },
-  "main": "public/electron.js",
-  "build": {
-    "appId": "com.opennexus3dstudio.app",
-    "productName": "OpenNexus3DStudio",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "build/**/*",
-      "public/electron.js",
-      "node_modules/**/*"
-    ],
-    "mac": {
-      "category": "public.app-category.graphics-design"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
-  }
+  "main": "public/electron.js"
 }

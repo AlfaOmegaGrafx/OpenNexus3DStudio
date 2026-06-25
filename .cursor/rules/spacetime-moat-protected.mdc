@@ -1,0 +1,33 @@
+---
+description: Space-Time moat — what is OSS vs proprietary; never commit or push moat assets
+alwaysApply: true
+---
+
+# Space-Time moat (protected)
+
+Read `memory-bank/spacetime-moat-strategy.md` before monetization, x402, passport API, NFC production, or investor-facing work.
+
+## Moat summary
+
+| Open (GitHub) | Proprietary (never push) |
+|---------------|---------------------------|
+| Client `src/` (rebrand required for forks) | `MONETIZATION_ROADMAP.md`, `Pitch Deck/` |
+| Public overview `docs/SPACETIME_MOAT_OVERVIEW.md` | `memory-bank/` (full strategy) |
+| Mock `/verify` UI + API **draft** docs | Live passport serial DB, NFC SUN signing keys |
+| `.env.example` placeholders | `.env`, Thirdweb/x402 facilitator secrets |
+
+**Moat layers:** (1) trademark/official drops, (2) OpenNexus+3DAIGC-API integration+SLA, (3) hosted x402/API/registry, (4) wallet+phygital asset graph, (5) ecosystem mindshare, (6) §11 personalization + companion handoff.
+
+## Agent rules
+
+1. **Never** `git add` / commit / push: `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `memory-bank/`, `.env`, facilitator keys, passport production data.
+2. **Never** paste roadmap pricing or ARR into tracked files — use `docs/SPACETIME_MOAT_OVERVIEW.md` for public-safe wording.
+3. **DGX sync:** push moat docs via `sync-to-dgx.ps1` (scp), not git.
+4. Implement billing/registry as **hosted services** with env secrets; client stays OSS.
+5. Forks must remove Space-Time branding (README Legal & Trademark).
+
+## Revenue mechanisms (internal detail in memory-bank only)
+
+- **x402:** primary; quote before DGX job queue; §6.1 SKU map in local roadmap.
+- **NFT commissions:** marketplace GMV; 3d-anvil primary 0% — Spacetime earns bundles/registry/hosted secondary.
+- **§11 personalized AI:** DataConnect digest → API context + companion handoff; Pro tier unlock; not PII sale.

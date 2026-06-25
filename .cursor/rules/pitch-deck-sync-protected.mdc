@@ -1,0 +1,39 @@
+---
+description: Pitch Deck scp sync — agents run scripts automatically (never instruct the user)
+alwaysApply: true
+---
+
+# Pitch Deck sync — agent-owned (do not tell the user to run)
+
+`Pitch Deck/` is **gitignored**. Sync is **scp only**, never git.
+
+## Agent behavior (mandatory)
+
+After **any** create/edit/delete under `Pitch Deck/`:
+
+| Machine | Run automatically (do not ask the user) |
+|---------|----------------------------------------|
+| **Surface** | `.\scripts\prune-sync-duplicates.ps1` then `.\scripts\sync-pitch-deck-to-dgx.ps1` |
+| **DGX** | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` (Pitch Deck paths) then `bash scripts/prune-sync-duplicates.sh` |
+
+When Surface agents run **any** post-edit sync (`sync-changes-to-dgx.ps1`, `sync-to-dgx.ps1`), Pitch Deck is handled automatically if `git status` shows changes under `Pitch Deck/` — **still run** the dedicated script after direct Pitch Deck edits.
+
+After `sync-from-dgx.ps1` pulls Pitch Deck, **run** `.\scripts\prune-sync-duplicates.ps1` on Surface (script does this).
+
+## Forbidden
+
+- Telling the user to run sync scripts — **you** run them.
+- `scp -r "Pitch Deck" host:/repo/` — nests `Pitch Deck/Pitch Deck`.
+- Raw `scp -r Pitch Deck` without `/.` target path.
+
+## Safe pattern (reference)
+
+```powershell
+scp -r "Pitch Deck/." DGX-Local:/home/sifr/OpenNexus3DStudio/Pitch\ Deck/
+```
+
+Wrapped by `scripts/sync-pitch-deck-to-dgx.ps1`.
+
+## Report to user
+
+Only if sync **failed** (SSH down, auth, missing folder). Do not end with “remember to sync” when you already ran sync.

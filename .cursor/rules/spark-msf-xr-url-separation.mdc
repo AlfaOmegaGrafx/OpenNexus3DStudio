@@ -1,0 +1,17 @@
+---
+description: Scene Assembler (MSF) vs XR Voice URL separation — never swap ports or env vars
+alwaysApply: true
+---
+
+# Scene Assembler vs XR Voice — locked URL map
+
+See workspace rule `spark-msf-xr-url-separation.mdc` and `docs/NVIDIA_XR_AI_INTEGRATION.md`.
+
+| Product | Surface proxy | Env vars |
+|---------|---------------|----------|
+| Scene Assembler | **:8453** (`npm run msf-proxy`) | `VITE_MSF_PUBLIC_URL` |
+| XR Voice | **:8443** (`npm run xr-hub-proxy`) | `VITE_XR_HUB_URL` |
+
+Run both proxies: `npm run dev:spark-proxies`. Verify: `npm run verify:dev-proxies`.
+
+Never assign XR Voice to `:8453` or Scene Assembler to `:8443` on Surface.

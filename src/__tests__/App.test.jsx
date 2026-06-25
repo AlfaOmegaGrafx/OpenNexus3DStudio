@@ -31,7 +31,9 @@ vi.mock('../context/TaskContext', () => ({
     getApiEndpoint: () => '',
     createAndStartTask: vi.fn(),
     removeTask: vi.fn(),
-    clearCompletedTasks: vi.fn()
+    clearCompletedTasks: vi.fn(),
+    adoptJobHandoff: vi.fn(),
+    syncTasksFromApi: vi.fn(),
   })
 }));
 

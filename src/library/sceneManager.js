@@ -1,6 +1,6 @@
 /**
  * SceneManager - Central orchestrator for 3D scene management
- * Similar to CharacterManager in CharacterStudio, but focused on 3D AIGC workflows
+ * Similar to CharacterManager in OpenNexus3DStudio, but focused on 3D AIGC workflows
  */
 import * as THREE from './three.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -59,11 +59,14 @@ import {
   collectModelBones,
   collectRigBonesFromGltf,
   countModelBones,
+  alignSkinnedMeshToRig,
+  anchorModelFeetToFloor,
   findPrimarySkinnedMesh,
   getBoneDisplayWorldPosition,
   getBoneWorldBounds,
   getMeshLayoutBounds,
   getSkeletonJointSphereRadius,
+  getViewportFloorAnchorBounds,
   getViewportLayoutBounds,
   getPrimarySkeletonBones,
   logRigAlignmentDiagnostics,
@@ -1813,6 +1816,9 @@ export class SceneManager {
     }
     this.vrSceneWrapper.updateMatrixWorld(true);
     console.log('[XR] Re-applied floor alignment after world load:', floorAlignmentY);
+    if (this.renderMode === 'skeleton') {
+      this.createBoneVisualization();
+    }
   }
 
   async loadWorldFromManifestUrl(manifestUrl, options = {}) {
@@ -2062,6 +2068,9 @@ export class SceneManager {
 
       if (fromAigc) {
         model.userData.fromAigc = true;
+      }
+      if (options.avatarFromImage) {
+        model.userData.avatarFromImage = true;
       }
       if (options.autoRigMeta) {
         model.userData.autoRigMeta = options.autoRigMeta;
@@ -3458,6 +3467,7 @@ export class SceneManager {
         model.userData.preserveExportedOrientation = true;
         ensureForwardFacing = false;
         orientationMode = 'none';
+        autoCenter = false;
       }
       // DGX Blender / template rig GLBs are already ~1 m — autoScale breaks skin bind.
       autoScale = false;
@@ -3489,14 +3499,17 @@ export class SceneManager {
       modelHasSkinnedMesh(model) ||
       Boolean(model?.userData?.autoRigMeta) ||
       countModelBones(model) > 0;
-    const anchorGroundToBones =
+    const useViewportFloorBounds =
       !isUploadedVrm &&
       (Boolean(model?.userData?.fromAigc) ||
         Boolean(model?.userData?.preserveExportedOrientation)) &&
-      countModelBones(model) > 0;
+      (modelHasSkinnedMesh(model) || countModelBones(model) > 0);
 
     const layoutBoundsFor = (target) => {
-      if (anchorGroundToBones) return getBoneWorldBounds(target);
+      if (useViewportFloorBounds) {
+        const floorBox = getViewportFloorAnchorBounds(target);
+        if (!floorBox.isEmpty()) return floorBox;
+      }
       if (useMeshOnlyBounds) return getViewportLayoutBounds(target);
       return new THREE.Box3().setFromObject(target);
     };
@@ -3593,8 +3606,13 @@ export class SceneManager {
 
     if (this.currentModel.userData?.preserveExportedOrientation) {
       if (modelHasSkinnedMesh(this.currentModel)) {
+        alignSkinnedMeshToRig(this.currentModel);
         this.currentModel.updateMatrixWorld(true);
         rebindSkinnedMeshes(this.currentModel);
+        const shiftY = anchorModelFeetToFloor(this.currentModel);
+        if (Math.abs(shiftY) > 0.001) {
+          console.log('[Rig] Floor-anchored preserved-orientation avatar', { shiftY });
+        }
       }
       return;
     }
@@ -3603,7 +3621,7 @@ export class SceneManager {
       modelHasSkinnedMesh(this.currentModel) ||
       countModelBones(this.currentModel) > 0;
     const box = useLayoutBounds
-      ? getViewportLayoutBounds(this.currentModel)
+      ? getViewportFloorAnchorBounds(this.currentModel, { meshFeetOnly: true })
       : new THREE.Box3().setFromObject(this.currentModel);
     
     // Check if bounding box is valid
@@ -3614,8 +3632,7 @@ export class SceneManager {
     
     const modelBottom = box.min.y;
     
-    // If the model is floating above ground, move it down
-    if (modelBottom > 0) {
+    if (Math.abs(modelBottom) > 0.001) {
       this.currentModel.position.y -= modelBottom;
       console.log('Model moved to ground level:', {
         originalBottom: modelBottom,
@@ -3758,6 +3775,23 @@ export class SceneManager {
     mat.transparent = true;
   }
 
+  _ensureSkeletonOverlayGroup(modelRoot) {
+    if (!modelRoot) return null;
+    let overlay = modelRoot.userData?.skeletonOverlayGroup;
+    if (overlay?.parent === modelRoot) return overlay;
+    overlay = new THREE.Group();
+    overlay.name = 'SkeletonOverlay';
+    modelRoot.add(overlay);
+    modelRoot.userData.skeletonOverlayGroup = overlay;
+    return overlay;
+  }
+
+  _worldToModelLocal(modelRoot, worldPos, target = new THREE.Vector3()) {
+    target.copy(worldPos);
+    if (modelRoot) modelRoot.worldToLocal(target);
+    return target;
+  }
+
   /**
    * @param {THREE.Bone} bone
    * @param {number} color
@@ -3777,7 +3811,9 @@ export class SceneManager {
     });
     const boneHelper = new THREE.Mesh(geometry, material);
     this._applySkeletonOverlayRenderState(boneHelper, 9998);
-    getBoneDisplayWorldPosition(bone, modelRoot, boneHelper.position);
+    const worldPos = new THREE.Vector3();
+    getBoneDisplayWorldPosition(bone, modelRoot, worldPos);
+    this._worldToModelLocal(modelRoot, worldPos, boneHelper.position);
     boneHelper.userData.boneName = boneName;
     boneHelper.userData.isBoneHelper = true;
     boneHelper.userData.originalBone = bone;
@@ -3802,6 +3838,14 @@ export class SceneManager {
       const skinned = findPrimarySkinnedMesh(modelRoot);
       if (skinned?.skeleton) {
         skinned.skeleton.update();
+      }
+      if (
+        modelRoot.userData?.avatarFromImage ||
+        modelRoot.userData?.preserveExportedOrientation
+      ) {
+        alignSkinnedMeshToRig(modelRoot);
+        rebindSkinnedMeshes(modelRoot);
+        modelRoot.updateMatrixWorld(true);
       }
 
       // Remove existing bone visualization
@@ -3986,11 +4030,14 @@ export class SceneManager {
    * @param {number} color
    */
   _addBoneHelpersFromRigBones(bones, boneHelpers, boneConnections, color, jointRadius) {
+    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+    const overlay = this._ensureSkeletonOverlayGroup(modelRoot);
+    const parent = overlay || this.scene;
     bones.forEach((bone) => {
       try {
         const boneHelper = this._createBoneHelperMesh(bone, color, jointRadius);
-        if (boneHelper && this.scene) {
-          this.scene.add(boneHelper);
+        if (boneHelper && parent) {
+          parent.add(boneHelper);
           boneHelpers.push(boneHelper);
         }
       } catch (error) {
@@ -3998,7 +4045,7 @@ export class SceneManager {
       }
     });
     try {
-      this.createBoneConnectionsFromBones(bones, boneConnections);
+      this.createBoneConnectionsFromBones(bones, boneConnections, parent, modelRoot);
     } catch (error) {
       console.warn('Error creating bone connections:', error);
     }
@@ -4007,16 +4054,18 @@ export class SceneManager {
   /**
    * Create bone connections for rig bones (scene graph or SkinnedMesh skeleton).
    */
-  createBoneConnectionsFromBones(bones, boneConnections) {
+  createBoneConnectionsFromBones(bones, boneConnections, parent = this.scene, modelRoot = null) {
     try {
+      const root = modelRoot ?? this.currentModel ?? this._resolveExpressionVRM()?.scene;
+      const attachParent = parent || this.scene;
       const bonePositions = new Map();
+      const worldPos = new THREE.Vector3();
+      const localPos = new THREE.Vector3();
 
-      const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
       bones.forEach((bone) => {
         try {
-          const worldPosition = new THREE.Vector3();
-          getBoneDisplayWorldPosition(bone, modelRoot, worldPosition);
-          bonePositions.set(bone.name, worldPosition);
+          getBoneDisplayWorldPosition(bone, root, worldPos);
+          bonePositions.set(bone.name, this._worldToModelLocal(root, worldPos, localPos.clone()));
         } catch (error) {
           console.warn('Error getting bone position for', bone.name, error);
         }
@@ -4024,15 +4073,15 @@ export class SceneManager {
 
       bones.forEach((bone) => {
         try {
-          const parent = bone.parent;
-          if (parent?.isBone) {
-            const parentPosition = bonePositions.get(parent.name);
+          const parentBone = bone.parent;
+          if (parentBone?.isBone) {
+            const parentPosition = bonePositions.get(parentBone.name);
             if (parentPosition) {
-              const childWorldPosition = new THREE.Vector3();
-              getBoneDisplayWorldPosition(bone, modelRoot, childWorldPosition);
+              const childLocal = bonePositions.get(bone.name);
+              if (!childLocal) return;
               const geometry = new THREE.BufferGeometry().setFromPoints([
                 parentPosition,
-                childWorldPosition,
+                childLocal,
               ]);
               const material = new THREE.LineBasicMaterial({
                 color: 0xff6600,
@@ -4044,8 +4093,8 @@ export class SceneManager {
               const connection = new THREE.Line(geometry, material);
               this._applySkeletonOverlayRenderState(connection, 9997);
               connection.userData.isBoneConnection = true;
-              if (this.scene) {
-                this.scene.add(connection);
+              if (attachParent) {
+                attachParent.add(connection);
                 boneConnections.push(connection);
               }
             }
@@ -4071,25 +4120,32 @@ export class SceneManager {
    */
   clearBoneVisualization() {
     try {
-      if (this.boneHelpers && this.scene) {
-        this.boneHelpers.forEach(helper => {
+      const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+      const overlay = modelRoot?.userData?.skeletonOverlayGroup;
+      if (overlay) {
+        while (overlay.children.length > 0) {
+          overlay.remove(overlay.children[0]);
+        }
+      }
+
+      const removeFrom = (parent, items) => {
+        if (!items || !parent) return;
+        items.forEach((helper) => {
           try {
-            this.scene.remove(helper);
+            parent.remove(helper);
           } catch (error) {
-            console.warn('Error removing bone helper:', error);
+            console.warn('Error removing bone overlay:', error);
           }
         });
+      };
+
+      if (this.boneHelpers?.length) {
+        removeFrom(overlay || this.scene, this.boneHelpers);
         this.boneHelpers = [];
       }
-      
-      if (this.boneConnections && this.scene) {
-        this.boneConnections.forEach(connection => {
-          try {
-            this.scene.remove(connection);
-          } catch (error) {
-            console.warn('Error removing bone connection:', error);
-          }
-        });
+
+      if (this.boneConnections?.length) {
+        removeFrom(overlay || this.scene, this.boneConnections);
         this.boneConnections = [];
       }
       
@@ -6080,7 +6136,7 @@ export class SceneManager {
   async exportToGLB(options = {}) {
     const {
       filename = 'opennexus3dstudio_export.glb',
-      forCharacterStudio = true,
+      forOpenNexus3DStudio = true,
       animationClips,
       ...exportOptions
     } = options;
@@ -6091,8 +6147,8 @@ export class SceneManager {
       ...exportOptions,
     };
 
-    if (forCharacterStudio) {
-      return await this.glbExporter.exportForCharacterStudio(this.currentModel, glbOpts);
+    if (forOpenNexus3DStudio) {
+      return await this.glbExporter.exportForOpenNexus3DStudio(this.currentModel, glbOpts);
     }
     return await this.glbExporter.exportToGLB(this.currentModel, glbOpts);
   }
@@ -6801,6 +6857,10 @@ export class SceneManager {
           // XR requirement: X must stay at 0 (centered) for both AR and VR modes
           this.vrSceneWrapper.position.set(0, floorAlignmentY, -0.5);
           this.vrSceneWrapper.matrixAutoUpdate = true; // Ensure matrix updates
+          this.vrSceneWrapper.updateMatrixWorld(true);
+          if (this.renderMode === 'skeleton') {
+            this.createBoneVisualization();
+          }
           
           console.log('✅ VR scene wrapper position set to:', this.vrSceneWrapper.position);
           console.log('📐 VR models anchored to floor plane - position fixed in world space');
@@ -6939,6 +6999,10 @@ export class SceneManager {
             this.vrSceneWrapper.userData.anchorPosition = this.vrSceneWrapper.position.clone();
             // Ensure anchorPosition stays centered on X even if something else modifies it later.
             this.vrSceneWrapper.userData.anchorPosition.x = 0;
+            this.vrSceneWrapper.updateMatrixWorld(true);
+            if (this.renderMode === 'skeleton') {
+              this.createBoneVisualization();
+            }
             
             console.log('✅ AR scene wrapper position set to:', this.vrSceneWrapper.position);
             console.log('📐 AR models anchored to floor plane at reference space origin');

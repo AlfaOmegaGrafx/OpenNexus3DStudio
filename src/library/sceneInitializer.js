@@ -5,7 +5,7 @@ import { CharacterManager } from "./characterManager";
 export function sceneInitializer(canvasId) {
     const scene = new THREE.Scene()
 
-    // Load sky background image from Character Studio
+    // Load sky background image from OpenNexus3DStudio
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load(
       '/assets/backgrounds/background4.jpg',

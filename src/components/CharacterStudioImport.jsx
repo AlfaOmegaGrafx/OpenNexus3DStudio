@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { CharacterStudioBridge } from '../library/characterStudioBridge';
+import { OpenNexus3DStudioBridge } from '../library/characterStudioBridge';
 
-const CharacterStudioImport = ({ onModelImported }) => {
+const OpenNexus3DStudioImport = ({ onModelImported }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
-  const [bridge] = useState(() => new CharacterStudioBridge());
+  const [bridge] = useState(() => new OpenNexus3DStudioBridge());
   const fileInputRef = useRef(null);
 
   const handleFileSelect = async (event) => {
@@ -24,12 +24,12 @@ const CharacterStudioImport = ({ onModelImported }) => {
       const processedModel = await bridge.loadOpenNexus3DStudioGLB(file, {
         convertToVRM: true,
         addVRMStructure: true,
-        optimizeForCharacterStudio: true,
+        optimizeForOpenNexus3DStudio: true,
         addDefaultMaterials: true
       });
 
       // Validate the processed model
-      const validation = bridge.validateForCharacterStudio(processedModel);
+      const validation = bridge.validateForOpenNexus3DStudio(processedModel);
       setValidationResult(validation);
 
       if (validation.valid) {
@@ -152,7 +152,7 @@ const CharacterStudioImport = ({ onModelImported }) => {
   );
 };
 
-export default CharacterStudioImport;
+export default OpenNexus3DStudioImport;
 
 
 

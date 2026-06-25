@@ -46,6 +46,8 @@ export const TaskProvider = ({ children }) => {
           });
 
       manager.on('tasksSynced', hydrateFromManager);
+      manager.on('tasksPruned', hydrateFromManager);
+      manager.on('taskRemoved', hydrateFromManager);
 
       manager.on('connectionStatusChanged', (data) => {
         const becameConnected = data.connected && !wasConnectedRef.current;
@@ -194,7 +196,8 @@ export const TaskProvider = ({ children }) => {
       isChecking = true;
       try {
         const connected = await taskManagerRef.current.checkConnection();
-        
+        setIsConnected(Boolean(connected));
+
         if (connected) {
           consecutiveFailures = 0;
         } else {
@@ -370,6 +373,27 @@ export const TaskProvider = ({ children }) => {
     }
   };
 
+  const adoptJobHandoff = async (jobId, opts = {}) => {
+    if (!taskManagerRef.current) {
+      throw new Error('Task manager not initialized');
+    }
+    if (!taskManagerRef.current.isConnected) {
+      const connected = await taskManagerRef.current.checkConnection();
+      setIsConnected(connected);
+      if (!connected) {
+        throw new Error('Not connected to DGX API');
+      }
+    }
+    setIsLoading(true);
+    try {
+      const task = await taskManagerRef.current.adoptJobFromHandoff(jobId, opts);
+      setTasks(sortTasksForDisplay(taskManagerRef.current.getAllTasks()));
+      return task;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const clearCompletedTasks = () => {
     if (taskManagerRef.current) {
       taskManagerRef.current.clearCompletedTasks();
@@ -436,6 +460,7 @@ export const TaskProvider = ({ children }) => {
     removeTask,
     deleteTask,
     syncTasksFromApi,
+    adoptJobHandoff,
     clearCompletedTasks,
     clearAllTasks,
     getTaskStats,

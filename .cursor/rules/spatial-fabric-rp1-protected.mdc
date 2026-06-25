@@ -1,0 +1,29 @@
+---
+description: Spatial fabric / RP1 publish — protected good state (2026-06-19)
+alwaysApply: true
+---
+
+# Spatial fabric / RP1 publish — protected (do not regress)
+
+**User-confirmed good state (2026-06-19).** Read `memory-bank/spatial-fabric-rp1-protected-state.md` and `docs/SPATIAL_FABRIC_INTEGRATION.md` before editing publish/browser paths.
+
+## Invariants
+
+| Area | Rule |
+|------|------|
+| Browser URL | Open **Scene Assembler root** (`MSF_PUBLIC_BASE_URL`); **never** navigate to raw `.msf` files |
+| TaskManager | `apiEndpoint` from `getApiEndpoint()` only — no duplicate prop |
+| Publish | Completed **mesh** jobs → `POST /api/v1/spatial-fabric/publish` on DGX API |
+| DGX API | `/api/v1/spatial-fabric/*` routes must be loaded; `.env` MSF vars sourced on restart |
+| Naming | OpenNexus3DStudio in product strings; Character Studio = attribution only |
+| Secrets | Never commit `.env`, `memory-bank/`, `MONETIZATION_ROADMAP.md`, MSF edit keys |
+
+## Protected files
+
+`spatialFabricAdapter.js`, `useSpatialFabric.js`, `TaskManager.jsx` (publish handler), `GLBExport.jsx`, `WorldLibrary.jsx`, `spatialFabricAdapter.test.js`
+
+## Forbidden without explicit user request
+
+- Opening `fabric_msf_url` / `.msf` as the Metaverse Browser tab URL
+- Re-adding `apiEndpoint` prop to TaskManager when `getApiEndpoint()` exists
+- Committing moat docs, roadmap, or secrets to git

@@ -7,8 +7,10 @@ import {
   collectModelBones,
   findBoneByName,
   findHipsBone,
+  findPrimarySkinnedMesh,
   getBoneWorldBounds,
   getMeshLayoutBounds,
+  getSkinnedDisplayWorldBounds,
   modelHasSkinnedMesh,
 } from './rigBoneUtils.js';
 
@@ -49,7 +51,8 @@ export function validateAigcRigContract(root, options = {}) {
     failures.push('no_bones_in_glb');
   }
 
-  const meshBox = getMeshLayoutBounds(root);
+  const skinned = findPrimarySkinnedMesh(root);
+  const meshBox = skinned ? getSkinnedDisplayWorldBounds(skinned) : getMeshLayoutBounds(root);
   const boneBox = getBoneWorldBounds(root);
   if (meshBox.isEmpty()) {
     failures.push('empty_mesh_bounds');
@@ -83,6 +86,14 @@ export function validateAigcRigContract(root, options = {}) {
 
   if (meshSize.y > 0 && Math.abs(hipsOffsetY) > meshSize.y * 0.35) {
     failures.push('mesh_bone_vertical_mismatch');
+  }
+
+  if (!meshBox.isEmpty() && !boneBox.isEmpty()) {
+    const feetDelta = Math.abs(boneBox.min.y - meshBox.min.y);
+    const feetThreshold = Math.max(meshSize.y * 0.08, 0.05);
+    if (feetDelta > feetThreshold) {
+      failures.push('mesh_bone_feet_mismatch');
+    }
   }
 
   const spine =

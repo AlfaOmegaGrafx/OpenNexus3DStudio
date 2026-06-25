@@ -1,0 +1,46 @@
+---
+description: Collapsed left/right side-rail icons must stay symmetric in a mirrored column
+globs: src/App.css,src/App.jsx
+alwaysApply: true
+---
+
+# Collapsed side-rail icon symmetry
+
+When changing **collapsed** left (`.sidebar`) or right (`.opennexus-sidebar`) icon strips:
+
+## Invariant
+
+**Left and right collapsed icon columns must mirror each other** — same width, icon size, gap, padding, and vertical start so row *N* on the left aligns with row *N* on the right.
+
+## Shared tokens (define on `.app` only)
+
+| Token | Purpose |
+|-------|---------|
+| `--collapsed-rail-width` | Collapsed rail width (both sides) |
+| `--collapsed-rail-icon-width` / `--collapsed-rail-icon-height` | Icon button size (match scene-controls hamburgers: 40×40) |
+| `--collapsed-rail-icon-gap` | Vertical gap between icons |
+| `--collapsed-rail-icon-padding` | Icon column padding |
+
+Do **not** add per-side overrides (e.g. extra `padding-top: 3rem` on one rail only).
+
+## Shared selectors (keep in sync)
+
+Style both rails together:
+
+- Containers: `.collapsed-sidebar-icons`, `.collapsed-opennexus-icons`
+- Buttons: `.sidebar-icon`, `.opennexus-sidebar-icon`
+- Collapsed width: `.sidebar.collapsed`, `.opennexus-sidebar.collapsed`
+
+## Layout rules
+
+1. **No ghost hamburger space** — in-panel hamburgers (`.hamburger-menu`, `.opennexus-sticky-hamburger`) use `display: none` when collapsed; scene-controls row hamburgers are the active controls.
+2. **No asymmetric top offsets** — do not reserve space for hidden hamburgers with large `padding-top` on one side only.
+3. **Right rail vertical origin** — `.opennexus-sidebar` uses `top: var(--app-content-top)` (measured from `.app-content` in `App.jsx`), not header alone and not `--app-chrome-top-height` calc alone.
+4. **Spacing via gap only** — use `gap` on the icon column; avoid extra `margin-bottom` on individual icons on one side.
+
+## Checklist when adding/changing collapsed icons
+
+1. Add or update icons on **both** rails if the feature is paired, or document intentional asymmetry.
+2. Change shared `--collapsed-rail-*` tokens instead of one-off pixel values.
+3. Keep container + button rules in the **shared selector blocks** in `App.css`.
+4. Verify visually with **both panels collapsed**: icons form horizontal pairs across the viewport.

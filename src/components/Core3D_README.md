@@ -1,10 +1,10 @@
-# Core3D Integration for CharacterStudio
+# Core3D Integration for OpenNexus3DStudio
 
-This document describes the comprehensive Core3D API integration that has been added to the CharacterStudio project, providing advanced 3D design capabilities through the Core3D platform.
+This document describes the comprehensive Core3D API integration that has been added to the OpenNexus3DStudio project, providing advanced 3D design capabilities through the Core3D platform.
 
 ## Overview
 
-The Core3D integration adds powerful 3D design features to CharacterStudio, including:
+The Core3D integration adds powerful 3D design features to OpenNexus3DStudio, including:
 - Access to thousands of 3D models
 - Advanced material and texture library
 - AI-powered design generation
@@ -80,7 +80,7 @@ The Core3D integration adds powerful 3D design features to CharacterStudio, incl
 ## UI/UX Features
 
 ### Design System
-- Consistent with CharacterStudio's dark theme
+- Consistent with OpenNexus3DStudio's dark theme
 - Responsive grid layouts
 - Smooth animations and transitions
 - Loading states and progress indicators
@@ -201,7 +201,7 @@ The Core3D integration adds powerful 3D design features to CharacterStudio, incl
 - File API for uploads
 
 ### Internal
-- CharacterStudio's existing context system
+- OpenNexus3DStudio's existing context system
 - Scene management integration
 - Task management system
 - Export functionality
@@ -210,10 +210,10 @@ The Core3D integration adds powerful 3D design features to CharacterStudio, incl
 
 For issues related to:
 - **Core3D API**: Contact Core3D support
-- **Integration**: Check CharacterStudio documentation
+- **Integration**: Check OpenNexus3DStudio documentation
 - **UI/UX**: Review component documentation
 - **Performance**: Monitor browser console and network
 
 ## License
 
-This integration follows the same license as the CharacterStudio project and respects Core3D's terms of service.
+This integration follows the same license as the OpenNexus3DStudio project and respects Core3D's terms of service.

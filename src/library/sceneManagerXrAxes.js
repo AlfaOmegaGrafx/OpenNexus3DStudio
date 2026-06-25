@@ -38,9 +38,9 @@ export function applyDeadzone(value) {
   return Math.abs(value) < DEADZONE ? 0 : value;
 }
 
-/** Stick tilted down/forward (teleport aim) — positive Y on Galaxy XR. */
+/** Stick tilted back (teleport aim) — negative Y on Galaxy XR after user-facing invert. */
 export function isThumbstickTeleportAim(stickY, stickX = 0) {
-  const y = applyDeadzone(stickY);
+  const y = applyDeadzone(-stickY);
   const x = applyDeadzone(stickX);
   return y > 0 && y >= Math.abs(x);
 }

@@ -7,7 +7,7 @@ alwaysApply: true
 
 Before any git commit or push:
 
-1. **Never stage:** `.env`, `*.pem`, `certs/`, `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `uploads/`, `.mcp.json`, `.codex/`, `.iwsdk/`, SSH configs with keys
+1. **Never stage:** `.env`, `*.pem`, `certs/`, `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `memory-bank/`, `uploads/`, `.mcp.json`, `.codex/`, `.iwsdk/`, SSH configs with keys — see `.cursor/rules/spacetime-moat-protected.mdc` for moat policy
 2. **Use templates only:** `.env.example` with empty placeholders — no real API keys in tracked files
 3. **Scripts that write MCP config** (`update-playwright-mcp.*`) must read tokens from **environment variables**, never string literals
 4. **Pre-commit hook:** run `sh scripts/install-secret-guard-hook.sh` after clone if hooks are missing

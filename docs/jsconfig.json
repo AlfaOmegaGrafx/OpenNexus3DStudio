@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "moduleResolution": "node"
+  },
+  "include": ["**/*.js", "**/*.jsx"]
+}

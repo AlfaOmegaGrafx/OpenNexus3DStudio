@@ -1,6 +1,6 @@
 # Library Scripts
 
-This directory contains various utility scripts for the Character Studio application.
+This directory contains various utility scripts for the OpenNexus3DStudio application.
 
 ## Files
 

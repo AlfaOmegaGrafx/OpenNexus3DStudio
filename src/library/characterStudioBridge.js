@@ -1,12 +1,12 @@
 /**
- * CharacterStudioBridge - Bridge for importing Core3D / GLB exports into OpenNexus3DStudio avatar workflows
+ * OpenNexus3DStudioBridge - Bridge for importing Core3D / GLB exports into OpenNexus3DStudio avatar workflows
  * Handles format conversion and VRM compatibility
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin } from '@pixiv/three-vrm';
 
-export class CharacterStudioBridge {
+export class OpenNexus3DStudioBridge {
   constructor() {
     this.gltfLoader = new GLTFLoader();
     // Register VRM loader plugin if available
@@ -20,7 +20,7 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Load OpenNexus3DStudio GLB for CharacterStudio
+   * Load OpenNexus3DStudio GLB for OpenNexus3DStudio
    * @param {File|string} source - GLB file or URL
    * @param {Object} options - Loading options
    */
@@ -28,7 +28,7 @@ export class CharacterStudioBridge {
     const {
       convertToVRM = true,
       addVRMStructure = true,
-      optimizeForCharacterStudio = true,
+      optimizeForOpenNexus3DStudio = true,
       addDefaultMaterials = true
     } = options;
 
@@ -38,11 +38,11 @@ export class CharacterStudioBridge {
       // Load the GLB file
       const gltf = await this.loadGLB(source);
       
-      // Process for CharacterStudio compatibility
-      const processedModel = await this.processForCharacterStudio(gltf, {
+      // Process for OpenNexus3DStudio compatibility
+      const processedModel = await this.processForOpenNexus3DStudio(gltf, {
         convertToVRM,
         addVRMStructure,
-        optimizeForCharacterStudio,
+        optimizeForOpenNexus3DStudio,
         addDefaultMaterials
       });
 
@@ -74,15 +74,15 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Process model for CharacterStudio compatibility
+   * Process model for OpenNexus3DStudio compatibility
    * @param {Object} gltf - Loaded GLTF object
    * @param {Object} options - Processing options
    */
-  async processForCharacterStudio(gltf, options = {}) {
+  async processForOpenNexus3DStudio(gltf, options = {}) {
     const {
       convertToVRM = true,
       addVRMStructure = true,
-      optimizeForCharacterStudio = true,
+      optimizeForOpenNexus3DStudio = true,
       addDefaultMaterials = true
     } = options;
 
@@ -98,9 +98,9 @@ export class CharacterStudioBridge {
       await this.convertToVRMFormat(scene);
     }
 
-    // Optimize for CharacterStudio
-    if (optimizeForCharacterStudio) {
-      this.optimizeForCharacterStudio(scene);
+    // Optimize for OpenNexus3DStudio
+    if (optimizeForOpenNexus3DStudio) {
+      this.optimizeForOpenNexus3DStudio(scene);
     }
 
     // Add default materials if needed
@@ -108,8 +108,8 @@ export class CharacterStudioBridge {
       this.addDefaultMaterials(scene);
     }
 
-    // Add CharacterStudio metadata
-    this.addCharacterStudioMetadata(scene);
+    // Add OpenNexus3DStudio metadata
+    this.addOpenNexus3DStudioMetadata(scene);
 
     return scene;
   }
@@ -250,18 +250,18 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Optimize model for CharacterStudio
+   * Optimize model for OpenNexus3DStudio
    * @param {Object} scene - Scene to optimize
    */
-  optimizeForCharacterStudio(scene) {
+  optimizeForOpenNexus3DStudio(scene) {
     // Merge geometries for better performance
     this.mergeGeometries(scene);
     
     // Optimize materials
     this.optimizeMaterials(scene);
     
-    // Add CharacterStudio-specific properties
-    this.addCharacterStudioProperties(scene);
+    // Add OpenNexus3DStudio-specific properties
+    this.addOpenNexus3DStudioProperties(scene);
   }
 
   /**
@@ -300,12 +300,12 @@ export class CharacterStudioBridge {
   optimizeMaterials(scene) {
     scene.traverse((child) => {
       if (child.isMesh && child.material) {
-        // Ensure materials are optimized for CharacterStudio
+        // Ensure materials are optimized for OpenNexus3DStudio
         child.material.transparent = false;
         child.material.opacity = 1.0;
         child.material.needsUpdate = true;
         
-        // Add CharacterStudio material properties
+        // Add OpenNexus3DStudio material properties
         child.material.userData.characterStudio = true;
         child.material.userData.optimized = true;
       }
@@ -313,10 +313,10 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Add CharacterStudio properties
+   * Add OpenNexus3DStudio properties
    * @param {Object} scene - Scene to add properties to
    */
-  addCharacterStudioProperties(scene) {
+  addOpenNexus3DStudioProperties(scene) {
     scene.userData.characterStudio = {
       imported: true,
       source: 'OpenNexus3DStudio',
@@ -344,10 +344,10 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Add CharacterStudio metadata
+   * Add OpenNexus3DStudio metadata
    * @param {Object} scene - Scene to add metadata to
    */
-  addCharacterStudioMetadata(scene) {
+  addOpenNexus3DStudioMetadata(scene) {
     scene.userData.metadata = {
       ...scene.userData.metadata,
       characterStudio: {
@@ -360,10 +360,10 @@ export class CharacterStudioBridge {
   }
 
   /**
-   * Validate model for CharacterStudio compatibility
+   * Validate model for OpenNexus3DStudio compatibility
    * @param {Object} model - Model to validate
    */
-  validateForCharacterStudio(model) {
+  validateForOpenNexus3DStudio(model) {
     const issues = [];
     const warnings = [];
 

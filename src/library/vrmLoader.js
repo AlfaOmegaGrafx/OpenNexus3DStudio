@@ -1,6 +1,6 @@
 /**
  * VRMLoader - VRM model loading and processing for OpenNexus3DStudio
- * Based on CharacterStudio's VRM handling patterns
+ * Based on OpenNexus3DStudio's VRM handling patterns
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';

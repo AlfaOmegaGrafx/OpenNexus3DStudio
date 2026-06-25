@@ -1,15 +1,15 @@
 ---
-description: Sync Surface PC ↔ DGX after Character Studio changes (local workspace)
+description: Sync Surface PC ↔ DGX after OpenNexus3DStudio changes (local workspace)
 alwaysApply: true
 ---
 
 # Surface sync reminder (local PC workspace)
 
-You are editing **Character Studio on the Surface** — the machine that runs
+You are editing **OpenNexus3DStudio on the Surface** — the machine that runs
 `npm run dev` and serves `https://<Surface-LAN-IP>:3000/` for browser and
 Galaxy XR tests.
 
-Repo root (typical): `C:\Users\alfao\Documents\GitHub\CharacterStudio`
+Repo root (typical): `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio`
 
 Whenever you **create, edit, or delete** files in this repo, **apply scp sync yourself** after the edit (user permission). **Never** run git push/pull/fetch/upstream unless the user explicitly asks.
 
@@ -19,33 +19,35 @@ Whenever you **create, edit, or delete** files in this repo, **apply scp sync yo
 2. **Do not** run `git push`, `git pull`, `git fetch`, or merge `upstream` unless the user explicitly asks.
 3. **After PC-owned changes** — run automatically:
    ```powershell
-   .\scripts\sync-to-dgx.ps1
+   .\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete
    ```
+   Use `.\scripts\sync-to-dgx.ps1 -RetryUntilComplete` only for a **full** resync (e.g. first clone, or after large drift).
 4. **After DGX-owned docs/scripts change** (or start of session) — run when needed:
    ```powershell
    .\scripts\sync-from-dgx.ps1
    ```
 5. **Do not** end responses with a “Sync reminder” when you already ran sync. Only mention sync if it **failed** (SSH down).
+6. **Pitch Deck** — after edits under `Pitch Deck/`, run `.\scripts\sync-pitch-deck-to-dgx.ps1` yourself (never `scp -r "Pitch Deck"`). `sync-changes-to-dgx.ps1` also auto-syncs Pitch Deck when git shows changes. See `.cursor/rules/pitch-deck-sync-protected.mdc`. **Never** tell the user to run these scripts.
 
 ## Ownership — edited on **Surface (here)**
 
 | Changed files | Source of truth | Action |
 | ------------- | --------------- | ------ |
-| `src/`, scripts, roadmaps | **PC** | `.\scripts\sync-to-dgx.ps1` |
+| `src/`, scripts, roadmaps | **PC** | `.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete` |
 | vite.config, index.html, public | **PC** | Keep on PC; sync to DGX if shared |
 
 ## Ownership — edited on **DGX (Cursor Remote)**
 
-| Changed on DGX | Action on Surface |
-| -------------- | ----------------- |
-| Pitch Deck, README, package.json, docs | `.\scripts\sync-from-dgx.ps1` |
-| sync-*.ps1, prune-sync-duplicates.sh | `.\scripts\sync-from-dgx.ps1` |
-| `src/` (edited on Spark) | DGX runs `bash scripts/sync-to-pc.sh --include-src` |
+| Changed on DGX | Action on **DGX** | Action on Surface |
+| -------------- | ----------------- | ----------------- |
+| Pitch Deck, README, package.json, docs | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` | `.\scripts\sync-from-dgx.ps1` |
+| sync-*.ps1, prune-sync-duplicates.sh | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` | `.\scripts\sync-from-dgx.ps1` |
+| `src/` (edited on Spark) | `bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete` | *(pull via DGX push, or SSH command below)* |
 
 Pull DGX `src/` from Surface if DGX did not push yet:
 
 ```powershell
-ssh DGX-Local "cd /home/sifr/OpenNexus3DStudio && bash scripts/sync-to-pc.sh --include-src"
+ssh DGX-Local "cd /home/sifr/OpenNexus3DStudio && bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete"
 ```
 
 Use `DGX-Remote` away from LAN.
@@ -55,7 +57,10 @@ Use `DGX-Remote` away from LAN.
 ## Scripts (PowerShell, from Surface repo root)
 
 ```powershell
-.\scripts\sync-to-dgx.ps1      # PC code → DGX
+.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete   # preferred after edits
+.\scripts\sync-to-dgx.ps1 -RetryUntilComplete            # full resync only
+.\scripts\sync-pitch-deck-to-dgx.ps1                     # Pitch Deck only (agents run; auto from sync-changes)
+.\scripts\prune-sync-duplicates.ps1                      # remove nested Pitch Deck/Pitch Deck on Surface
 .\scripts\sync-from-dgx.ps1    # DGX docs/branding → PC
 .\scripts\sync-from-dgx.ps1 -IncludeAgentContext   # + memory-bank + graphify-out
 .\scripts\sync-sessionmem-team.ps1   # SessionMem team memories

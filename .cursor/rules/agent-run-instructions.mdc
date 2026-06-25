@@ -1,0 +1,103 @@
+---
+description: Agent must run commands itself on DGX and Surface — never hand the user loose scripts
+alwaysApply: true
+---
+
+# Agent run instructions (DGX + Surface)
+
+The user is a novice. **Do not give partial scripts without full context.**
+
+## Never offer options — execute or report a blocker
+
+Standing user permission: if a project task is **necessary, important, or urgent**, and you can do it (write files, run commands, SSH), **do it without asking**.
+
+- **Do not** end with “if you want…”, “would you like me to…”, or a list of optional next steps.
+- **Do not** ask the user to run commands you can run (DGX terminal, Surface via SSH, file edits).
+- **Do** report briefly what you did, or what blocked you (SSH down, password prompt, UI-only approval).
+
+**DGX and Surface agents have equal roles** — same permission to edit the project, run sync scripts, and reach the other machine. The only difference is *which machine Cursor is attached to*:
+
+| Cursor workspace | Local execution | Reach other machine |
+|------------------|-----------------|---------------------|
+| **DGX** | bash, write under `/home/sifr/OpenNexus3DStudio` | `ssh Surface-PC-Tailscale` |
+| **Surface** | PowerShell, write under `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` | `ssh DGX-Local` or `DGX-Remote` |
+
+## User communication (novice-friendly)
+
+When you **must** give the user a command or script (because you are blocked):
+
+1. **Machine** — start with **On DGX** or **On Surface**.
+2. **Folder** — full path to `cd` into before the command.
+3. **Command** — copy-paste ready, one block.
+4. **Purpose** — one sentence what it does.
+
+Example format:
+
+```
+On Surface — open PowerShell, then:
+  cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio
+  .\scripts\refresh-graphify-surface.ps1
+(Rebuilds the local code map for Cursor agents.)
+```
+
+**Script inventory:** maintain and consult `memory-bank/scripts-cheatsheet.md` when introducing or reusing workflow scripts.
+
+1. **Say which machine** — every step is labeled **On DGX** or **On Surface**.
+2. **Give full paths** — e.g. `/home/sifr/OpenNexus3DStudio/scripts/foo.sh` or `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio\scripts\foo.ps1`.
+3. **Run it yourself** — create files, run shell/PowerShell, SSH to the other machine when the task needs it.
+4. **Only ask the user** when truly blocked: missing SSH, password prompt, or UI-only action (e.g. approve MCP in Cursor Settings).
+
+## OpenNexus3DStudio paths
+
+| Machine | Repo root |
+|---------|-----------|
+| DGX | `/home/sifr/OpenNexus3DStudio` |
+| Surface | `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
+
+## Common remote commands (from DGX)
+
+```bash
+ssh Surface-PC-Tailscale "powershell -NoProfile -Command \"cd 'C:\\Users\\alfao\\Documents\\GitHub\\OpenNexus3DStudio'; <command>\""
+```
+
+## Git and GitHub — do nothing unless the user explicitly asks
+
+**The #1 mistake:** treating “sync” or “upload” as permission to run **git** commands.
+
+| User said | Agent may do | Agent must NOT do |
+|-----------|--------------|-------------------|
+| “sync”, “upload”, “push to Surface” | **scp scripts only** (`sync-to-pc.sh`, `sync-to-dgx.ps1`, etc.) | `git push`, `git pull`, `git fetch`, merge `upstream`, open PRs |
+| “commit” | `git add` + `git commit` (local only) | `git push` unless user also says push |
+| “push to GitHub” | User does it (agent has no GitHub SSH key) | Any `git push` / `gh` write |
+
+After the `.env` leak, the user **removed the agent SSH key from GitHub**. Never assume GitHub write access.
+
+**DGX and Surface are the same project folder on two machines** — keep them aligned with **sync scripts over SSH**, not with git remotes or upstream.
+
+## DGX ↔ Surface file copy (scp) — auto-run after edits
+
+**User permission:** After every create/edit/delete in this repo, **run the correct scp sync script yourself** (do not ask the user to run it). This is **not** git — never use `git push` / `git pull` / `upstream` for machine sync.
+
+| You edited on | Run automatically |
+|---------------|-------------------|
+| **DGX** — DGX-owned files (docs, README, Pitch Deck) | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` |
+| **DGX** — `src/` (DGX was sole editor; lock if needed) | `bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete` |
+| **Surface** — PC-owned files (`src/`, scripts, roadmaps) | `.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete` |
+| **Surface** — Pitch Deck only | `.\scripts\sync-pitch-deck-to-dgx.ps1` (also auto from sync-changes when git shows Pitch Deck changes) |
+| **Surface** — need DGX docs/scripts | `.\scripts\sync-from-dgx.ps1` |
+
+**Never tell the user to run sync** — you run it. Pitch Deck: `.cursor/rules/pitch-deck-sync-protected.mdc`. Forbidden: `scp -r "Pitch Deck" host:/repo/`.
+
+From DGX, Surface sync can run via SSH if you are on DGX but changed Surface-owned files through remote commands.
+
+Say **“copied to Surface”** / **“copied to DGX”** in chat — never say “git push” for scp sync.
+
+**Still forbidden without explicit user ask:** `git push`, `git pull`, `git fetch`, merge `upstream`, PRs, GitHub publish.
+
+## After DGX-owned changes
+
+Run automatically: `bash scripts/sync-changes-to-pc.sh --retry-until-complete` (add `--include-src` only when DGX owned `src/` edits). Full `sync-to-pc.sh` only when incremental is insufficient.
+
+## After Surface-owned changes
+
+Run automatically on Surface: `.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete`. Respect single-writer rules for `src/`; do not overwrite Surface `src/` from DGX without lock/sync rules.

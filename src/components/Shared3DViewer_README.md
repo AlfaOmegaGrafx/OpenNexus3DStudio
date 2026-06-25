@@ -1,6 +1,6 @@
 # Shared 3D Viewer System
 
-This document explains the shared 3D viewer system that allows both CharacterStudio and Open3DStudio (OpenNexus3DStudio) to use the same 3D viewing capabilities.
+This document explains the shared 3D viewer system that allows both OpenNexus3DStudio and Open3DStudio (OpenNexus3DStudio) to use the same 3D viewing capabilities.
 
 ## Overview
 
@@ -12,7 +12,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
 
 1. **Shared3DViewer** (`src/components/Shared3DViewer.jsx`)
    - Base 3D viewer component with Three.js integration
-   - Handles both CharacterStudio and Open3DStudio (OpenNexus3DStudio) modes
+   - Handles both OpenNexus3DStudio and Open3DStudio (OpenNexus3DStudio) modes
    - Provides common 3D viewing functionality
 
 2. **Universal3DViewer** (`src/components/Universal3DViewer.jsx`)
@@ -26,7 +26,7 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
    - Integrates with Core3D API and designs
 
 4. **Scene3D** (`src/components/Scene3D.jsx`)
-   - CharacterStudio-specific viewer component
+   - OpenNexus3DStudio-specific viewer component
    - Optimized for VRM and character workflows
    - Integrates with existing scene management
 
@@ -40,12 +40,12 @@ The shared 3D viewer system provides a unified 3D viewing experience across both
 - **Responsive Design**: Works on desktop and mobile
 - **Error Handling**: Graceful error recovery and user feedback
 
-### CharacterStudio Features
+### OpenNexus3DStudio Features
 - **VRM Support**: Full VRM model loading and manipulation
 - **Blend Shapes**: VRM facial expression controls
 - **Character Animation**: Bone and animation support
 - **VRM Export**: Export models in VRM format
-- **Character Studio Integration**: Seamless workflow integration
+- **OpenNexus3DStudio Integration**: Seamless workflow integration
 
 ### Open3DStudio (OpenNexus3DStudio) Features
 - **Core3D Integration**: Direct API integration
@@ -76,7 +76,7 @@ import Universal3DViewer from './components/Universal3DViewer';
 />
 ```
 
-### CharacterStudio Usage
+### OpenNexus3DStudio Usage
 
 ```jsx
 import Scene3D from './components/Scene3D';
@@ -138,7 +138,7 @@ import Core3DViewer from './components/Core3DViewer';
 - Integrates with Core3D material system
 
 ### Context Integration
-- Uses `SceneContext` for CharacterStudio features
+- Uses `SceneContext` for OpenNexus3DStudio features
 - Uses `Core3DContext` for Open3DStudio (OpenNexus3DStudio) features
 - Maintains state consistency across components
 
@@ -278,7 +278,7 @@ import Core3DViewer from './components/Core3DViewer';
 
 For issues related to:
 - **3D Viewer**: Check component documentation
-- **CharacterStudio**: Review scene management docs
+- **OpenNexus3DStudio**: Review scene management docs
 - **Open3DStudio (OpenNexus3DStudio)**: Check Core3D integration docs
 - **Performance**: Monitor browser dev tools
 - **Compatibility**: Test on different browsers/devices

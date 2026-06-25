@@ -46,7 +46,11 @@ test.describe('AI task (DGX Spark)', () => {
     await expect(newBtn).toBeVisible({ timeout: 5000 });
     await newBtn.click();
 
-    // Fill prompt and submit
+    // Fill object name and prompt, then submit
+    const objectNameInput = page.getByTestId('task-object-name-input');
+    await expect(objectNameInput).toBeVisible({ timeout: 3000 });
+    await objectNameInput.fill('E2E Red Cube');
+
     const promptInput = page.getByTestId('task-prompt-input');
     await expect(promptInput).toBeVisible({ timeout: 3000 });
     await promptInput.fill(PROMPT);
@@ -103,6 +107,10 @@ test.describe('AI task (DGX Spark)', () => {
     const fileInput = page.getByTestId('task-image-file-input');
     await expect(fileInput).toBeAttached({ timeout: 3000 });
     await page.getByTestId('task-prompt-input').fill(IMAGE_TO_3D_PROMPT);
+
+    const objectNameInput = page.getByTestId('task-object-name-input');
+    await expect(objectNameInput).toBeVisible({ timeout: 3000 });
+    await objectNameInput.fill('E2E Image Mesh');
 
     await fileInput.setInputFiles(TEST_IMAGE_PATH);
 

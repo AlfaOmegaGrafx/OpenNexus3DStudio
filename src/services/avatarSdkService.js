@@ -1,3 +1,5 @@
+import { isLocalDev } from '../library/runtimeUi.js';
+
 const AVATARSDK_BASE_URL = 'https://api.avatarsdk.com';
 
 function sleep(ms) {
@@ -66,7 +68,11 @@ class AvatarSdkService {
     const clientId = getEnv('VITE_AVATARSDK_CLIENT_ID');
     const clientSecret = getEnv('VITE_AVATARSDK_CLIENT_SECRET');
     if (!clientId || !clientSecret) {
-      throw new Error('AvatarSDK credentials are missing. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET.');
+      throw new Error(
+        isLocalDev
+          ? 'AvatarSDK credentials are missing. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET.'
+          : 'AvatarSDK is not configured on this deployment.',
+      );
     }
 
     const body = new URLSearchParams();

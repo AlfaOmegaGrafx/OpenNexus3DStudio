@@ -1,6 +1,6 @@
 # Preparing Assets
 
-After cloning and installing [Character Studio](https://github.com/m3-org/CharacterStudio), you will want to then copy your assets into the public folder and check the `.env` variable to ensure it's configured to the right location.
+After cloning and installing [OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio), you will want to then copy your assets into the public folder and check the `.env` variable to ensure it's configured to the right location.
 
 
 ---
@@ -128,4 +128,4 @@ Requirements:
 
 
 
-reference: https://hackmd.io/@XR/character-studio-overview
+reference: https://hackmd.io/@XR/opennexus3dstudio-overview

@@ -6,8 +6,13 @@ import {
   alignSkinnedMeshToRig,
   getBoneDisplayWorldPosition,
   getPrimarySkeletonBones,
+  getSkeletonJointSphereRadius,
+  SKELETON_JOINT_SPHERE_RADIUS,
   getSkinnedDisplayWorldBounds,
   getViewportLayoutBounds,
+  anchorModelFeetToFloor,
+  normalizeRiggedModelTransforms,
+  needsSkinnedMeshRigRepair,
   rebindSkinnedMeshes,
   updateSkeletonDisplayCorrection,
 } from '../library/rigBoneUtils.js';
@@ -33,6 +38,11 @@ describe('rigBoneUtils', () => {
     expect(rebound).toBe(1);
   });
 
+  it('uses a fixed joint sphere radius for every model', () => {
+    expect(getSkeletonJointSphereRadius()).toBe(SKELETON_JOINT_SPHERE_RADIUS);
+    expect(getSkeletonJointSphereRadius()).toBe(0.012);
+  });
+
   it('prefers active skinned skeleton bones for visualization', () => {
     const root = new THREE.Group();
     const bone = new THREE.Bone();
@@ -47,6 +57,25 @@ describe('rigBoneUtils', () => {
     const bones = getPrimarySkeletonBones(root);
     expect(bones).toHaveLength(1);
     expect(bones[0].name).toBe('Hips');
+  });
+
+  it('anchors mesh feet to y=0 when model is below the floor', () => {
+    const root = new THREE.Group();
+    const geometry = new THREE.BoxGeometry(0.4, 1.6, 0.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    skinned.position.set(0, -0.4, 0);
+    root.add(skinned);
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.4, 0);
+    skinned.add(hips);
+    skinned.bind(new THREE.Skeleton([hips]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    const shift = anchorModelFeetToFloor(root);
+    expect(shift).toBeGreaterThan(0);
+    const box = getSkinnedDisplayWorldBounds(skinned);
+    expect(box.min.y).toBeCloseTo(0, 2);
   });
 
   it('stores skeleton display offset without moving skinned mesh', () => {
@@ -74,7 +103,7 @@ describe('rigBoneUtils', () => {
     const display = new THREE.Vector3();
     getBoneDisplayWorldPosition(hips, root, display);
     expect(display.y).toBeLessThan(raw.y);
-    expect(display.y).toBeCloseTo(0.8, 0);
+    expect(display.y - raw.y).toBeCloseTo(root.userData.rigSkeletonDisplayOffset.y, 1);
   });
 
   it('unions mesh and bone bounds for viewport layout', () => {
@@ -219,5 +248,77 @@ describe('rigBoneUtils', () => {
     const hipsWorld = new THREE.Vector3();
     hips.getWorldPosition(hipsWorld);
     expect(hipsWorld.y).toBeCloseTo(1, 0);
+  });
+
+  it('runs mesh rig repair on preserved export when feet mismatch despite contract pass', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.fromAigc = true;
+    root.userData.aigcRigContract = { status: 'pass', failures: [] };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.5, 0);
+    const spine = new THREE.Bone();
+    spine.name = 'Spine';
+    spine.position.set(0, 0.8, 0);
+    hips.add(spine);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.4, 1.6, 0.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    skinned.position.set(0.25, 2.5, 0.1);
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips, spine]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    expect(needsSkinnedMeshRigRepair(root)).toBe(true);
+    normalizeRiggedModelTransforms(root, {
+      label: 'test-aigc-pass',
+      preserveExportedOrientation: true,
+    });
+    expect(skinned.position.y).toBeLessThan(2.5);
+    expect(root.userData.rigSkeletonDisplayOffset).toBeUndefined();
+  });
+
+  it('always repairs avatar-from-image skinned exports', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.avatarFromImage = true;
+    root.userData.aigcRigContract = { status: 'pass', failures: [] };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 1, 0);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.4, 1.6, 0.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    expect(needsSkinnedMeshRigRepair(root)).toBe(true);
+  });
+
+  it('skips armature mesh repair for uploaded VRM roots', () => {
+    const root = new THREE.Group();
+    root.userData.vrm = { meta: { metaVersion: '1' } };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 1, 0);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.4, 1.6, 0.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    skinned.position.set(0, 0, 0);
+    skinned.rotation.y = 0;
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    normalizeRiggedModelTransforms(root, { label: 'test-vrm' });
+    expect(skinned.rotation.y).toBe(0);
   });
 });

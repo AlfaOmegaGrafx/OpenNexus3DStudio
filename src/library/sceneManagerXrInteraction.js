@@ -11,6 +11,7 @@ import {
   ensureXrLocomotionRig,
 } from './sceneManagerXrLocomotion.js';
 import { SceneManagerXrTeleport } from './sceneManagerXrTeleport.js';
+import { SceneManagerXrMouseEmulation } from './sceneManagerXrMouseEmulation.js';
 import {
   isThumbstickTeleportAim,
   readRightThumbstickAxes,
@@ -34,6 +35,7 @@ export class SceneManagerXrInteraction {
     this.grab = new SceneManagerXrGrab(sceneManager);
     this.locomotion = new SceneManagerXrLocomotion(sceneManager);
     this.teleport = new SceneManagerXrTeleport(sceneManager);
+    this.mouseEmulation = new SceneManagerXrMouseEmulation(sceneManager);
     this._demoCube = null;
     this._lastFrameTime = 0;
     this._capabilityLogged = false;
@@ -57,6 +59,7 @@ export class SceneManagerXrInteraction {
     this._removeDemoGrabbable();
     this.grab.reset();
     this.input.reset();
+    this.mouseEmulation.reset();
     this.locomotion.reset();
     this.teleport.reset();
     this._capabilityLogged = false;
@@ -108,6 +111,7 @@ export class SceneManagerXrInteraction {
     const rightStick = readRightThumbstickAxes(right);
 
     this.grab.update(pointers);
+    this.mouseEmulation.update(pointers);
 
     const hasGrab = this.grab.hasActiveGrab();
     if (hasGrab) {
@@ -118,9 +122,8 @@ export class SceneManagerXrInteraction {
     }
 
     const skipRightTurn =
-      hasGrab ||
       this.teleport.isAiming() ||
-      isThumbstickTeleportAim(rightStick.y, rightStick.x);
+      (!hasGrab && isThumbstickTeleportAim(rightStick.y, rightStick.x));
     this.locomotion.update(deltaSeconds, pointers, { skipRightTurn });
   }
 

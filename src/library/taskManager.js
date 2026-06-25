@@ -211,7 +211,12 @@ export class TaskManager {
     try {
       const startTime = Date.now();
       let response;
-      const base = (this.apiEndpoint || '').replace(/\/$/, '');
+      const base = ensureAbsoluteUrl(normalizeApiBaseUrl(this.apiEndpoint || '')).replace(/\/$/, '');
+      if (!base) {
+        this.isConnected = false;
+        this.emit('connectionStatusChanged', { connected: false, endpoint: this.apiEndpoint });
+        return false;
+      }
       const healthCandidates = [
         `${base}/health`,
         `${base}/api/v1/system/health`
@@ -247,7 +252,7 @@ export class TaskManager {
           error.code === 'ERR_CONNECTION_REFUSED'
         ) {
           try {
-            response = await axios.get(`${this.apiEndpoint}/`, { 
+            response = await axios.get(`${base}/`, { 
               timeout: 3000,
               validateStatus: () => true // Accept any status
             });
@@ -1784,7 +1789,7 @@ export class TaskManager {
           error.code === 'ECONNABORTED' ||
           error.message?.includes('Network Error') ||
           error.response?.status >= 500;
-        if (attempts > 5 && isNetworkDown) {
+        if (attempts > 2 && isNetworkDown) {
           throw new Error(
             'Lost connection to the API while the job was running. ' +
               'The server may have restarted — check that the API and scheduler are online, then retry. ' +
@@ -2131,7 +2136,14 @@ export class TaskManager {
         `[TaskManager] Synced job ${jobId} (${mapped.type}): loadUrl=${loadUrl || 'none'}`,
       );
       if (existing) {
+        const wasRunning = existing.status === 'running' || existing.status === 'pending';
         Object.assign(existing, mapped);
+        if (wasRunning && mapped.status === 'failed') {
+          this.emit('taskFailed', {
+            task: existing,
+            error: mapped.error || jobStatus?.error || jobStatus?.message || 'Job failed',
+          });
+        }
         this.tasks.set(existing.id, existing);
       } else {
         this.tasks.set(mapped.id, mapped);

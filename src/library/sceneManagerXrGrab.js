@@ -148,7 +148,7 @@ export class SceneManagerXrGrab {
    * @param {import('./sceneManagerXrInput.js').XrPointerState[]} pointers
    */
   applyRightStickPlacement(stickY, deltaSeconds, pointers) {
-    const axis = applyDeadzone(stickY);
+    const axis = applyDeadzone(-stickY);
     if (axis === 0) return;
 
     for (const [hand, grab] of this.activeGrabs) {
@@ -208,10 +208,7 @@ export class SceneManagerXrGrab {
     for (const pointer of pointers) {
       const key = pointer.handedness;
       const grab = this.activeGrabs.get(key);
-      const holding =
-        grab &&
-        ((grab.mode === 'distance' && pointer.selectPressed) ||
-          (grab.mode === 'proximity' && pointer.squeezePressed));
+      const holding = grab && pointer.selectPressed;
 
       if (holding) {
         this._followPointerRay(grab, pointer);
@@ -226,41 +223,34 @@ export class SceneManagerXrGrab {
             object: hit.root,
             mode: 'distance',
           });
+        } else {
+          const near = this.findProximityTarget(pointer);
+          if (near) {
+            near.getWorldPosition(_worldPos);
+            const rayDistance = pointer.rayOrigin.distanceTo(_worldPos);
+            this.activeGrabs.set(key, {
+              object: near,
+              mode: 'proximity',
+              anchor: pointer.gripPosition.clone(),
+              rayDistance,
+              worldGrabDelta: pointer.gripPosition.clone().sub(_worldPos),
+            });
+            this.sceneManager.emit?.('xrGrabStart', {
+              handedness: key,
+              object: near,
+              mode: 'proximity',
+            });
+          }
         }
       }
 
-      if (pointer.squeezeStart && !this.activeGrabs.has(key)) {
-        const near = this.findProximityTarget(pointer);
-        if (near) {
-          near.getWorldPosition(_worldPos);
-          const rayDistance = pointer.rayOrigin.distanceTo(_worldPos);
-          this.activeGrabs.set(key, {
-            object: near,
-            mode: 'proximity',
-            anchor: pointer.gripPosition.clone(),
-            rayDistance,
-            worldGrabDelta: pointer.gripPosition.clone().sub(_worldPos),
-          });
-          this.sceneManager.emit?.('xrGrabStart', {
-            handedness: key,
-            object: near,
-            mode: 'proximity',
-          });
-        }
-      }
-
-      if ((pointer.selectEnd || pointer.squeezeEnd) && grab) {
-        if (
-          (grab.mode === 'distance' && pointer.selectEnd) ||
-          (grab.mode === 'proximity' && pointer.squeezeEnd)
-        ) {
-          this.activeGrabs.delete(key);
-          this.sceneManager.emit?.('xrGrabEnd', {
-            handedness: key,
-            object: grab.object,
-            mode: grab.mode,
-          });
-        }
+      if (pointer.selectEnd && grab) {
+        this.activeGrabs.delete(key);
+        this.sceneManager.emit?.('xrGrabEnd', {
+          handedness: key,
+          object: grab.object,
+          mode: grab.mode,
+        });
       }
 
       this._updatePointerVisual(scene, pointer);

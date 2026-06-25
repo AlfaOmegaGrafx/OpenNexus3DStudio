@@ -1,0 +1,12 @@
+# Graphify scope: app source + docs (skip deps and generated artifacts)
+node_modules/
+graphify-out/
+src/graphify-out/
+public/loot-assets/
+docs/node_modules/
+docs/build/
+dist/
+coverage/
+native/android-xr-face-bridge/app/build/
+MONETIZATION_ROADMAP.md
+MONETIZATION_ROADMAP_BACKUP.md
