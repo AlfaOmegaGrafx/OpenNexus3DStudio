@@ -16,11 +16,10 @@ OpenNexus3DStudio ships two deployment modes:
 
 `vercel.json` sets safe build-time flags only:
 
-- `VITE_PUBLIC_DEMO=1` — hides API status panel; shows user-friendly “no AI backend” copy.
+- `VITE_PUBLIC_DEMO=1` — hides API status panel; shows user-friendly “no AI backend” copy; **XR Voice sidebar** shows a static demo preview (no DGX iframe).
 - `VITE_ASSET_PATH=https://m3-org.github.io/loot-assets/` — CDN loot assets (no full clone in CI).
-- `VITE_XR_HUB_URL=https://dgx-spark.tail6121eb.ts.net:8088` — **XR Voice sidebar** (Tailscale Funnel to DGX Spark hub). Public HTTPS URL only — **not** a secret. Do **not** put `MSF_EDIT_KEY`, API keys, or LAN IPs here.
 
-The XR Voice panel appears in the left sidebar when `VITE_XR_HUB_URL` is set (`XrAiPanel.jsx`). Mic/camera run inside the iframe against the Spark hub; full AI task adoption still needs a connected 3DAIGC API (local dev only — do not expose `VITE_3DAIGC_API_KEY` on Vercel).
+The XR Voice panel appears at the **top of the left sidebar** when `VITE_PUBLIC_DEMO=1` (`XrAiPanel.jsx`). It is a visual demo only on Vercel — mic/camera and task handoff require local dev + DGX Spark.
 
 ### Do **not** set on Vercel
 
@@ -47,9 +46,7 @@ These are inlined into the browser bundle (`import.meta.env.VITE_*`):
 | `VITE_THIRDWEB_CLIENT_ID` | Public wallet client id |
 | `VITE_AVATARSDK_CLIENT_ID` | Public AvatarSDK client id (no secret) |
 | `VITE_JOB_STATUS_PATH` | Only if you expose a **public** API URL |
-| `VITE_XR_HUB_URL` | Public Tailscale Funnel URL to XR Spark hub (`:8088` on DGX funnel host) — enables sidebar panel |
-| `VITE_MSF_PUBLIC_URL` | Public Tailscale Funnel URL for Scene Assembler (`:443` root on funnel host) |
-| `VITE_RP1_COMPANY_ID` | Public RP1 company slug (e.g. `spacetimefabric`) — not a secret |
+| `VITE_XR_HUB_URL` | Local dev / self-hosted only — live Spark hub iframe (not used on Vercel public demo) |
 
 ## Local development (unchanged)
 
@@ -70,7 +67,6 @@ VITE_JOB_STATUS_PATH=api/v1/system/jobs
 # Simulate Vercel (no local .env loaded)
 VERCEL=1 CI=1 VITE_PUBLIC_DEMO=1 \
   VITE_ASSET_PATH=https://m3-org.github.io/loot-assets/ \
-  VITE_XR_HUB_URL=https://dgx-spark.tail6121eb.ts.net:8088 \
   npm run build
 ```
 

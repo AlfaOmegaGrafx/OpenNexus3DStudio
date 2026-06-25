@@ -59,7 +59,19 @@ export function getXrHubEmbedUrl() {
   return '';
 }
 
+/** Vercel / public demo — static sidebar preview, no live DGX iframe. */
+export function isXrVoicePublicDemo() {
+  return import.meta.env.VITE_PUBLIC_DEMO === '1';
+}
+
+/** Whether the sidebar should embed the live Spark hub (local dev + configured hub only). */
+export function useXrHubLiveEmbed() {
+  if (isXrVoicePublicDemo()) return false;
+  return Boolean(getXrHubEmbedUrl());
+}
+
 export function showXrAiPanel() {
+  if (isXrVoicePublicDemo()) return true;
   return Boolean(getXrHubEmbedUrl());
 }
 

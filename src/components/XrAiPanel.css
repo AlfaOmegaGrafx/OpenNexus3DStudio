@@ -56,6 +56,11 @@
   background: rgba(248, 113, 113, 0.12);
 }
 
+.xr-ai-status-badge.demo {
+  color: #93c5fd;
+  background: rgba(147, 197, 253, 0.14);
+}
+
 .xr-ai-panel-popout {
   min-width: 28px;
   width: 28px;
@@ -105,4 +110,75 @@
   min-height: 400px;
   border: none;
   background: #f2f2f7;
+}
+
+.xr-ai-demo-preview {
+  margin: 0 0.35rem 0.45rem;
+  padding: 0.85rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #4a5568;
+  background: linear-gradient(160deg, #1a2332 0%, #121820 100%);
+  color: #e2e8f0;
+}
+
+.xr-ai-demo-hero {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.xr-ai-demo-mic {
+  font-size: 1.75rem;
+  line-height: 1;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.xr-ai-demo-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.xr-ai-demo-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.62rem;
+  color: #94a3b8;
+}
+
+.xr-ai-demo-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+
+.xr-ai-demo-bubble {
+  font-size: 0.62rem;
+  line-height: 1.45;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.xr-ai-demo-bubble-user {
+  align-self: flex-end;
+  background: rgba(59, 130, 246, 0.22);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #dbeafe;
+}
+
+.xr-ai-demo-bubble-agent {
+  align-self: flex-start;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  color: #cbd5e1;
+}
+
+.xr-ai-demo-footnote {
+  margin: 0;
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: #64748b;
+  text-align: center;
 }

@@ -40,6 +40,7 @@ import {
   AI_BACKEND_UNAVAILABLE_MSG,
   canBrowseAiTaskCatalog,
   dispatchOpenTaskCatalog,
+  isPublicDemo,
 } from './library/runtimeUi.js';
 
 // Import OpenNexus3DStudio avatar panels (Appearance, Save, Mint, Load, Tools)
@@ -1481,6 +1482,11 @@ function AppContent() {
           {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
             <>
+          {isPublicDemo && showXrAiPanel() && (
+          <div ref={xrAiPanelRef}>
+            <XrAiPanel isApiConnected={isConnected} />
+          </div>
+          )}
           <BlendShapeController 
             sceneManager={sceneManager}
             characterManager={characterManager}
@@ -1507,11 +1513,11 @@ function AppContent() {
             onTestConnection={forceConnectionCheck}
           />
           )}
+          {!isPublicDemo && showXrAiPanel() && (
           <div ref={xrAiPanelRef}>
-            {showXrAiPanel() && (
-              <XrAiPanel isApiConnected={isConnected} />
-            )}
+            <XrAiPanel isApiConnected={isConnected} />
           </div>
+          )}
           <TaskManager 
             tasks={tasks}
             onAITask={handleAITask}

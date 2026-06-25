@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildXrHubEmbedUrl, getXrHubEmbedUrl, showXrAiPanel } from '../library/xrHubConfig.js';
+import {
+  buildXrHubEmbedUrl,
+  getXrHubEmbedUrl,
+  isXrVoicePublicDemo,
+  showXrAiPanel,
+  useXrHubLiveEmbed,
+} from '../library/xrHubConfig.js';
 
 describe('xrHubConfig', () => {
   afterEach(() => {
@@ -29,5 +35,13 @@ describe('xrHubConfig', () => {
     if (!import.meta.env.DEV) return;
     expect(getXrHubEmbedUrl()).toBe('https://10.0.0.32:8443/');
     expect(showXrAiPanel()).toBe(true);
+  });
+
+  it('shows panel on Vercel public demo without hub URL', () => {
+    vi.stubEnv('VITE_PUBLIC_DEMO', '1');
+    vi.stubEnv('VITE_XR_HUB_URL', '');
+    expect(isXrVoicePublicDemo()).toBe(true);
+    expect(showXrAiPanel()).toBe(true);
+    expect(useXrHubLiveEmbed()).toBe(false);
   });
 });
