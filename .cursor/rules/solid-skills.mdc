@@ -1,0 +1,31 @@
+---
+description: Apply solid-skills (SOLID, clean code, architecture) when writing, refactoring, or reviewing code
+alwaysApply: false
+---
+
+# Solid Skills — OpenNexus3DStudio
+
+Project skill: `.agents/skills/solid/` ([ramziddin/solid-skills](https://github.com/ramziddin/solid-skills)). Lock: `skills-lock.json`.
+
+## When to apply
+
+Use on **new modules**, **refactors**, **architecture**, **code review**, and **non-trivial features** — not on log reads, sync, server ops, or one-line fixes.
+
+## Stack overrides (skill is TypeScript/NestJS-biased)
+
+| Layer | Apply as |
+|-------|----------|
+| Frontend | React 19 + Vite; hooks/components in `src/`; Vitest for unit tests |
+| API client | Thin adapters (`taskManager.js`, `spatialFabricAdapter.js`); no business logic in JSX |
+| 3D/XR | Keep Three.js/IWSDK concerns in library modules, not scattered in UI |
+
+## Project rules win over skill defaults
+
+1. **Minimize scope** — smallest correct diff; no drive-by refactors.
+2. **Tests** — add when requested or when they cover real behavior; full TDD for new isolated modules, not every hotfix.
+3. **Legacy** — do not split large files to hit “&lt;50 lines per class” unless the task is explicitly a refactor.
+4. **Complementary changes** — API contract edits need matching `3DAIGC-API` updates (see workflow rule).
+
+## Prefer from the skill
+
+SOLID at adapter boundaries, meaningful names, code-smell fixes in touched code, dependency inversion for new services, vertical slices for new features.

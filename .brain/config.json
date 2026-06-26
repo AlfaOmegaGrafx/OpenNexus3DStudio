@@ -1,0 +1,13 @@
+{
+  "gitTracking": true,
+  "autoSync": true,
+  "agents": [
+    "claude",
+    "cursor",
+    "codex",
+    "gemini",
+    "copilot",
+    "windsurf"
+  ],
+  "maxLogEntries": 50
+}
