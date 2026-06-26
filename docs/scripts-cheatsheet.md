@@ -1,6 +1,6 @@
 # Scripts & terminal commands cheat sheet
 
-*Last updated: 2026-06-21 — incremental sync both directions (`sync-changes-to-dgx.ps1`, `sync-changes-to-pc.sh`).*
+*Last updated: 2026-06-25 — animation playback QA (bone audit, animSmoke).*
 
 **How to read:** Every block says **machine**, **folder to open first**, **command**, and **what it does**.
 
@@ -160,6 +160,27 @@ Port **3000** runs on Surface, not on DGX.
 | `https://10.0.0.32:3000/?xrDebugInputs=1&remoteLog=1` | XR input debug |
 
 Append `&v=2` to bust headset cache after deploy.
+
+### Animation playback QA (Surface — Vite must be running on :3000)
+
+| Task | Command |
+|------|---------|
+| Canned Mixamo smoke (VRM hips move) | `npm run test:anim-smoke` |
+| Bone audit — Walking + Kimodo (Playwright) | `npm run test:bone-audit` |
+| Kimodo job for audit | `set MOTION_JOB_ID=JOB_UUID&& npm run test:bone-audit` |
+| Anim regression unit tests | `npm run test:anim-regression` |
+| Manual browser hooks | Open `https://10.0.0.32:3000/?animSmoke=1` then DevTools → `await __csAnimSmoke.auditBones()` |
+
+Optional env: `ANIM_SMOKE_URL=https://10.0.0.32:3000` (default LAN HTTPS origin).
+
+**From DGX** (SSH to Surface and run in repo):
+
+```bash
+ssh Surface-PC-Tailscale "cd C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio && npm run test:anim-smoke"
+ssh Surface-PC-Tailscale "cd C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio && set MOTION_JOB_ID=90cc20fe-da7d-4175-8601-f40e1819515e&& npm run test:bone-audit"
+```
+
+**Eagle Knight (SkinTokens GLB):** job `79a9f3d5-10e3-4ba0-9b7f-593aa6191455` — `skintokens_tokenrig_cli`, skeleton `bone_0`…`bone_51`. Do **not** apply VRM0 quat axis fix on SkinTokens (causes reversed limbs). VRM canned + Kimodo locked via `npm run test:anim-regression` (`vrmPlaybackLock.test.js`).
 
 ---
 

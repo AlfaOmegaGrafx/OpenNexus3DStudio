@@ -19,7 +19,8 @@
         "eslint-plugin-no-inline-styles"
     ],
     "rules": {
-        "react/prop-types": "off"
+        "react/prop-types": "off",
+        "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
     },
     "ignorePatterns": ["node_modules/*", "*.png", "character-assets/"]
 }

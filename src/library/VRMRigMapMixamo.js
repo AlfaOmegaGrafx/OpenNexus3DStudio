@@ -55,3 +55,8 @@ export const VRMRigMapMixamo = {
 	mixamorigRightFoot: 'rightFoot',
 	mixamorigRightToeBase: 'rightToes',
 };
+
+/** VRM humanoid bone name → Mixamo rig name (for GLB / UniRig retarget). */
+export const VRMHumanoidToMixamo = Object.fromEntries(
+	Object.entries(VRMRigMapMixamo).map(([mixamo, humanoid]) => [humanoid, mixamo]),
+);

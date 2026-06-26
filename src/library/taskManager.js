@@ -16,6 +16,7 @@ import {
   enrichCompletedJobPayload,
   extractJobProgress,
   getTaskResultModelUrl,
+  isTextToMotionTaskResult,
   resolveTaskModelUrl,
 } from './taskModelUrl.js';
 import {
@@ -28,7 +29,6 @@ import {
 import {
   buildTaskDisplayName,
   normalizeObjectName,
-  slugifyObjectName,
   withObjectNamePayload,
 } from './objectNameUtils.js';
 import {
@@ -196,6 +196,7 @@ export class TaskManager {
       'avatar-from-image',
       'avatar-from-photo',
       'image-to-world',
+      'text-to-motion',
     ];
   }
 
@@ -487,7 +488,8 @@ export class TaskManager {
           task.type === 'image-to-3d' ||
           task.type === 'image-to-splat' ||
           task.type === 'avatar-from-image' ||
-          task.type === 'image-to-world'
+          task.type === 'image-to-world' ||
+          task.type === 'text-to-motion'
             ? { maxAttempts: 600, pollInterval: 3000 }
             : {};
         const pollIntervalMs = pollOptions.pollInterval ?? 3000;
@@ -513,13 +515,20 @@ export class TaskManager {
           );
           this.updateTaskStatus(taskId, 'completed', 100, completedResult);
           this.emit('taskCompleted', { task: this.tasks.get(taskId), result: completedResult });
-          const modelUrl = getTaskResultModelUrl(completedResult);
+          const isMotionTask = task.type === 'text-to-motion';
+          const modelUrl = isMotionTask ? null : getTaskResultModelUrl(completedResult);
           const isWorldTask =
             task.type === 'image-to-world' ||
             completedResult.pipelineStage === 'world_package' ||
             completedResult.feature === 'image_to_world';
-          if (modelUrl || isWorldTask) {
-            const taskRow = this.tasks.get(taskId);
+          const taskRow = this.tasks.get(taskId);
+          if (isMotionTask) {
+            window.dispatchEvent(
+              new CustomEvent('taskCompleted', {
+                detail: { taskId, task: taskRow, result: completedResult },
+              }),
+            );
+          } else if (modelUrl || isWorldTask) {
             console.log('Auto-loading task result:', {
               modelUrl,
               isWorldTask,
@@ -729,6 +738,8 @@ export class TaskManager {
         return await this.executeAvatarFromImage(prompt, imageFile, options);
       case 'image-to-world':
         return await this.executeImageToWorld(prompt, imageFile, options);
+      case 'text-to-motion':
+        return await this.executeTextToMotion(prompt, options);
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
@@ -766,6 +777,34 @@ export class TaskManager {
     } catch (error) {
       performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, error.response?.status ?? 0, error);
       logger.error('Text-to-3D task failed', error, { prompt, endpoint });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute text-to-motion (Kimodo → studio_motion.json for uploaded VRM).
+   */
+  async executeTextToMotion(prompt, options) {
+    const endpoint = `${this.apiEndpoint}/api/v1/motion-generation/text-to-motion`;
+    const requestData = withObjectNamePayload({
+      text_prompt: prompt,
+      duration: options?.duration ?? 5,
+      output_format: 'studio_motion',
+      model_preference: options?.model_preference ?? 'kimodo_text_to_motion',
+      model_parameters: options?.model_parameters,
+    }, options);
+
+    const startTime = Date.now();
+    try {
+      const response = await axios.post(endpoint, requestData, {
+        headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+        timeout: 120000,
+      });
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, response.status);
+      return response.data;
+    } catch (error) {
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, error.response?.status ?? 0, error);
+      logger.error('Text-to-motion task failed', error, { prompt, endpoint });
       throw error;
     }
   }
@@ -1990,6 +2029,22 @@ export class TaskManager {
   }
 
   _dispatchAutoLoadIfNeeded(task, completedResult, source = 'taskCompleted') {
+    if (
+      task?.type === 'text-to-motion' ||
+      isTextToMotionTaskResult(completedResult)
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('taskCompleted', {
+          detail: {
+            taskId: task?.id,
+            task,
+            result: completedResult,
+            source,
+          },
+        }),
+      );
+      return;
+    }
     const modelUrl = getTaskResultModelUrl(completedResult);
     const isWorldTask =
       task?.type === 'image-to-world' ||

@@ -2,35 +2,42 @@ import { getFileNameWithoutExtension } from './utils';
 import {
   LOOT_DEFAULT_ANIMATIONS,
   normalizeLootAssetUrl,
-  resolveMainManifestUrl,
 } from './lootAssetsConfig';
+
+/**
+ * @param {Array<{ name?: string, location?: string, description?: string }>} rows
+ * @returns {Array<{ name: string, path: string }>}
+ */
+function mapAnimationEntries(rows) {
+  const seen = new Set();
+  /** @type {Array<{ name: string, path: string }>} */
+  const out = [];
+  for (const entry of rows) {
+    const name = entry.name || getFileNameWithoutExtension(entry.location || '');
+    const path = normalizeLootAssetUrl(entry.location || '', name);
+    if (!path) continue;
+    const key = path.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, path });
+  }
+  return out;
+}
+
+/**
+ * Canonical studio animation bar clips (numbered Mixamo FBX on loot-assets CDN).
+ * Upstream main manifest `defaultAnimations` often lists wrong filenames (Walking.fbx vs 3_Walking.fbx).
+ * @returns {Array<{ name: string, path: string }>}
+ */
+export function resolveCanonicalStudioAnimationEntries() {
+  return mapAnimationEntries(LOOT_DEFAULT_ANIMATIONS);
+}
 
 /**
  * @returns {Promise<Array<{ name: string, path: string }>>}
  */
 async function resolveStudioAnimationEntries() {
-  const mapEntries = (rows) =>
-    rows
-      .map((entry) => ({
-        name: entry.name || getFileNameWithoutExtension(entry.location || ''),
-        path: normalizeLootAssetUrl(entry.location || ''),
-      }))
-      .filter((e) => e.path);
-
-  for (const manifestUrl of [resolveMainManifestUrl(), '/manifest.json']) {
-    try {
-      const res = await fetch(manifestUrl, { cache: 'no-store' });
-      if (!res.ok) continue;
-      const manifest = await res.json();
-      const entries = Array.isArray(manifest?.defaultAnimations) ? manifest.defaultAnimations : [];
-      const mapped = mapEntries(entries);
-      if (mapped.length) return mapped;
-    } catch {
-      /* try next source */
-    }
-  }
-
-  return mapEntries(LOOT_DEFAULT_ANIMATIONS);
+  return resolveCanonicalStudioAnimationEntries();
 }
 
 /**
@@ -58,7 +65,8 @@ export async function loadStudioDefaultAnimations(animationManager) {
     animationManager.curLoadAnim = 0;
     animationManager._studioDefaultsLoaded = true;
 
-    const first = animationManager._studioAnimationEntries.find((e) => !/t-?pose/i.test(e.name))
+    const first =
+      animationManager._studioAnimationEntries.find((e) => /t-?pose/i.test(e.name))
       ?? animationManager._studioAnimationEntries[0];
     animationManager.curLoadAnim = animationManager._studioAnimationEntries.indexOf(first);
     if (animationManager.curLoadAnim < 0) animationManager.curLoadAnim = 0;
@@ -92,15 +100,16 @@ export async function loadStudioDefaultAnimations(animationManager) {
  */
 export function loadStudioAnimationAtIndex(animationManager, index) {
   const entries = animationManager._studioAnimationEntries;
-  const paths = animationManager.animationPaths;
-  if (!paths?.length) return Promise.resolve();
+  if (!entries?.length) return Promise.resolve();
 
-  const safeIndex = ((index % paths.length) + paths.length) % paths.length;
+  const safeIndex = ((index % entries.length) + entries.length) % entries.length;
   animationManager.curLoadAnim = safeIndex;
 
-  const path = paths[safeIndex];
-  const entry = entries?.[safeIndex];
-  const name = entry?.name || getFileNameWithoutExtension(path);
+  const entry = entries[safeIndex];
+  const path = entry?.path;
+  if (!path) return Promise.resolve();
+
+  const name = entry.name || getFileNameWithoutExtension(path);
   const isPose = /t-?pose/i.test(name);
 
   return animationManager.loadAnimation(
@@ -110,5 +119,11 @@ export function loadStudioAnimationAtIndex(animationManager, index) {
     path.endsWith('.fbx'),
     '',
     name,
-  );
+  ).then(() => {
+    animationManager.triggerPrimarySync?.();
+    if (!isPose) {
+      animationManager.play();
+      animationManager.setSpeed(1);
+    }
+  });
 }

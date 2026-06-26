@@ -1,6 +1,6 @@
 # OpenNexus3DStudio: SPACE-TIME EDITION
 
-[![Apache2.0 License](https://img.shields.io/badge/license-Apache2.0-green.svg)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Cross-Platform](https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Web%20%7C%20XR-blue)](#)
 
 **OpenNexus3DStudio: SPACE-TIME EDITION** is a unified 3D AIGC application with advanced WebXR support. It combines legacy **Open3DStudio** capabilities with **OpenNexus3DStudio** (WebXR, WebGPU, blockchain) and integrated **VRM avatar authoring** (appearance traits, animation, mint/export). It works closely with the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
@@ -9,7 +9,7 @@
 
 **Goals & structure**: The [roadmap](docs/docs/history.md#roadmap) includes connecting wallet to load profiles or mint files and AI personality features. OpenNexus3DStudio uses a **soulbound base body** VRM (non-transferable) and **equippable** wearables/traits; programmatic avatar configuration from owned wallet assets is in progress (see [Create an Avatar](docs/docs/General/create-an-avatar.md#configure-programmatically) and [Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)). Technical and product roadmaps are detailed in the docs (e.g. [Technical Roadmap: RPM Migration](docs/TECHNICAL_ROADMAP_RPM_MIGRATION.md)).
 
-The supported workflows include text-to-3d, image-to-3d, mesh segmentation, texture generation, auto-rigging, part completion, VRM model optimization, avatar trait customization, animation, and more.
+The supported workflows include text-to-3D, image-to-3D, mesh painting, segmentation, retopology, UV unwrapping, VoxHammer editing, auto-rigging, Gaussian splats, explorable worlds, avatar-from-image, spatial-fabric publish (RP1/OMB), VRM optimization, trait customization, animation, and more.
 
 ## Demo 
 Browse the [screenshot & demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7) or clone and build from [github.com/AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) (desktop: `npm run dist-mac` / `dist-win` / `dist-linux`).
@@ -30,18 +30,37 @@ Import the GitHub repo in Vercel; no `VITE_API_ENDPOINT` required for the public
 
 ## 🚀 Core Principles
 - **All Local**: No data leaves your device. 
-- **Open Source**: Apache2.0 licensed.
+- **Open Source**: MIT licensed (see [LICENSE](LICENSE); **Space-Time** brand assets are reserved — see Legal below).
 - **Cross-Platform**: Desktop (Windows/MacOS), Web, and XR (VR/AR)
 - **WebXR Ready**: Full VR/AR support with floor anchoring and pass-through modes
 
 ## 🧩 Supported 3DAIGC Modules
-* Mesh Generation: text / image conditioned
-* Mesh Painting: text / image conditioned 
-* Mesh Segmentation
-* Part Completion
-* Auto Rigging
 
-The available models are up to the API backend, refer to [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) for the example model matrix
+Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) on DGX Spark (`:7842`). Live model list: `GET /api/v1/system/models` — mirrored in [`src/library/aiModelsCatalog.js`](src/library/aiModelsCatalog.js).
+
+| Task | API feature | Example models (DGX, Jun 2026) |
+|------|-------------|--------------------------------|
+| Text to 3D | `text_to_textured_mesh` | TRELLIS |
+| Image to 3D | `image_to_textured_mesh` | **TRELLIS.2** (recommended), Pixal3D (PBR), Hunyuan3D-2.1 |
+| Image to Raw Mesh | `image_to_raw_mesh` | Hunyuan3D-2.1, UltraShape |
+| Mesh painting (text / image) | `text_mesh_painting` / `image_mesh_painting` | TRELLIS.2, Hunyuan |
+| Mesh segmentation | `mesh_segmentation` | P3-SAM |
+| Mesh retopology | `mesh_retopology` | Instant Meshes |
+| Mesh UV unwrapping | `uv_unwrapping` | xatlas |
+| Mesh editing (text / image) | `text_mesh_editing` / `image_mesh_editing` | VoxHammer |
+| Auto rigging | `auto_rig` | **SkinTokens** (full GLB, recommended), UniRig (template VRM) |
+| Image to Gaussian Splat | `image_to_splat` | TripoSplat (1 photo), WorldMirror 2.0 (2+), COLMAP (3+) |
+| Image to World | `image_to_world` | `opennexus_image_to_world` (splat env + optional TRELLIS.2 props) |
+| Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig template rig → GLB |
+| Avatar From Photo | client only | AvatarSDK (not 3DAIGC-API) |
+
+**Also shipped (client + API):**
+
+- **Multi-image input** — primary + up to 7 reference photos on splat, world, and avatar tasks ([`docs/MULTI_IMAGE_SPLAT_ROADMAP.md`](docs/MULTI_IMAGE_SPLAT_ROADMAP.md))
+- **Publish RP1 / OMB validate** — mesh jobs → spatial fabric via MSF Map Service ([`docs/SPATIAL_FABRIC_INTEGRATION.md`](docs/SPATIAL_FABRIC_INTEGRATION.md))
+- **Job handoff** — chain completed jobs into rig, world, or export (`jobHandoff.js`)
+
+**Not in UI:** “Part completion” (legacy upstream docs only). **License-blocked** on commercial tiers: PartField, PartPacker, FastMesh — see [3DAIGC-API `MODEL_LICENSES.md`](https://github.com/AlfaOmegaGrafx/3DAIGC-API/blob/main/docs/MODEL_LICENSES.md).
 
 ## Gaussian splats (3DGS)
 
@@ -51,9 +70,12 @@ Gaussian splats live in **this app** — same `SceneManager` viewport as VRM and
 
 | Capability | Client | API (DGX) |
 |------------|--------|-----------|
-| Splat preview in viewport | `SplatMesh` alongside VRM/meshes | `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) |
-| World package load | **World Library** + `worldSceneLoader.js` | `POST /api/v1/world-generation/image-to-world` |
-| Avatar + optional splat | **Avatar from Image** + “Gaussian splat preview” checkbox | mesh + template rig + parallel TripoSplat |
+| Splat preview in viewport | `SplatMesh` alongside VRM/meshes | `POST /api/v1/splat-generation/image-to-splat` |
+| **1 photo** → splat | Task Manager multi-select (primary photo) | **TripoSplat** |
+| **2+ photos** → splat | Same; mark best front view as **Primary** | **WorldMirror 2.0** (COLMAP fallback at 3+) |
+| World package load | **World Library** + `worldSceneLoader.js` | `POST /api/v1/world-generation/image-to-world` (`opennexus_image_to_world`) |
+| Avatar + optional splat | **Avatar from Image** + “Gaussian splat preview” checkbox | TRELLIS.2 mesh + UniRig template rig + optional TripoSplat |
+| Multi-image uploads | `multiImageInput.js` on splat / world / avatar tasks | `image_file_id` + `reference_image_file_ids` (up to 8 total) |
 
 Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in the New Task panel (`TaskManager.jsx`).
 
@@ -65,17 +87,18 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
 ### Where it lives (architecture)
 
 ```text
-[DGX 3DAIGC-API]  TripoSplat, image-to-world, avatar mesh/rig jobs
+[DGX 3DAIGC-API]  TripoSplat, WorldMirror/COLMAP, image-to-world, avatar mesh/rig jobs
        ↓
 [OpenNexus3DStudio /]  SceneManager — one renderer, one WebXR session, VRM + tools
        ↓                  SparkRenderer + SplatMesh in the same scene as avatars
-[Future XR worlds]       IWSDK Option A interaction + world packages (not a second app)
+[OMB / RP1 publish]    spatial-fabric validate + MSF Scene Assembler (mesh props)
 ```
 
 `/xr` remains an **IWSDK lab** for grab/locomotion regression; the **main app** (`/`) runs IWSDK Option A on SceneManager — distance/proximity grab (trigger), grip → context menu / pan, thumbstick locomotion — alongside loaded splat worlds and VRM.
 
 **Further reading**
 
+- [Multi-image splat & avatar roadmap](docs/MULTI_IMAGE_SPLAT_ROADMAP.md) — 1 vs 2–8 photo routing
 - [NVIDIA XR AI + 3DAIGC (DGX)](docs/NVIDIA_XR_AI_INTEGRATION.md) — voice VLM → mesh jobs on Galaxy XR
 - [Dev machine topology](docs/DEV_MACHINE_TOPOLOGY.md) — Surface + DGX Spark roles, incremental sync, Galaxy XR URLs
 - [World package format](docs/WORLD_PACKAGE.md) — splats, props, Redis rehydrate for image-to-world jobs
@@ -104,7 +127,9 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
   - **WebXR expression tracking** when the browser exposes `expression-tracking` (VRM blink / mouth)
   - **Native face relay** when it does not — companion APK + dev-server ingest (see [OpenXR face tracking](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md))
 - **IWSDK immersive lab** (`/xr`): Meta [Immersive Web SDK](https://iwsdk.dev/) route for locomotion, grab, and spatial interaction experiments — separate from main VRM authoring; validated on **Galaxy XR** at `https://<your-PC-LAN-IP>:3000/xr` ([integration guide](docs/IWSDK_INTEGRATION.md))
-- **Gaussian splats (3DGS)**: Spark.js splat rendering in the main viewport (`SceneManager`); TripoSplat and world packages from **3DAIGC-API**; **WebXR grab + locomotion on `/`** (distance/proximity grab, thumbstick move/turn) with worlds + VRM in one session — see [Gaussian splats (3DGS)](#gaussian-splats-3dgs)
+- **Gaussian splats (3DGS)**: Spark.js splat rendering in the main viewport (`SceneManager`); TripoSplat, WorldMirror, COLMAP, and world packages from **3DAIGC-API**; **WebXR grab + locomotion on `/`** (distance/proximity grab, thumbstick move/turn) with worlds + VRM in one session — see [Gaussian splats (3DGS)](#gaussian-splats-3dgs)
+- **Spatial fabric (RP1 / OMB)**: **Publish RP1** on completed mesh tasks; **Validate OMB tier** on GLB export; explore in Open Metaverse Browser–compatible fabrics — [`docs/SPATIAL_FABRIC_INTEGRATION.md`](docs/SPATIAL_FABRIC_INTEGRATION.md)
+- **XR AI panel**: `XrAiPanel` + `xrHubConfig.js` — in-app hub status and handoff to DGX **xr-ai** / MCP (parallel to voice-only stack)
 - **WebGPU Rendering**: Automatic WebGPU detection with WebGL fallback
 - **Advanced Post-Processing**: SSAO (Screen Space Ambient Occlusion), Bloom effects, FXAA anti-aliasing
 - **Spatial Audio**: PositionalAudio support for immersive audio experiences
@@ -158,6 +183,9 @@ npm run dev
 # Optional: IWSDK PC emulator stack (localhost smoke tests only — not a substitute for headset)
 npm run dev:iwsdk
 
+# Optional: MSF + XR hub proxies for Galaxy XR LAN testing (with DGX xr-ai / MSF_Map_Svc)
+npm run dev:spark-proxies
+
 # Desktop development mode
 npm run electron-dev
 # Electron app launches automatically
@@ -208,7 +236,7 @@ WebXR (VR/AR) requires HTTPS to work. For local development:
 
 **Galaxy XR tips:** Use **https** (not http). Add your PC LAN IP to the cert (e.g. `mkcert localhost 127.0.0.1 10.0.0.32`). On `/xr`, do a **full page reload** before Enter VR (hot reload can drop the XR session). Headset console output is forwarded to `logs/remote-log.txt` in dev (`?remoteLog=1` or APK “Open in Chrome” adds it). See [HTTPS setup](docs/HTTPS_SETUP.md) and [IWSDK integration](docs/IWSDK_INTEGRATION.md).
 
-**Face tracking on Galaxy XR:** Use the **main app** (`/`), not `/xr`. If Chrome does not grant WebXR expression APIs, install the [**CS XR Face** APK](native/android-xr-face-bridge/README.md), run `npm run dev`, open **⋮ → Open in Chrome for WebXR (+ face)** — [OpenXR / Android XR face docs](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md). APK currently uses **Jetpack XR only** (`OPENXR_ENABLED=false`); OpenXR face is preserved for a future runtime.
+**Face tracking on Galaxy XR:** Use the **main app** (`/`), not `/xr`. If Chrome does not grant WebXR expression APIs, install the [**OpenNexus XR Face** APK](native/android-xr-face-bridge/README.md), run `npm run dev`, open **⋮ → Open in Chrome for WebXR (+ face)** — [OpenXR / Android XR face docs](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md). APK currently uses **Jetpack XR only** (`OPENXR_ENABLED=false`); OpenXR face is preserved for a future runtime.
 
 ### Building
 
@@ -224,9 +252,12 @@ npm run dist-linux  # Linux
 
 ### API Backend Setup
 
-1. Clone and setup the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend
-2. Start the API server (usually on port 8000)
-3. Update the API endpoint in OpenNexus3DStudio if needed
+1. Clone and setup the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend (Spacetime fork on **DGX Spark**, default port **`:7842`**)
+2. Start the API server (`scripts/run_server.sh` on DGX; requires Redis)
+3. Point OpenNexus3DStudio at the API:
+   - **Direct:** `VITE_API_ENDPOINT=http://<api-host>:7842` in `.env`
+   - **Surface HTTPS dev (recommended):** `VITE_API_ENDPOINT=/__dev_dgx_proxy` — Vite proxies to DGX (see [Dev machine topology](docs/DEV_MACHINE_TOPOLOGY.md))
+4. Confirm models: `curl http://<api-host>:7842/api/v1/system/models` — should list **22** enabled models across **13** features (Jun 2026)
 
 ### OpenNexus3DStudio Asset Setup
 
@@ -288,7 +319,7 @@ OpenNexus3DStudio requires asset packs for avatar traits. You can:
 - **3D Rendering Modes**: Solid, Rendered, Wireframe, Skeleton, Part Colorize
 - **File Support**: GLB, GLTF, OBJ, FBX, DAE, STL, VRM formats
 - **Images**: JPG, PNG, BMP, TGA (for image-to-3D workflows)
-- **AI Workflows**: Text-to-3D, Image-to-3D, Mesh Painting, Mesh Segmentation, Part Completion, Auto Rigging
+- **AI Workflows**: Text-to-3D, Image-to-3D, Image-to-Raw-Mesh, Mesh Painting, Segmentation, Retopology, UV Unwrapping, VoxHammer Editing, Auto Rigging, Image-to-Splat, Image-to-World, Avatar-from-Image
 
 ### OpenNexus3DStudio Features
 - **WebXR Features**:
@@ -321,8 +352,8 @@ The application connects to a 3DAIGC-API backend. You can configure the endpoint
 
 ### Environment Variables
 ```env
-# API Configuration
-VITE_API_ENDPOINT=<your-api-server-url>
+# API Configuration (DGX Spark default :7842; Surface dev often uses /__dev_dgx_proxy)
+VITE_API_ENDPOINT=/__dev_dgx_proxy
 
 # AvatarSDK (photo -> avatar)
 # For production, route OAuth through backend if possible.
@@ -404,6 +435,8 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 - Task management and progress tracking
 
 ### OpenNexus3DStudio Documentation
+- [Spatial fabric / RP1](docs/SPATIAL_FABRIC_INTEGRATION.md) - Publish to OMB-compatible spatial fabric
+- [Multi-image splat roadmap](docs/MULTI_IMAGE_SPLAT_ROADMAP.md) - Primary + reference photos for splat/avatar
 - [Avatar pipeline (client)](docs/AVATAR_PIPELINE.md) - Photo → rigged GLB/VRM, optional splat preview, key client files
 - [IWSDK Option A Migration Blueprint](docs/IWSDK_OPTION_A_MIGRATION_BLUEPRINT.md) - IWSDK → main app migration; Spark world building stack
 - [IWSDK Integration](docs/IWSDK_INTEGRATION.md) - Meta Immersive Web SDK (`/xr` route, Galaxy XR testing, optional PC emulator)
@@ -433,7 +466,7 @@ Open3DStudio was the original foundation of this project, providing core 3D AIGC
 
 ## 📄 License
 
-**OpenNexus3DStudio: SPACE-TIME EDITION** is licensed under [Apache2.0 License](LICENSE). The code maintains continuity with the original Open3DStudio project while evolving as a unified 3D AIGC + avatar platform.
+**OpenNexus3DStudio: SPACE-TIME EDITION** is licensed under the [MIT License](LICENSE). The code maintains continuity with the original Open3DStudio project while evolving as a unified 3D AIGC + avatar platform.
 
 ## 🙏 Acknowledgments
 

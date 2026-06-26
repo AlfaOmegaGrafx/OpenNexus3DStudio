@@ -424,11 +424,15 @@ export function needsSkinnedMeshRigRepair(root) {
   if (!root || !modelHasSkinnedMesh(root)) return false;
   if (root.userData?.vrm || root.userData?.vrmNormalized) return false;
 
-  if (root.userData?.avatarFromImage || isTemplateRigExport(root)) {
+  const contract = root.userData?.aigcRigContract;
+  if (contract?.status === 'pass') return false;
+  if (contract?.status === 'fail') return true;
+
+  if (root.userData?.autoRigMeta?.rig_info?.validation?.passed === false) {
     return true;
   }
 
-  if (root.userData?.aigcRigContract?.status === 'fail') {
+  if (root.userData?.avatarFromImage || isTemplateRigExport(root)) {
     return true;
   }
 
@@ -890,10 +894,11 @@ export function normalizeRiggedModelTransforms(root, options = {}) {
     Boolean(root.userData?.preserveExportedOrientation);
 
   if (preserveExport) {
-    if (modelHasSkinnedMesh(root) && needsSkinnedMeshRigRepair(root)) {
+    if (needsSkinnedMeshRigRepair(root)) {
       alignSkinnedMeshToRig(root);
+      rebindSkinnedMeshes(root);
+      updateSkeletonDisplayCorrection(root);
     }
-    rebindSkinnedMeshes(root);
     anchorModelFeetToFloor(root);
     logRigAlignmentDiagnostics(root, options.label || 'viewport');
     return;
@@ -903,8 +908,9 @@ export function normalizeRiggedModelTransforms(root, options = {}) {
     options.trustApiExport === true || Boolean(root.userData?.fromAigc);
 
   if (trustApiExport) {
-    if (modelHasSkinnedMesh(root)) {
+    if (needsSkinnedMeshRigRepair(root)) {
       alignSkinnedMeshToRig(root);
+      rebindSkinnedMeshes(root);
     }
     anchorModelFeetToFloor(root);
   } else if (modelHasSkinnedMesh(root)) {

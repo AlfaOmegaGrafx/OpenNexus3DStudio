@@ -16,7 +16,11 @@ describe('syncAnimationPrimaryTarget', () => {
       curAnimID: 0,
       lastAnimID: -1,
       mouseLookEnabled: false,
+      getCurrentAnimationName: () => 'Walking',
+      play: vi.fn(),
       setPrimaryAnimationVrm,
+      setPrimaryAnimationRig: vi.fn(),
+      removeViewportRig: vi.fn(),
       removeVRM,
       addVRM,
     };
@@ -44,6 +48,8 @@ describe('syncAnimationPrimaryTarget', () => {
     const animationManager = {
       animationControls: [{ vrm: lootBody }],
       setPrimaryAnimationVrm,
+      setPrimaryAnimationRig: vi.fn(),
+      removeViewportRig: vi.fn(),
       removeVRM,
       addVRM: vi.fn(),
     };
@@ -58,6 +64,7 @@ describe('syncAnimationPrimaryTarget', () => {
 
     expect(primary).toBeNull();
     expect(setPrimaryAnimationVrm).toHaveBeenCalledWith(null);
+    expect(animationManager.setPrimaryAnimationRig).toHaveBeenCalledWith(null);
     expect(removeVRM).toHaveBeenCalledWith(lootBody);
   });
 });

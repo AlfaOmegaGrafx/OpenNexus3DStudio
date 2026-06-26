@@ -20,6 +20,8 @@ import {
 import {
   getTaskResultModelUrl,
   getTaskResultMeshUrl,
+  getTaskResultMotionUrl,
+  isTextToMotionTaskResult,
   normalizeTaskLoadPayload,
 } from '../library/taskModelUrl.js';
 import {
@@ -677,6 +679,23 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
     const loadPayload = normalizeTaskLoadPayload(task);
     if (!loadPayload) return;
+    const isMotion = task.type === 'text-to-motion' || isTextToMotionTaskResult(loadPayload);
+    if (isMotion) {
+      if (!getTaskResultMotionUrl(loadPayload) && !jobId) {
+        console.warn('TaskManager: No motion URL for task', task.id);
+        return;
+      }
+      console.log(`TaskManager: Loading motion in viewport (${source})`, {
+        jobId: resolveTaskJobId(task),
+        type: task.type,
+      });
+      window.dispatchEvent(
+        new CustomEvent('loadModelFromUrl', {
+          detail: { result: loadPayload, taskId: task.id, task },
+        }),
+      );
+      return;
+    }
     const isWorld = isWorldLayerTaskResult(loadPayload);
     const modelUrl = isWorld ? getTaskResultModelUrl(loadPayload) : getTaskResultMeshUrl(loadPayload);
     if (!isWorld && !modelUrl) {
@@ -777,7 +796,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   task.status === 'completed' && task.result
                     ? isViewportLoading
                       ? 'Loading into viewport…'
-                      : 'Click to open in viewport'
+                      : task.type === 'text-to-motion' || isTextToMotionTaskResult(task.result)
+                        ? 'Click to load animation on the VRM'
+                        : 'Click to open in viewport'
                     : undefined
                 }
                 style={{
@@ -889,27 +910,37 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
                 {(task.result || (task.status === 'completed' && resolveTaskJobId(task))) && (() => {
                   const loadPayload = normalizeTaskLoadPayload(task);
+                  const isMotion =
+                    task.type === 'text-to-motion' || isTextToMotionTaskResult(loadPayload);
                   const isFullWorld = isFullWorldPackageTaskResult(loadPayload);
                   const isSplatEnv = isSplatEnvironmentTaskResult(loadPayload);
                   const isWorld = isFullWorld || isSplatEnv;
                   const modelUrl = getTaskResultModelUrl(loadPayload);
                   const meshUrl = getTaskResultMeshUrl(loadPayload);
+                  const taskJobId = resolveTaskJobId(task);
+                  const motionUrl = isMotion ? getTaskResultMotionUrl(loadPayload) : null;
+                  const canLoadMotion = isMotion && Boolean(motionUrl || taskJobId);
                   const canPublishRp1 = canPublishTaskToSpatialFabric(task, loadPayload, {
                     isSplatOnly: isSplatEnv && !meshUrl,
                     hasMesh: Boolean(meshUrl),
                     meshUrl,
                     isFullWorld,
                   });
-                  const taskJobId = resolveTaskJobId(task);
                   const isPublishing = publishingJobId && taskJobId === publishingJobId;
                   return (
                   <div className="text-xs text-green-400 mb-0.5" style={{ fontSize: '0.6rem' }}>
                     {isViewportLoading
-                      ? '⏳ Loading in viewport…'
+                      ? isMotion
+                        ? '⏳ Loading animation…'
+                        : '⏳ Loading in viewport…'
                       : isViewportFailed
-                        ? '✗ Viewport load failed'
+                        ? isMotion
+                          ? '✗ Animation load failed'
+                          : '✗ Viewport load failed'
                         : isViewportActive
-                          ? '● In viewport'
+                          ? isMotion
+                            ? '● Playing on VRM'
+                            : '● In viewport'
                           : '✓ Completed'}
                     {isWorld ? (
                       <button
@@ -929,6 +960,26 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         }}
                       >
                         {isFullWorld ? 'Load World' : 'Load Splat'}
+                      </button>
+                    ) : canLoadMotion ? (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          dispatchLoadTask(task, 'loadAnimationButton');
+                        }}
+                        style={{
+                          marginLeft: '0.5rem',
+                          padding: '0.1rem 0.3rem',
+                          fontSize: '0.6rem',
+                          background: isViewportFailed ? '#e0a020' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                        title="Load studio_motion.json and play on the viewport VRM"
+                      >
+                        Load Animation
                       </button>
                     ) : (
                       modelUrl && (
@@ -972,7 +1023,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         {isPublishing ? '…' : 'Publish RP1'}
                       </button>
                     )}
-                    {!isWorld && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
+                    {!isWorld && !isMotion && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
                       <button
                         onClick={(event) => void handleOpenMetaverseBrowser(event)}
                         style={{

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { VRMRigMapMixamo } from './VRMRigMapMixamo.js';
 import { collectModelBones } from './rigBoneUtils.js';
+import { mixamoRigNameToSkinTokensBone } from './skintokensRigMap.js';
+import { validateMixamoRetargetClip } from './vrmMixamoPlaybackGuard.js';
 
 /** mixamorigLeftArm → LeftArm (UniRig / viewport GLB export naming). */
 export function mixamoNameToRigBoneName(mixamoRigName) {
@@ -24,6 +26,14 @@ function prepareMixamoModelForRetarget(mixamoModel) {
  */
 export function resolveRigBoneTrackName(rigRoot, mixamoRigName) {
     if (!rigRoot || !mixamoRigName) return null;
+
+    if (isSkinTokensRig(rigRoot)) {
+        const skinTokensBone = mixamoRigNameToSkinTokensBone(mixamoRigName);
+        if (skinTokensBone && rigRoot.getObjectByName(skinTokensBone)) {
+            return skinTokensBone;
+        }
+    }
+
     const candidates = [
         mixamoNameToRigBoneName(mixamoRigName),
         mixamoRigName,
@@ -40,8 +50,8 @@ export function resolveRigBoneTrackName(rigRoot, mixamoRigName) {
 
 /**
  * Resolve the scene object name used by AnimationMixer for a VRM humanoid bone.
- * Prefers bone names that exist under vrm.scene (exported/reimported VRMs often lack
- * Normalized_* helper nodes while raw skeleton bones are present).
+ * Prefers normalized humanoid bones for canned Mixamo (three-vrm convention).
+ * Kimodo / studio_motion uses resolveVrmStudioMotionTrackName (same normalized-first rule).
  * @param {import('@pixiv/three-vrm').VRM} vrm
  * @param {string} vrmBoneName
  * @returns {string | null}
@@ -69,13 +79,41 @@ export function resolveVrmBoneTrackName(vrm, vrmBoneName) {
     const normalizedName = normalizedNode?.name ?? null;
 
     return (
-        nodeInScene(scene, rawNode) ??
         nodeInScene(scene, normalizedNode) ??
-        inScene(rawName) ??
+        nodeInScene(scene, rawNode) ??
         inScene(normalizedName) ??
+        inScene(rawName) ??
         inScene(vrmBoneName) ??
-        rawName ??
         normalizedName ??
+        rawName ??
+        null
+    );
+}
+
+/**
+ * Kimodo / studio_motion clips must target normalized humanoid bones so mixer
+ * output is not overwritten by humanoid.update(). Canned Mixamo uses resolveVrmBoneTrackName (raw-first).
+ */
+export function resolveVrmStudioMotionTrackName(vrm, vrmBoneName) {
+    const humanoid = vrm?.humanoid;
+    if (!humanoid || !vrmBoneName) return null;
+
+    const scene = vrm.scene;
+    const inScene = (name) => (name && scene?.getObjectByName(name) ? name : null);
+
+    const rawNode = humanoid.getRawBoneNode?.(vrmBoneName) ?? null;
+    const normalizedNode = humanoid.getNormalizedBoneNode?.(vrmBoneName) ?? null;
+    const rawName = rawNode?.name ?? null;
+    const normalizedName = normalizedNode?.name ?? null;
+
+    return (
+        nodeInScene(scene, normalizedNode) ??
+        nodeInScene(scene, rawNode) ??
+        inScene(normalizedName) ??
+        inScene(rawName) ??
+        inScene(vrmBoneName) ??
+        normalizedName ??
+        rawName ??
         null
     );
 }
@@ -92,6 +130,97 @@ export function prepareVrmForMixamoRetarget(vrm) {
         vrm.humanoid.getNormalizedBoneNode?.('hips') ??
         vrm.humanoid.getRawBoneNode?.('hips'),
     );
+}
+
+/** @returns {'vrm0' | null} */
+export function vrmCoordinateFixFlag(vrm) {
+    return vrm?.meta?.metaVersion === '0' ? 'vrm0' : null;
+}
+
+/** @param {import('three').Object3D | null | undefined} rigRoot */
+export function isSkinTokensRig(rigRoot) {
+    if (!rigRoot) return false;
+    const rigInfo = rigRoot.userData?.autoRigMeta?.rig_info;
+    const method = rigInfo?.generation_method ?? rigInfo?.generationMethod ?? '';
+    if (method === 'skintokens_tokenrig_cli') return true;
+    const genModel = rigRoot.userData?.autoRigMeta?.generation_info?.model;
+    if (genModel === 'skintokens_auto_rig') return true;
+    return Boolean(rigRoot.userData?.skintokensRig);
+}
+
+/**
+ * Optional VRM0-style quat axis fix for rigged GLB playback.
+ * SkinTokens rigs (Eagle Knight, etc.) must NOT get this — it reverses limbs.
+ * UniRig / explicit userData.rigCoordinateFix may still request it.
+ * @returns {'vrm0' | null}
+ */
+export function rigCoordinateFixFlag(rigRoot) {
+    if (!rigRoot || isSkinTokensRig(rigRoot)) return null;
+    if (rigRoot.userData?.rigCoordinateFix === 'vrm0') return 'vrm0';
+    return null;
+}
+
+/**
+ * Retarget a source local quaternion onto a target bone bind pose (Mixamo→VRM convention).
+ * @param {import('three').Object3D | null | undefined} node
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @param {number} w
+ * @param {{ coordinateFix?: 'vrm0' | null, root?: import('three').Object3D | null }} [options]
+ * @returns {[number, number, number, number]}
+ */
+export function retargetLocalQuatForBoneNode(node, x, y, z, w, options = {}) {
+    if (!node?.parent) return [x, y, z, w];
+
+    const root = options.root ?? null;
+    root?.updateMatrixWorld?.(true);
+    node.parent.updateMatrixWorld?.(true);
+    node.updateMatrixWorld?.(true);
+
+    const restRotationInverse = new THREE.Quaternion();
+    const parentRestWorldRotation = new THREE.Quaternion();
+    const out = new THREE.Quaternion(x, y, z, w);
+
+    node.getWorldQuaternion(restRotationInverse).invert();
+    node.parent.getWorldQuaternion(parentRestWorldRotation);
+    out.premultiply(parentRestWorldRotation).multiply(restRotationInverse);
+
+    let arr = out.toArray();
+    if (options.coordinateFix === 'vrm0') {
+        arr = arr.map((v, i) => (i % 2 === 0 ? -v : v));
+    }
+    return arr;
+}
+
+/**
+ * Retarget Mixamo local rotation onto a rig bone with a different bind pose (SkinTokens bone_N).
+ * Applies world-space delta from Mixamo bind rather than assuming identical rest orientations.
+ */
+export function retargetMixamoLocalQuatToRigBone(mixamoModel, mixamoNode, targetNode, x, y, z, w, rigRoot) {
+    if (!mixamoNode?.parent || !targetNode?.parent) return [x, y, z, w];
+
+    mixamoModel?.updateMatrixWorld?.(true);
+    rigRoot?.updateMatrixWorld?.(true);
+
+    const mixamoLocal = new THREE.Quaternion(x, y, z, w);
+    const mixamoParentWorld = new THREE.Quaternion();
+    const mixamoBindWorld = new THREE.Quaternion();
+    mixamoNode.parent.getWorldQuaternion(mixamoParentWorld);
+    mixamoNode.getWorldQuaternion(mixamoBindWorld);
+
+    const mixamoAnimWorld = mixamoParentWorld.clone().multiply(mixamoLocal);
+    const delta = mixamoBindWorld.clone().invert().multiply(mixamoAnimWorld);
+
+    const targetParentWorld = new THREE.Quaternion();
+    const targetBindWorld = new THREE.Quaternion();
+    targetNode.parent.getWorldQuaternion(targetParentWorld);
+    targetNode.getWorldQuaternion(targetBindWorld);
+
+    const targetAnimWorld = targetBindWorld.clone().multiply(delta);
+    const targetLocal = targetParentWorld.clone().invert().multiply(targetAnimWorld);
+
+    return targetLocal.toArray();
 }
 
 /**
@@ -199,6 +328,9 @@ export function getMixamoAnimation( animations, model, vrm ) {
     }
 
     const animClip = new THREE.AnimationClip( 'vrmAnimation', clip.duration, tracks );
+    validateMixamoRetargetClip(vrm, animClip, {
+      throwOnViolation: typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test',
+    });
     return animClip;
 
 }
@@ -213,6 +345,11 @@ export function getMixamoAnimation( animations, model, vrm ) {
 export function getMixamoAnimationForRig(animations, mixamoModel, rigRoot) {
     const clip = THREE.AnimationClip.findByName(animations, 'mixamo.com');
     if (!clip || !rigRoot) return null;
+
+    const rigCoordFix = rigCoordinateFixFlag(rigRoot);
+    const skinTokens = isSkinTokensRig(rigRoot);
+
+    prepareMixamoModelForRetarget(mixamoModel);
 
     const mixamoHips = mixamoModel.getObjectByName('mixamorigHips');
     const rigHipsName = resolveRigBoneTrackName(rigRoot, 'mixamorigHips');
@@ -244,29 +381,37 @@ export function getMixamoAnimationForRig(animations, mixamoModel, rigRoot) {
 
         if (rigNodeName != null && mixamoRigNode?.parent) {
             const propertyName = trackSplitted[1];
-            mixamoRigNode.getWorldQuaternion(restRotationInverse).invert();
-            mixamoRigNode.parent.getWorldQuaternion(parentRestWorldRotation);
+            const rigTargetNode = rigRoot.getObjectByName(rigNodeName);
 
-            if (track instanceof THREE.QuaternionKeyframeTrack) {
+            if (track instanceof THREE.QuaternionKeyframeTrack && rigTargetNode?.parent) {
+                mixamoRigNode.getWorldQuaternion(restRotationInverse).invert();
+                mixamoRigNode.parent.getWorldQuaternion(parentRestWorldRotation);
+
+                const outValues = [];
                 for (let i = 0; i < track.values.length; i += 4) {
                     const flatQuaternion = track.values.slice(i, i + 4);
                     _quatA.fromArray(flatQuaternion);
                     _quatA
                         .premultiply(parentRestWorldRotation)
                         .multiply(restRotationInverse);
-                    _quatA.toArray(flatQuaternion);
-                    flatQuaternion.forEach((v, index) => {
-                        track.values[index + i] = v;
-                    });
+                    const arr = _quatA.toArray().map((v, idx) =>
+                        rigCoordFix === 'vrm0' && idx % 2 === 0 ? -v : v,
+                    );
+                    outValues.push(...arr);
                 }
                 tracks.push(
                     new THREE.QuaternionKeyframeTrack(
                         `${rigNodeName}.${propertyName}`,
                         track.times,
-                        track.values.slice(),
+                        outValues,
                     ),
                 );
             } else if (track instanceof THREE.VectorKeyframeTrack) {
+                if (skinTokens) {
+                    // Mixamo hips translation is in Mixamo bind space — applying scaled
+                    // absolute keys on bone_0 collapses SkinTokens skinning. Rotations only.
+                    return;
+                }
                 const value = track.values.map((v) => v * hipsPositionScale);
                 tracks.push(
                     new THREE.VectorKeyframeTrack(

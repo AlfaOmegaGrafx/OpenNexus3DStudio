@@ -17,6 +17,21 @@ const MESH_URL_KEYS = [
   'result_url',
 ];
 
+const MOTION_URL_KEYS = [
+  'motion_url',
+  'studio_motion_url',
+  'mesh_url',
+  'download_url',
+  'downloadUrl',
+  'modelUrl',
+];
+
+/** Server-side artifact paths (outputs/...) — not fetchable from the browser. */
+const MOTION_ARTIFACT_PATH_KEYS = [
+  'output_motion_path',
+  'output_studio_motion_path',
+];
+
 /** Includes splat paths — use only for splat/world environment loads. */
 const URL_KEYS = [
   ...MESH_URL_KEYS.slice(0, 5),
@@ -29,11 +44,77 @@ const SPLAT_ONLY_FEATURES = new Set(['image_to_splat']);
 const TERMINAL_SUCCESS = new Set(['completed', 'success', 'done', 'succeeded']);
 const TERMINAL_FAILURE = new Set(['failed', 'error', 'failure', 'cancelled', 'canceled']);
 
+/**
+ * Kimodo text-to-motion jobs return studio_motion.json — not a viewport mesh.
+ * @param {object|null|undefined} result
+ * @returns {boolean}
+ */
+export function isTextToMotionTaskResult(result) {
+  if (!result || typeof result !== 'object') return false;
+
+  const feature = result.feature || result.result?.feature || null;
+  const taskType = result.type || result.taskType || null;
+  if (feature === 'text_to_motion' || taskType === 'text-to-motion') {
+    return true;
+  }
+
+  const motionPath =
+    result.output_studio_motion_path ||
+    result.output_motion_path ||
+    result.result?.output_studio_motion_path ||
+    result.result?.output_motion_path;
+  if (typeof motionPath === 'string' && motionPath.includes('studio_motion')) {
+    return true;
+  }
+
+  const ext =
+    result.mesh_file_info?.file_extension ||
+    result.result?.mesh_file_info?.file_extension;
+  if (ext === '.json') {
+    const fmt =
+      result.generation_info?.output_format ||
+      result.result?.generation_info?.output_format;
+    if (fmt === 'studio_motion' || motionPath) return true;
+  }
+
+  return false;
+}
+
 function pickUrlFromObject(obj, keys) {
   if (!obj || typeof obj !== 'object') return null;
   for (const key of keys) {
     const value = obj[key];
     if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * True when the client can fetch this value with HTTP (API download, proxy, absolute URL).
+ * @param {string|null|undefined} value
+ * @returns {boolean}
+ */
+export function isClientFetchableAssetUrl(value) {
+  if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return (
+    trimmed.startsWith('/api/') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:') ||
+    trimmed.includes(DEV_DGX_PROXY_PREFIX)
+  );
+}
+
+function pickFetchableUrlFromObject(obj, keys) {
+  if (!obj || typeof obj !== 'object') return null;
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && isClientFetchableAssetUrl(value)) {
       return value.trim();
     }
   }
@@ -54,6 +135,7 @@ function resolveJobDownloadPath(result) {
  */
 export function getTaskResultModelUrl(result) {
   if (!result || typeof result !== 'object') return null;
+  if (isTextToMotionTaskResult(result)) return null;
 
   const top = pickUrlFromObject(result, URL_KEYS);
   if (top) return top;
@@ -80,6 +162,7 @@ export function getTaskResultModelUrl(result) {
  */
 export function getTaskResultMeshUrl(result) {
   if (!result || typeof result !== 'object') return null;
+  if (isTextToMotionTaskResult(result)) return null;
 
   const feature = result.feature || result.result?.feature || null;
   const splatOnly =
@@ -106,6 +189,34 @@ export function getTaskResultMeshUrl(result) {
   }
 
   return resolveJobDownloadPath(result);
+}
+
+/**
+ * studio_motion.json URL for text-to-motion jobs (Kimodo → VRM playback).
+ * @param {object|null|undefined} result
+ * @returns {string|null}
+ */
+export function getTaskResultMotionUrl(result) {
+  if (!result || typeof result !== 'object') return null;
+
+  const nested = result.result && typeof result.result === 'object' ? result.result : null;
+
+  const fetchable =
+    pickFetchableUrlFromObject(result, MOTION_URL_KEYS) ||
+    pickFetchableUrlFromObject(nested, MOTION_URL_KEYS);
+  if (fetchable) return fetchable;
+
+  const jobId =
+    result.job_id ||
+    result.jobId ||
+    nested?.job_id ||
+    nested?.jobId ||
+    null;
+  if (typeof jobId === 'string' && jobId.length > 0) {
+    return `/api/v1/system/jobs/${jobId}/download`;
+  }
+
+  return null;
 }
 
 /**
@@ -353,23 +464,50 @@ export function enrichCompletedJobPayload(jobStatus, jobId = null, taskType = nu
     jobStatus.world_base_url ||
     nested?.world_base_url ||
     (isWorldJob && id ? `/api/v1/system/jobs/${id}/world/` : null);
+  const isMotionJob =
+    normalizedTaskType === 'text_to_motion' ||
+    nested?.feature === 'text_to_motion' ||
+    jobStatus.feature === 'text_to_motion' ||
+    pickUrlFromObject(jobStatus, MOTION_ARTIFACT_PATH_KEYS) ||
+    pickUrlFromObject(nested, MOTION_ARTIFACT_PATH_KEYS);
+  const motionUrl =
+    pickFetchableUrlFromObject(jobStatus, ['motion_url', 'studio_motion_url']) ||
+    pickFetchableUrlFromObject(nested, ['motion_url', 'studio_motion_url']) ||
+    pickFetchableUrlFromObject(jobStatus, ['mesh_url']) ||
+    pickFetchableUrlFromObject(nested, ['mesh_url']) ||
+    (isMotionJob && downloadPath ? downloadPath : null);
 
-  return {
+  const payload = {
     ...jobStatus,
     job_id: id,
     feature: nested?.feature || jobStatus.feature || normalizedTaskType || null,
     pipeline: nested?.pipeline || jobStatus.pipeline || null,
-    mesh_url: meshUrl,
+    motion_url: motionUrl,
+    output_studio_motion_path:
+      nested?.output_studio_motion_path || jobStatus.output_studio_motion_path || null,
     world_manifest_url: worldManifestUrl,
     world_base_url: worldBaseUrl,
     mesh_file_info: jobStatus.mesh_file_info || nested?.mesh_file_info || null,
-    modelUrl: jobStatus.modelUrl || meshUrl,
-    downloadUrl: jobStatus.downloadUrl || jobStatus.modelUrl || meshUrl,
     pipelineStage:
       taskType === 'image-to-world' || nested?.feature === 'image_to_world'
         ? 'world_package'
         : jobStatus.pipelineStage,
     result: nested || jobStatus.result,
+  };
+
+  if (isMotionJob) {
+    payload.feature = 'text_to_motion';
+    delete payload.mesh_url;
+    delete payload.modelUrl;
+    delete payload.downloadUrl;
+    return payload;
+  }
+
+  return {
+    ...payload,
+    mesh_url: meshUrl,
+    modelUrl: jobStatus.modelUrl || meshUrl,
+    downloadUrl: jobStatus.downloadUrl || jobStatus.modelUrl || meshUrl,
   };
 }
 

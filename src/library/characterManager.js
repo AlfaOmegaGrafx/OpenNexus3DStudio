@@ -1378,9 +1378,19 @@ export class CharacterManager {
       const animationPaths = getAsArray(paths);
       if (this.animationManager){
         this.animationManager.setScale(scale);
-        if (paths.length > 0){
+        if (this.animationManager._studioDefaultsLoaded) {
+          return;
+        }
+        if (animationPaths.length > 0){
           this.animationManager.storeAnimationPaths(animationPaths, baseLocation || "");
-          await this.animationManager.loadAnimation(animationPaths,false, 0, animationPaths[0].endsWith('.fbx'), baseLocation || "")
+          const firstPath = animationPaths[0];
+          await this.animationManager.loadAnimation(
+            firstPath,
+            false,
+            0,
+            String(firstPath).endsWith('.fbx'),
+            baseLocation || "",
+          );
         }
       }
     }
