@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 /**
  * Smoke test: VRM Mixamo animation advances hips rotation in the browser.
- * Prereq: npm run dev (HTTPS on :3000). Optional: npm run get-assets for FBX clips.
+ * Prereq: npm run dev (HTTPS on :3000).
  *
- * Usage: node scripts/anim-playback-smoke.mjs
+ * Usage:
+ *   npm run test:anim-smoke
+ *   set ANIM_SMOKE_URL=https://10.0.0.32:3000 && npm run test:anim-smoke
+ *
+ * Manual browser QA: open the SAME origin as your working dev tab, append ?animSmoke=1
+ * (e.g. https://10.0.0.32:3000/?animSmoke=1 — not http://localhost if Vite serves HTTPS on LAN).
  */
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const NORMALIZED_MIXAMO_TRACK_PREFIX = 'Normalized_mixamorig';
+
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const baseUrl = process.env.ANIM_SMOKE_URL || 'https://localhost:3000';
+const baseUrl =
+  process.env.ANIM_SMOKE_URL ||
+  process.env.VITE_DEV_HOST ||
+  'https://10.0.0.32:3000';
 const smokeUrl = `${baseUrl.replace(/\/$/, '')}/?animSmoke=1`;
 
 function rotationDelta(a, b) {
@@ -94,6 +104,10 @@ async function main() {
 
   const vrmOk = (diag?.vrmControlCount ?? 0) > 0;
   const tracksOk = diag?.vrmControls?.some((c) => (c.trackCount ?? 0) > 0);
+  const retargetOk = diag?.playbackHealth?.retargetTracksOk !== false;
+  const normalizedTracks = diag?.vrmControls?.some((c) =>
+    (c.sampleTracks ?? []).some((t) => t.startsWith(NORMALIZED_MIXAMO_TRACK_PREFIX)),
+  );
   const playing = !diag?.paused && diag?.vrmControls?.some((c) => (c.toWeight ?? 0) > 0);
   const moved = Number.isFinite(delta) && delta > 0.001;
 
@@ -104,7 +118,7 @@ async function main() {
     console.log('Animation-related console messages:', animErrors.slice(0, 20));
   }
 
-  if (!vrmOk || !tracksOk || !playing || !moved) {
+  if (!vrmOk || !tracksOk || !playing || !moved || !retargetOk || !normalizedTracks) {
     console.log('Recent console (last 30 lines):', consoleLines.slice(-30));
   }
 
@@ -114,6 +128,10 @@ async function main() {
   }
   if (!vrmOk || !tracksOk) {
     console.error('FAIL: VRM animation controls or retargeted tracks missing.');
+    process.exit(1);
+  }
+  if (!retargetOk || !normalizedTracks) {
+    console.error('FAIL: Retarget tracks must use normalized VRM bones (Normalized_mixamorig*).');
     process.exit(1);
   }
   if (!playing) {

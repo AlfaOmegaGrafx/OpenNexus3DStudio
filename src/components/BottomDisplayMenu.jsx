@@ -15,6 +15,7 @@ import reverseIcon from '../images/reverse.png';
 import pauseIcon from '../images/pause.png';
 import fastForwardIcon from '../images/fast-forward.png';
 import fastBackwardIcon from '../images/fast-backward.png';
+import KimodoMotionPromptBar from './KimodoMotionPromptBar';
 
 export default function BottomDisplayMenu({ loadedAnimationName, randomize }) {
   const {
@@ -150,16 +151,34 @@ export default function BottomDisplayMenu({ loadedAnimationName, randomize }) {
 
   const nextAnimation = async () => {
     if (!animationManager) return;
-    await animationManager.loadNextAnimation();
-    setAnimationName(animationManager.getCurrentAnimationName());
-    syncPlaybackFromManager();
+    try {
+      await animationManager.loadNextAnimation();
+      animationManager.triggerPrimarySync?.();
+      if (!/t-?pose/i.test(animationManager.getCurrentAnimationName() || '')) {
+        animationManager.play();
+        animationManager.setSpeed(1);
+      }
+      setAnimationName(animationManager.getCurrentAnimationName());
+      syncPlaybackFromManager();
+    } catch (err) {
+      console.error('[BottomDisplayMenu] Failed to load next animation:', err?.message || err);
+    }
   };
 
   const prevAnimation = async () => {
     if (!animationManager) return;
-    await animationManager.loadPreviousAnimation();
-    setAnimationName(animationManager.getCurrentAnimationName());
-    syncPlaybackFromManager();
+    try {
+      await animationManager.loadPreviousAnimation();
+      animationManager.triggerPrimarySync?.();
+      if (!/t-?pose/i.test(animationManager.getCurrentAnimationName() || '')) {
+        animationManager.play();
+        animationManager.setSpeed(1);
+      }
+      setAnimationName(animationManager.getCurrentAnimationName());
+      syncPlaybackFromManager();
+    } catch (err) {
+      console.error('[BottomDisplayMenu] Failed to load previous animation:', err?.message || err);
+    }
   };
 
   const handleWebcamToggle = async () => {
@@ -272,6 +291,19 @@ export default function BottomDisplayMenu({ loadedAnimationName, randomize }) {
                 </button>
               </div>
             </div>
+          )}
+          {hasAnimationBar && (
+            <KimodoMotionPromptBar
+              embedded
+              onMotionPlayed={(name) => {
+                setAnimationName(name);
+                if (animationManager) {
+                  animationManager.play();
+                  animationManager.setSpeed(1);
+                  syncPlaybackFromManager();
+                }
+              }}
+            />
           )}
           <div className={styles.ContainerPosition}>
             <div className={styles.topLine} />

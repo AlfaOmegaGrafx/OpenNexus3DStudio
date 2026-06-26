@@ -1,0 +1,34 @@
+---
+description: Never guess when diagnostics exist — remote logs, smoke, SSH, git, docs
+alwaysApply: true
+---
+
+# No guess — use data first
+
+When debugging viewport, rig, animation, floor alignment, API, or device issues, **collect evidence before editing code**.
+
+## Required sources (use what applies)
+
+| Source | When | How |
+|--------|------|-----|
+| **Remote log** | Browser/viewport repro | `logs/remote-log.txt` on Surface or DGX — enable `?remoteLog=1`. Grep `[Rig]`, `shiftY`, `processModel`, `SkinTokens`. See `remote-log-first.mdc`. |
+| **Smoke scripts** | Animation / GLB / floor | `npm run test:anim-smoke`, `node scripts/glb-playback-smoke.mjs`, `node scripts/glb-floor-audit.mjs`, `npm run test:bone-audit` on Surface. Read **minY**, screenshots, `misbehaving`, hips delta — do not trust PASS alone. |
+| **`?animSmoke=1`** | Live hooks | `sampleMeshLayout()`, `getDiag()`, `auditBones()`, `compareAtTime()` via Playwright or browser console. |
+| **SSH** | Other machine | `ssh Surface-PC-Tailscale` / `ssh DGX-Local` — run smoke, read logs, curl API (`7842`). |
+| **Git** | Regressions | `git log`, `git diff` on the files you are about to change. |
+| **Docs** | Pipeline contracts | `docs/VRM_UPLOAD_DISPLAY_EXPORT.md`, `docs/scripts-cheatsheet.md`, `docs/api/api.md`, workflow `.mdc` rules. |
+| **ADB** | Galaxy XR / Quest | When user reports headset issues — `adb logcat`, package state; do not infer from desktop-only smoke. |
+| **API / jobs** | Backend | `curl` `/api/v1/system/jobs/{id}`, download GLB, inspect outputs on DGX. |
+
+## Rules
+
+1. **If a metric exists, read it.** Example: `minY: -0.5003` in smoke = half under floor — do not ship a “fix” without checking feet.
+2. **Quote the evidence** in your reasoning (log line, smoke output, bbox) before changing code.
+3. **Extend smoke** when it false-PASSes (e.g. add floor minY gate if only volume was checked).
+4. **No speculative bone-map / retarget rewrites** until hierarchy is verified (GLB parse, bone audit, screenshot).
+5. After fix, **re-run the same diagnostic** and state what changed (e.g. `minY` 0.00, `shiftY` +0.50).
+
+## Pair with
+
+- `remote-log-first.mdc` — browser log discipline
+- `opennexus3d-vrm-animation-playback.mdc` — anim regression tests

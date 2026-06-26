@@ -40,6 +40,7 @@ export const ALL_MODELS = [
   { value: 'xatlas_uv_unwrapping', label: 'xatlas UV Unwrapping', feature: 'uv_unwrapping' },
   { value: 'voxhammer_text_mesh_editing', label: 'VoxHammer Text Mesh Editing', feature: 'text_mesh_editing' },
   { value: 'voxhammer_image_mesh_editing', label: 'VoxHammer Image Mesh Editing', feature: 'image_mesh_editing' },
+  { value: 'kimodo_text_to_motion', label: 'Kimodo Text-to-Motion (SOMA → VRM)', feature: 'text_to_motion' },
 ];
 
 /** Models known to fail or underperform on DGX Spark — listed last in pickers. */
@@ -90,6 +91,7 @@ export const TASK_TYPE_TO_FEATURE = {
   'mesh-editing-image': 'image_mesh_editing',
   'image-to-splat': 'image_to_splat',
   'image-to-world': 'image_to_world',
+  'text-to-motion': 'text_to_motion',
   'avatar-from-image': null,
   'avatar-from-photo': null,
 };
@@ -153,6 +155,7 @@ const DEFAULT_MODEL_BY_FEATURE = {
   uv_unwrapping: 'xatlas_uv_unwrapping',
   text_mesh_editing: 'voxhammer_text_mesh_editing',
   image_mesh_editing: 'voxhammer_image_mesh_editing',
+  text_to_motion: 'kimodo_text_to_motion',
 };
 
 /** Default model id for a task type or API feature key. */

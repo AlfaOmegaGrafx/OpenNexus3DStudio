@@ -20,6 +20,40 @@ export const LOOT_DEFAULT_ANIMATIONS = [
   { name: 'Waving', description: 'Waving', location: `${LOOT_ASSETS_ROOT}/animations/4_Waving.fbx` },
 ];
 
+/** Upstream manifest often uses short names; CDN files use numbered Mixamo clips. */
+const LOOT_ANIMATION_CANONICAL_FILENAMES = {
+  tpose: '1_T-Pose.fbx',
+  idle: '2_Idle.fbx',
+  dancing: '2_Idle.fbx',
+  walking: '3_Walking.fbx',
+  waving: '4_Waving.fbx',
+};
+
+/**
+ * Map legacy animation paths (e.g. ./animations/Walking.fbx) to numbered FBX on loot-assets.
+ * @see docs/docs/Modders/manifest-files/character-animations.md
+ * @param {string} path
+ * @param {string} [animationName]
+ * @returns {string}
+ */
+export function resolveLootAnimationPath(path, animationName = '') {
+  let s = String(path || '').trim().replace(/\\/g, '/');
+  if (!s) return s;
+
+  const file = s.split('/').pop() || '';
+  if (!/\.fbx$/i.test(file) || /^\d+_.+\.fbx$/i.test(file)) return s;
+
+  const fromFile = LOOT_ANIMATION_CANONICAL_FILENAMES[file.replace(/\.fbx$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '')];
+  if (fromFile) return s.replace(/[^/]+$/, fromFile);
+
+  const fromName = LOOT_ANIMATION_CANONICAL_FILENAMES[
+    String(animationName || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  ];
+  if (fromName) return s.replace(/[^/]+$/, fromName);
+
+  return s;
+}
+
 /**
  * CDN / remote base from VITE_ASSET_PATH (no trailing slash), or '' for same-origin /loot-assets.
  * Accepts base URL or direct manifest.json URL.
@@ -86,11 +120,11 @@ export function toPublicAssetUrl(location) {
  * @param {string} assetPath
  * @returns {string}
  */
-export function rewriteLootPathForCdn(assetPath) {
+export function rewriteLootPathForCdn(assetPath, animationName = '') {
   const base = resolveLootAssetBaseUrl();
   if (!base) return assetPath;
 
-  let s = String(assetPath || '').trim().replace(/\\/g, '/');
+  let s = resolveLootAnimationPath(String(assetPath || '').trim(), animationName).replace(/\\/g, '/');
   if (!s || /^https?:\/\//i.test(s)) return s;
 
   s = s.replace(/^\.\//, '');
@@ -118,19 +152,46 @@ export function rewriteLootPathForCdn(assetPath) {
  * @param {string} path
  * @returns {string}
  */
-export function normalizeLootAssetUrl(path) {
-  const s = String(path || '').trim();
+export function normalizeLootAssetUrl(path, animationName = '') {
+  let s = resolveLootAnimationPath(String(path || '').trim(), animationName);
   if (!s) return s;
+
+  if (/^https?:\/\//i.test(s)) {
+    return rewriteLootPathForCdn(s, animationName);
+  }
+
+  // Collapse manifest join bugs like ./loot-assets//./animations/foo.fbx (not https://)
+  s = s.replace(/\\/g, '/').replace(/([^:])\/{2,}/g, '$1/').replace(/\/\.\//g, '/');
 
   const cdn = resolveLootAssetBaseUrl();
   if (cdn) {
-    return rewriteLootPathForCdn(s);
+    return rewriteLootPathForCdn(s, animationName);
   }
 
-  let normalized = s.replace(/\\/g, '/').replace(/\/\.\//g, '/');
-  normalized = normalized.replace(/\/loot-assets\/loot\//g, '/loot-assets/');
+  let normalized = s.replace(/\/loot-assets\/loot\//g, '/loot-assets/');
   normalized = normalized.replace(/^\.\/loot-assets\/loot\//, '/loot-assets/');
+  if (/^\/?animations\//i.test(normalized) && !/\/loot-assets\//i.test(normalized)) {
+    normalized = `${LOOT_ASSETS_ROOT}/${normalized.replace(/^\//, '').replace(/^\.\//, '')}`;
+  }
   return toPublicAssetUrl(normalized);
+}
+
+/**
+ * Join manifest asset directory + relative animation path without `//./` artifacts.
+ * @param {string} baseLocation
+ * @param {string} relativePath
+ * @returns {string}
+ */
+export function joinLootAssetPath(baseLocation, relativePath) {
+  const base = String(baseLocation || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  let rel = String(relativePath || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  rel = rel.replace(/^\.\//, '');
+  if (!base) return normalizeLootAssetUrl(rel);
+  if (/^https?:\/\//i.test(base)) {
+    return normalizeLootAssetUrl(`${base}/${rel}`);
+  }
+  const combined = `${base}/${rel}`.replace(/\/+/g, '/').replace(/\/\.\//g, '/');
+  return normalizeLootAssetUrl(combined);
 }
 
 /** @param {import('./characterManager').CharacterManager | null | undefined} characterManager */

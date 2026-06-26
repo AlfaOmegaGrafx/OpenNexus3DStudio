@@ -1,0 +1,44 @@
+---
+description: VRM Mixamo animation playback invariants — do not break
+globs: OpenNexus3DStudio/src/library/**/{animationManager,loadMixamoAnimation,studioAnimations,viewportExpressionVrm,vrmMixamoPlaybackGuard}*
+alwaysApply: false
+---
+
+# VRM animation playback (Mixamo + studio bar)
+
+## Non-negotiable invariant
+
+When `vrm.humanoid.autoUpdateHumanBones === true` (required for skinning):
+
+1. **AnimationMixer tracks MUST target normalized humanoid bones** (`Normalized_mixamorig*` names from three-vrm), not raw skeleton bones.
+2. Each frame after `mixer.update(delta)`: call `humanoid.update()` then `vrm.update(delta)` (`applyVrmHumanoidPose`).
+3. Mixer root is `vrm.scene`; loot FBX URLs must stay canonical (`2_Idle.fbx`, not `Idle.fbx`).
+
+Violating (1) causes **silent failure**: mixer time advances, logs show loaded clips, avatar stays frozen.
+
+## Before merging animation changes
+
+Run on Surface (dev server on `:3000`):
+
+```bash
+npm run test:anim-regression
+npm run test:anim-smoke   # needs https://10.0.0.32:3000
+```
+
+Vitest must pass `vrmMixamoPlaybackGuard.test.js` and `loadMixamoAnimation.test.js`.
+
+## Do not revert without replacement
+
+- `resolveVrmBoneTrackName` — normalized before raw
+- `setAnimationFrameHook` in sceneManager render/XR loops
+- `syncAnimationPrimaryTarget` on VRM load
+- Studio bar uses `LOOT_DEFAULT_ANIMATIONS` only (`_studioDefaultsLoaded` blocks trait manifest overwrite)
+- `normalizeLootAssetUrl` must not collapse `https://`
+
+## Kimodo (next)
+
+Text/constraint motion from [Kimodo](https://research.nvidia.com/labs/sil/projects/kimodo/) ([HF collection](https://huggingface.co/collections/nvidia/kimodo-v1), [code](https://github.com/nv-tlabs/kimodo)) exports NPZ/AMASS — not Mixamo FBX. Integration path:
+
+- **3DAIGC-API**: Kimodo adapter (SOMA/G1/SMPL-X → studio skeleton)
+- **OpenNexus3DStudio**: new clip source alongside loot FBX; reuse `AnimationManager` only after retarget to VRM normalized bones
+- Do not bypass `vrmMixamoPlaybackGuard` validation for any new motion format

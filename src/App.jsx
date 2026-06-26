@@ -30,6 +30,7 @@ import {
   getTaskResultFbxUrl,
   getAutoRigMetaFromResult,
   getTaskResultFileExtension,
+  isTextToMotionTaskResult,
   normalizeTaskLoadPayload,
   resolveTaskModelUrl,
 } from './library/taskModelUrl';
@@ -54,7 +55,11 @@ import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
 import { showApiStatusPanel } from './library/runtimeUi';
-import { showXrAiPanel, OPEN_XR_AI_PANEL_EVENT } from './library/xrHubConfig';
+import {
+  showXrAiPanel,
+  showXrAiPanelAtSidebarTop,
+  OPEN_XR_AI_PANEL_EVENT,
+} from './library/xrHubConfig';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -462,6 +467,51 @@ function AppContent() {
       });
     };
 
+    const playTextToMotionFromTask = async (loadPayload, task, source) => {
+      const { playTextToMotionOnViewport } = await import('./library/playViewportMotion.js');
+      const jobId =
+        loadPayload?.job_id ||
+        loadPayload?.jobId ||
+        task?.job_id ||
+        (typeof task?.id === 'string' && task.id.startsWith('job_') ? task.id.slice(4) : null);
+      window.dispatchEvent(
+        new CustomEvent('viewportLoadStart', {
+          detail: { jobId, source, motion: true },
+        }),
+      );
+      try {
+        console.log(`App: Playing text-to-motion (${source}):`, jobId);
+        await playTextToMotionOnViewport({
+          sceneManager,
+          characterManager,
+          taskResult: loadPayload,
+          apiEndpoint,
+          displayName:
+            task?.prompt ||
+            loadPayload?.text_prompt ||
+            loadPayload?.result?.text_prompt ||
+            'Kimodo',
+        });
+        window.dispatchEvent(
+          new CustomEvent('viewportLoadComplete', {
+            detail: { jobId, source, motion: true },
+          }),
+        );
+        return true;
+      } catch (error) {
+        console.error('App: Failed to play text-to-motion:', error);
+        window.dispatchEvent(
+          new CustomEvent('viewportLoadFailed', {
+            detail: {
+              jobId,
+              error: error?.message || String(error),
+            },
+          }),
+        );
+        return false;
+      }
+    };
+
     const handleTaskCompleted = async (event) => {
       const { result, task, taskId } = event.detail || {};
       const loadPayload =
@@ -490,6 +540,10 @@ function AppContent() {
         if (loadPayload?.feature === 'image_to_world' || loadPayload?.pipelineStage === 'world_package') {
           return;
         }
+      }
+      if (isTextToMotionTaskResult(loadPayload) || task?.type === 'text-to-motion') {
+        await playTextToMotionFromTask(loadPayload, task, 'taskCompleted');
+        return;
       }
       const rawUrl = getTaskResultMeshUrl(loadPayload);
       if (rawUrl) await loadGeneratedModel(rawUrl, 'taskCompleted', loadPayload, task);
@@ -527,6 +581,10 @@ function AppContent() {
           return;
         }
       }
+      if (isTextToMotionTaskResult(loadPayload) || task?.type === 'text-to-motion') {
+        await playTextToMotionFromTask(loadPayload, task, 'loadModelFromUrl');
+        return;
+      }
       const rawUrl =
         event.detail?.url || getTaskResultMeshUrl(loadPayload) || getTaskResultModelUrl(loadPayload);
       if (rawUrl) {
@@ -557,6 +615,8 @@ function AppContent() {
     loadWorldEnvironment,
     apiEndpoint,
     isViewportReady,
+    sceneManager,
+    characterManager,
   ]);
 
   useEffect(() => {
@@ -1482,7 +1542,7 @@ function AppContent() {
           {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
             <>
-          {isPublicDemo && showXrAiPanel() && (
+          {showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
             <XrAiPanel isApiConnected={isConnected} />
           </div>
@@ -1513,7 +1573,7 @@ function AppContent() {
             onTestConnection={forceConnectionCheck}
           />
           )}
-          {!isPublicDemo && showXrAiPanel() && (
+          {showXrAiPanel() && !showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
             <XrAiPanel isApiConnected={isConnected} />
           </div>

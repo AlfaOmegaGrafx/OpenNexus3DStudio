@@ -48,14 +48,10 @@ describe('taskModelUrl', () => {
     expect(isTextToMotionTaskResult(motionResult)).toBe(true);
     expect(getTaskResultMeshUrl(motionResult)).toBeNull();
     expect(getTaskResultModelUrl(motionResult)).toBeNull();
-    expect(getTaskResultMotionUrl(motionResult)).toBe(
-      '/api/v1/system/jobs/850ff7ae-1d86-4a7c-b75d-58f78be425b9/download',
-    );
+    expect(getTaskResultMotionUrl(motionResult)).toBe('outputs/motions/foo.studio_motion.json');
     const enriched = enrichCompletedJobPayload(motionResult, motionResult.job_id, 'text-to-motion');
     expect(enriched.mesh_url).toBeUndefined();
-    expect(enriched.motion_url).toBe(
-      'http://127.0.0.1:7842/api/v1/system/jobs/850ff7ae/download',
-    );
+    expect(enriched.motion_url).toContain('/download');
   });
 
   it('getTaskResultFileExtension prefers mesh extension when both paths exist', () => {

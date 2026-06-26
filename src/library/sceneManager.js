@@ -73,6 +73,7 @@ import {
   mergeModelBones,
   modelHasSkinnedMesh,
   normalizeRiggedModelTransforms,
+  needsSkinnedMeshRigRepair,
   rebindSkinnedMeshes,
 } from './rigBoneUtils.js';
 import { validateAigcRigContract } from './aigcRigContract.js';
@@ -3605,14 +3606,17 @@ export class SceneManager {
     }
 
     if (this.currentModel.userData?.preserveExportedOrientation) {
-      if (modelHasSkinnedMesh(this.currentModel)) {
+      if (
+        modelHasSkinnedMesh(this.currentModel) &&
+        needsSkinnedMeshRigRepair(this.currentModel)
+      ) {
         alignSkinnedMeshToRig(this.currentModel);
         this.currentModel.updateMatrixWorld(true);
         rebindSkinnedMeshes(this.currentModel);
-        const shiftY = anchorModelFeetToFloor(this.currentModel);
-        if (Math.abs(shiftY) > 0.001) {
-          console.log('[Rig] Floor-anchored preserved-orientation avatar', { shiftY });
-        }
+      }
+      const shiftY = anchorModelFeetToFloor(this.currentModel);
+      if (Math.abs(shiftY) > 0.001) {
+        console.log('[Rig] Floor-anchored preserved-orientation avatar', { shiftY });
       }
       return;
     }
@@ -3840,8 +3844,9 @@ export class SceneManager {
         skinned.skeleton.update();
       }
       if (
-        modelRoot.userData?.avatarFromImage ||
-        modelRoot.userData?.preserveExportedOrientation
+        needsSkinnedMeshRigRepair(modelRoot) &&
+        (modelRoot.userData?.avatarFromImage ||
+          modelRoot.userData?.preserveExportedOrientation)
       ) {
         alignSkinnedMeshToRig(modelRoot);
         rebindSkinnedMeshes(modelRoot);
