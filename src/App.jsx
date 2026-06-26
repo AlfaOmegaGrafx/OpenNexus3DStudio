@@ -55,7 +55,11 @@ import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
 import { showApiStatusPanel } from './library/runtimeUi';
-import { showXrAiPanel, OPEN_XR_AI_PANEL_EVENT } from './library/xrHubConfig';
+import {
+  showXrAiPanel,
+  showXrAiPanelAtSidebarTop,
+  OPEN_XR_AI_PANEL_EVENT,
+} from './library/xrHubConfig';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -1538,7 +1542,7 @@ function AppContent() {
           {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
             <>
-          {isPublicDemo && showXrAiPanel() && (
+          {showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
             <XrAiPanel isApiConnected={isConnected} />
           </div>
@@ -1569,7 +1573,7 @@ function AppContent() {
             onTestConnection={forceConnectionCheck}
           />
           )}
-          {!isPublicDemo && showXrAiPanel() && (
+          {showXrAiPanel() && !showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
             <XrAiPanel isApiConnected={isConnected} />
           </div>

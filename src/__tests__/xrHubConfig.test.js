@@ -4,6 +4,7 @@ import {
   getXrHubEmbedUrl,
   isXrVoicePublicDemo,
   showXrAiPanel,
+  showXrAiPanelAtSidebarTop,
   useXrHubLiveEmbed,
 } from '../library/xrHubConfig.js';
 
@@ -42,6 +43,18 @@ describe('xrHubConfig', () => {
     vi.stubEnv('VITE_XR_HUB_URL', '');
     expect(isXrVoicePublicDemo()).toBe(true);
     expect(showXrAiPanel()).toBe(true);
+    expect(showXrAiPanelAtSidebarTop()).toBe(true);
+    expect(useXrHubLiveEmbed()).toBe(false);
+  });
+
+  it('shows demo panel at top in production when hub URL is unset', () => {
+    vi.stubEnv('VITE_PUBLIC_DEMO', '');
+    vi.stubEnv('VITE_XR_HUB_URL', '');
+    vi.stubEnv('PROD', 'true');
+    vi.stubEnv('DEV', '');
+    expect(isXrVoicePublicDemo()).toBe(true);
+    expect(showXrAiPanel()).toBe(true);
+    expect(showXrAiPanelAtSidebarTop()).toBe(true);
     expect(useXrHubLiveEmbed()).toBe(false);
   });
 });

@@ -61,7 +61,12 @@ export function getXrHubEmbedUrl() {
 
 /** Vercel / public demo — static sidebar preview, no live DGX iframe. */
 export function isXrVoicePublicDemo() {
-  return import.meta.env.VITE_PUBLIC_DEMO === '1';
+  if (import.meta.env.VITE_PUBLIC_DEMO === '1') return true;
+  // Production deploys without a hub URL (e.g. Vercel env drift) still use the demo preview.
+  if (import.meta.env.PROD && !String(import.meta.env.VITE_XR_HUB_URL || '').trim()) {
+    return true;
+  }
+  return false;
 }
 
 /** Whether the sidebar should embed the live Spark hub (local dev + configured hub only). */
@@ -70,9 +75,18 @@ export function useXrHubLiveEmbed() {
   return Boolean(getXrHubEmbedUrl());
 }
 
+/** Include XR Voice in the bundle — must be true for typical Vercel prod builds. */
 export function showXrAiPanel() {
   if (isXrVoicePublicDemo()) return true;
-  return Boolean(getXrHubEmbedUrl());
+  if (getXrHubEmbedUrl()) return true;
+  if (import.meta.env.PROD) return true;
+  return false;
+}
+
+/** Top of left sidebar (Vercel demo); live hub stays lower near API status in local dev. */
+export function showXrAiPanelAtSidebarTop() {
+  if (!showXrAiPanel()) return false;
+  return isXrVoicePublicDemo() || !useXrHubLiveEmbed();
 }
 
 /** Sidebar mic icon — scroll to and expand XR Voice. */
