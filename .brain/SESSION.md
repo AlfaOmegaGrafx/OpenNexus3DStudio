@@ -26,8 +26,8 @@ None — setup complete on DGX.
 
 ## Blockers
 
-Surface still needs `npm install -g mindlink` and matching MCP entry with Windows `MINDLINK_PROJECT_PATH` if init not run there.
+None — MindLink + solid-skills on DGX and Surface; MCP wired on both.
 
 ## Up Next
 
-On Surface: `npm install -g mindlink`, `mindlink init --yes` in OpenNexus repo (or merge MCP block), enable MindLink MCP in Cursor settings, restart Cursor.
+Agents must read MindLink at session start (see `.cursor/rules/agent-run-instructions.mdc`).

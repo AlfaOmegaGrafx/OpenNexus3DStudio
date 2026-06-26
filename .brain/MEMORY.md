@@ -83,3 +83,4 @@ SessionMem team: `.sessionmem-team/` | Cursor memory-bank: `memory-bank/` | Grap
 - Surface must run `npm run msf-proxy` and `npm run dev:surface` for MSF Publish/Assembler from browser
 - Never commit `.env` or secrets; agent SSH key removed from GitHub after prior leak
 - `spatialFabricAdapter.js` prefers env `VITE_MSF_PUBLIC_URL` over API Tailscale URL when set
+- Surface git: no GitHub SSH key — DGX pulls for Surface via HTTPS over Tailscale SSH; DGX has GitHub SSH for push <!-- added: 2026-06-26 -->
