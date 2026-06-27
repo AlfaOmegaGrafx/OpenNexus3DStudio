@@ -1,4 +1,4 @@
-# Android Studio AI brief — CS XR Face Bridge APK
+# Android Studio AI brief — OpenNexus XR Face Bridge APK
 
 Copy-paste this document (or sections) into **Android Studio AI Assistant** when working on `native/android-xr-face-bridge/`. It explains the product goal, architecture, what works, what is broken, and what we need help with.
 
@@ -12,7 +12,7 @@ We are building **OpenNexus3DStudio** — a web app (React + Three.js + VRM) tha
 
 **Current runtime (May 2026):** `FaceTrackingCoordinator.OPENXR_ENABLED = false` — **Jetpack XR only**. OpenXR `XR_ANDROID_face_tracking` session creation fails on Galaxy XR (-2 / -38); the native OpenXR code stays in the repo behind the flag. Web mirror: `OPENXR_WEB_ENABLED = false` in `nativeFaceBridge.js`.
 
-**Solution:** A companion APK (`com.characterstudio.xrfacebridge`, folder `native/android-xr-face-bridge/`) that:
+**Solution:** A companion APK (`com.opennexus3dstudio.xrfacebridge`, folder `native/android-xr-face-bridge/`) that:
 
 1. Runs **native face tracking** (Jetpack XR; OpenXR when the flag is re-enabled).
 2. While the user is in **Chrome WebXR**, **POSTs face JSON** to the dev PC over LAN.
@@ -24,7 +24,7 @@ This is a **dev workflow** today (Vite relay on PC). Production would need WebXR
 
 ```
 [Galaxy XR headset]
-  CS XR Face APK
+  OpenNexus XR Face APK
     Jetpack XR Session + Face (BLEND_SHAPES)  ─┐
     OpenXR xrGetFaceStateANDROID (parallel) ─┤
                                              ▼
@@ -120,7 +120,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 2. **Galaxy XR OpenXR runtime** — API **1.0.x** only (1.1 rejected: “Max supported version is 1.0.34”).
 3. **`android.permission.FACE_TRACKING`** — required before `xrCreateFaceTrackerANDROID`.
 4. **Chrome cannot share OpenXR session** with our APK — headless / separate OpenXR instance is the intended Phase 1b approach.
-5. **Dev URL** — `local.properties` → `characterStudio.url=https://<PC_LAN_IP>:3000/` (gitignored). PC runs `npm run dev` with `--host`; firewall allows TCP 3000.
+5. **Dev URL** — `local.properties` → `openNexus3dStudio.url=https://<PC_LAN_IP>:3000/` (legacy alias `characterStudio.url` still works). PC runs `npm run dev` with `--host`; firewall allows TCP 3000.
 6. **HTTPS** — debug builds trust dev certs for relay POST; release must not blindly `proceed()` on SSL errors.
 
 ## Follow-up tasks (if Full Space AR still fails after May 2026 build)
@@ -137,7 +137,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 1. Surface (dev workstation): `npm run dev` → `https://<Surface-LAN-IP>:3000/?remoteLog=1&nativeFaceRelay=1` (see [`DEV_MACHINE_TOPOLOGY.md`](./DEV_MACHINE_TOPOLOGY.md))
 2. Install debug APK; grant face + notifications + camera.
 3. Open app → load site → **⋮ → Open in Chrome for WebXR (+ face)**.
-4. Keep CS XR Face visible or PiP bubble in Home Space.
+4. Keep OpenNexus XR Face visible or PiP bubble in Home Space.
 5. Enter AR in Chrome; watch PC `logs/remote-log.txt` for `[CS-NATIVE-FACE-DIAG] nativeKeys=… relay=… xrPresenting=…`
 6. `adb logcat` with tags above, or repo script `scripts/capture-apk-logcat.ps1`
 

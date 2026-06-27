@@ -33,13 +33,27 @@ Import the GitHub repo in Vercel; no `VITE_API_ENDPOINT` required for the public
 - **WebXR Ready**: Full VR/AR support with floor anchoring and pass-through modes
 
 ## 🧩 Supported 3DAIGC Modules
-* Mesh Generation: text / image conditioned
-* Mesh Painting: text / image conditioned 
-* Mesh Segmentation
-* Part Completion
-* Auto Rigging
 
-The available models are up to the API backend, refer to [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) for the example model matrix
+Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) on DGX Spark (`:7842`). Live model list: `GET /api/v1/system/models` — mirrored in [`src/library/aiModelsCatalog.js`](../src/library/aiModelsCatalog.js).
+
+| Task | API feature | Example models (DGX, Jun 2026) |
+|------|-------------|--------------------------------|
+| Text to 3D | `text_to_textured_mesh` | TRELLIS |
+| Image to 3D | `image_to_textured_mesh` | **TRELLIS.2** (recommended), Pixal3D (PBR), Hunyuan3D-2.1 |
+| Image to Raw Mesh | `image_to_raw_mesh` | Hunyuan3D-2.1, UltraShape |
+| Mesh painting (text / image) | `text_mesh_painting` / `image_mesh_painting` | TRELLIS.2, Hunyuan |
+| Mesh segmentation | `mesh_segmentation` | P3-SAM |
+| Mesh retopology | `mesh_retopology` | Instant Meshes |
+| Mesh UV unwrapping | `uv_unwrapping` | xatlas |
+| Mesh editing (text / image) | `text_mesh_editing` / `image_mesh_editing` | VoxHammer |
+| Auto rigging | `auto_rig` | **SkinTokens** (full GLB), UniRig (template VRM) |
+| Text to Motion (Kimodo) | `text_to_motion` | **Kimodo SOMA-RP-v1.1** → studio motion JSON |
+| Image to Gaussian Splat | `image_to_splat` | TripoSplat (1 photo), WorldMirror 2.0 (2+), COLMAP (3+) |
+| Image to World | `image_to_world` | `opennexus_image_to_world` |
+| Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig template rig → GLB |
+| Avatar From Photo | client only | AvatarSDK (not 3DAIGC-API) |
+
+**Also shipped:** multi-image input (up to 8 photos), **Publish RP1 / OMB validate**, **Kimodo text-to-motion** animation bar, job handoff. **23 models / 14 features** on DGX (Jun 2026). See root [`README.md`](../README.md) for full detail.
 
 ## Gaussian splats (3DGS)
 
@@ -201,7 +215,7 @@ WebXR (VR/AR) requires HTTPS to work. For local development:
 
 **Galaxy XR tips:** Use **https** (not http). Add your PC LAN IP to the cert (e.g. `mkcert localhost 127.0.0.1 10.0.0.32`). On `/xr`, do a **full page reload** before Enter VR (hot reload can drop the XR session). Headset console output is forwarded to `logs/remote-log.txt` in dev (`?remoteLog=1` or APK “Open in Chrome” adds it). See [HTTPS setup](docs/HTTPS_SETUP.md) and [IWSDK integration](docs/IWSDK_INTEGRATION.md).
 
-**Face tracking on Galaxy XR:** Use the **main app** (`/`), not `/xr`. If Chrome does not grant WebXR expression APIs, install the [**CS XR Face** APK](native/android-xr-face-bridge/README.md), run `npm run dev`, open **⋮ → Open in Chrome for WebXR (+ face)** — [OpenXR / Android XR face docs](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md). APK currently uses **Jetpack XR only** (`OPENXR_ENABLED=false`); OpenXR face is preserved for a future runtime.
+**Face tracking on Galaxy XR:** Use the **main app** (`/`), not `/xr`. If Chrome does not grant WebXR expression APIs, install the [**OpenNexus XR Face** APK](native/android-xr-face-bridge/README.md), run `npm run dev`, open **⋮ → Open in Chrome for WebXR (+ face)** — [OpenXR / Android XR face docs](docs/OPENXR_FACE_TRACKING_ANDROID_XR.md). APK currently uses **Jetpack XR only** (`OPENXR_ENABLED=false`); OpenXR face is preserved for a future runtime.
 
 ### Building
 

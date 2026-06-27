@@ -67,7 +67,7 @@ When **both** are inactive, the avatar face in XR stays neutral (webcam driver i
 
 ### Dev relay: Chrome WebXR + APK face (Galaxy XR)
 
-When the browser does not grant **`expression-tracking`**, use the **CS XR Face** APK plus the Vite dev relay on the **main app** (`/`), not the IWSDK lab (`/xr`):
+When the browser does not grant **`expression-tracking`**, use the **OpenNexus XR Face** APK plus the Vite dev relay on the **main app** (`/`), not the IWSDK lab (`/xr`):
 
 | Step | Component |
 |------|-----------|
@@ -108,7 +108,7 @@ From Kotlin/Java WebView:
 
 ```java
 webView.evaluateJavascript(
-  "__characterStud__characterStudioNativeFacetring + ");",
+  "window.__characterStudioNativeFace.push(" + json + ");",
   null
 );
 ```

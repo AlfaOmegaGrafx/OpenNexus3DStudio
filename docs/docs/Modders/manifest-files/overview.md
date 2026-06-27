@@ -49,7 +49,7 @@ The next section will have more information about the manifest.json files being 
 
 ## [Character Traits](./character-traits.md)
 
-Setting up this manifest will populate the asset trait section with your own traits that people can select from. It will also serve the character studio for cull trait model options (remove faces underneath) based on the layers, so the triangles disappear underneath the clothing for example.
+Setting up this manifest will populate the asset trait section with your own traits that people can select from. It will also serve the OpenNexus3DStudio for cull trait model options (remove faces underneath) based on the layers, so the triangles disappear underneath the clothing for example.
 
 ![Screenshot from 2024-02-19 13-42-19](/img/By1NZXbhT.jpg)
 

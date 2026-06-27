@@ -1,6 +1,6 @@
 # Android XR — OpenXR face bridge
 
-Native **WebView** shell for Character Studio plus (TODO) **OpenXR `XR_ANDROID_face_tracking`** → `evaluateJavascript("__characterStudioNativeFace.push(...)")`.
+Native **WebView** shell for **OpenNexus3DStudio** plus (TODO) **OpenXR `XR_ANDROID_face_tracking`** → `evaluateJavascript("window.__characterStudioNativeFace.push(...)")` (stable inject global; see [`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)).
 
 The web side is implemented in:
 
@@ -13,7 +13,7 @@ The web side is implemented in:
 | Path | Purpose |
 |------|---------|
 | `settings.gradle.kts` / `build.gradle.kts` | Root project |
-| `app/` | Application module (`com.characterstudio.xrfacebridge`) |
+| `app/` | Application module (`com.opennexus3dstudio.xrfacebridge`) |
 | `gradle/wrapper/` | Wrapper 8.9 (also `gradlew` / `gradlew.bat`) |
 
 **Open in Android Studio:** `File → Open` → select `native/android-xr-face-bridge`. Let it sync Gradle.
@@ -27,19 +27,20 @@ cd native/android-xr-face-bridge
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-## Configure Character Studio URL
+## Configure OpenNexus3dStudio URL
 
 The WebView URL is set at **build time** via `resValue` in `app/build.gradle.kts`:
 
 1. **`local.properties`** (in this folder, gitignored — copy from `local.properties.example`):
 
    ```properties
-   characterStudio.url=https://YOUR_PC_LAN_IP:3000/
+   openNexus3dStudio.url=https://YOUR_PC_LAN_IP:3000/
+   # Legacy alias: characterStudio.url=… (still read by Gradle)
    ```
 
    On Windows, `ipconfig` → **IPv4 Address** of the same Wi‑Fi as the headset (often `192.168.x.x`).
 
-2. **Or** edit the fallback in `app/build.gradle.kts` → `readCharacterStudioUrl()` default (`https://192.168.1.100:3000/` is only an example).
+2. **Or** edit the fallback in `app/build.gradle.kts` → `readOpenNexus3dStudioUrl()` default (`https://192.168.1.100:3000/` is only an example).
 
 **Important**
 
@@ -48,7 +49,7 @@ The WebView URL is set at **build time** via `resValue` in `app/build.gradle.kts
 | **Physical headset** | `https://<your-pc-lan-ip>:3000/` — must be reachable on the LAN. |
 | **Android emulator** | `https://10.0.2.2:3000/` — special alias to the host PC (does **not** work on a real headset). |
 
-**Dev server:** run Character Studio with `npm run dev` (Vite already uses `--host` so it listens on all interfaces).
+**Dev server:** run **OpenNexus3DStudio** with `npm run dev` (Vite already uses `--host` so it listens on all interfaces).
 
 **Firewall:** allow inbound **TCP 3000** (or your port) on the PC for private networks.
 
@@ -57,26 +58,26 @@ The WebView URL is set at **build time** via `resValue` in `app/build.gradle.kts
 ### White / blank WebView
 
 1. **Self-signed / mkcert HTTPS:** Chrome may let you click through warnings; **WebView does not** and often stays blank. **Debug APK** (`assembleDebug`) now calls `SslErrorHandler.proceed()` only when `BuildConfig.DEBUG` is true so local dev certs load. **Release builds** still cancel bad certs — use a proper CA or network security config for production.
-2. **Logcat:** filter tag `CS-XR-WebView` — you should see `loadUrl`, `onPageStarted` / `onPageFinished`, `console:` lines, and any `onReceivedError`.
+2. **Logcat:** filter tag `ON-XR-WebView` — you should see `loadUrl`, `onPageStarted` / `onPageFinished`, `console:` lines, and any `onReceivedError`.
 3. **Remote inspect:** with a debug build, on desktop Chrome open `chrome://inspect` → inspect the WebView; check Console and Network.
 4. **If the page loads but stays white:** watch JS `console:` lines in logcat — WebGL/WebGPU or a thrown error in React can leave a blank root (same as desktop devtools).
 
 ## Jetpack XR face → WebView (native bridge — implemented)
 
-On **Android XR / supported** devices, after permissions and page load, [`XrFaceTrackingEngine.kt`](app/src/main/java/com/characterstudio/xrfacebridge/XrFaceTrackingEngine.kt) runs in the same activity as the WebView:
+On **Android XR / supported** devices, after permissions and page load, [`XrFaceTrackingEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/XrFaceTrackingEngine.kt) runs in the same activity as the WebView:
 
 1. [`Session.create`](https://developer.android.com/develop/xr/jetpack-xr-sdk/add-session) → `configure(faceTracking = FaceTrackingMode.BLEND_SHAPES)`
 2. [`Face.getUserFace`](https://developer.android.com/develop/xr/jetpack-xr-sdk/arcore/face) → blend shapes (~30 Hz)
 3. Map to **WebXR-style keys** (`jaw_drop`, `mouth_left`, …) → inject into the WebView:
    - `window.onNativeFaceData(weights)` — optional thin hook
-   - `window.__characterStudioNativeFace.push({ weights, t })` — used by Character Studio ([`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js))
-4. Web calls `AndroidXRBridge.onBridgeReady()` after `initNativeFaceBridge()` ([`AndroidXrBridgeInterface.kt`](app/src/main/java/com/characterstudio/xrfacebridge/AndroidXrBridgeInterface.kt))
+   - `window.__characterStudioNativeFace.push({ weights, t })` — used by OpenNexus3DStudio ([`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js))
+4. Web calls `AndroidXRBridge.onBridgeReady()` after `initNativeFaceBridge()` ([`AndroidXrBridgeInterface.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/AndroidXrBridgeInterface.kt))
 
 **No PC relay required** for face in the APK WebView. Load the dev site in the APK (or ship a build to the headset); VRM expressions apply via `sceneManager.js` like desktop.
 
 **Note:** Standard Android **WebView does not support `navigator.xr`**. Native face works in the APK; immersive AR/VR still needs **Chrome** (relay below).
 
-Requires dependencies in `app/build.gradle.kts` (`androidx.xr.runtime`, `androidx.xr.arcore`, `extensions-xr` compileOnly). On non-XR hardware, `Session.create` fails gracefully (see logcat `CS-JetpackFace`).
+Requires dependencies in `app/build.gradle.kts` (`androidx.xr.runtime`, `androidx.xr.arcore`, `extensions-xr` compileOnly). On non-XR hardware, `Session.create` fails gracefully (see logcat `ON-JetpackFace`).
 
 ## WebXR (AR / VR) — **not in WebView**
 
@@ -85,9 +86,9 @@ Requires dependencies in `app/build.gradle.kts` (`androidx.xr.runtime`, `android
 ### Chrome WebXR **with face** (dev relay — recommended)
 
 1. On your PC: **`npm run dev`** (Vite serves HTTPS + **`/__native_face_ingest`** + **`/__native_face_sse`**).
-2. Install this APK, grant **face tracking**, load Character Studio in the WebView once (Jetpack face starts).
+2. Install this APK, grant **face tracking**, load **OpenNexus3DStudio** in the WebView once (Jetpack face starts).
 3. Toolbar **⋮** → **Open in Chrome for WebXR (+ face)** — URL includes **`?nativeFaceRelay=1`**.
-4. **Keep CS XR Face visible** after opening Chrome — Jetpack face only runs while the bridge stays active. The APK starts a transparent **`FaceKeeperActivity`** plus PiP (when available) so the Jetpack session host stays resumed while Chrome runs WebXR. On **Galaxy XR Home Space**, still leave the **CS XR Face panel** beside Chrome if PiP is unavailable. The foreground notification should say **“Relaying face tracking to Chrome”**.
+4. **Keep OpenNexus3DStudio visible** after opening Chrome — Jetpack face only runs while the bridge stays active. The APK starts a transparent **`FaceKeeperActivity`** plus PiP (when available) so the Jetpack session host stays resumed while Chrome runs WebXR. On **Galaxy XR Home Space**, still leave the **OpenNexus3DStudio** panel beside Chrome if PiP is unavailable. The foreground notification should say **“Relaying face tracking to Chrome”**.
 5. **Permissions:** grant **Notifications**, **Face tracking**, and **Camera** when prompted (or all at once in App info). Crashes on first launch are often from starting the foreground service before notifications are allowed — fixed in recent builds.
 5. Enter AR/VR in Chrome; remote log should show **`nativeKeys > 0`** and **`relay=poll/…ms`** while **`xrPresenting=true`**.
 
@@ -96,11 +97,11 @@ Requires dependencies in `app/build.gradle.kts` (`androidx.xr.runtime`, `android
 | Remote log | Meaning |
 |------------|---------|
 | `relay=enabled-not-running` | Chrome has `?nativeFaceRelay=1` but relay JS did not start — hard-refresh Chrome after `npm run dev` restart |
-| `relay=poll/stale` + `nativeKeys=0` in Chrome AR | APK went fully background — use ⋮ → Open in Chrome again and **keep the PiP bubble** on screen; or bring CS XR Face to foreground briefly |
+| `relay=poll/stale` + `nativeKeys=0` in Chrome AR | APK went fully background — use ⋮ → Open in Chrome again and **keep the PiP bubble** on screen; or bring **OpenNexus XR Face** to foreground briefly |
 | `relay=poll+sse/50ms` + `nativeKeys=25+` | Relay working (often while APK or PiP is active) |
-| `faceSrc=jetpack` / `faceSrc=openxr` | Which APK backend last posted weights (OpenXR needs Phase 1b APK + logcat `CS-OpenXrNative`) |
+| `faceSrc=jetpack` / `faceSrc=openxr` | Which APK backend last posted weights (OpenXR needs Phase 1b APK + logcat `ON-OpenXrNative`) |
 | `nativeKeys=25+` in WebView only | Jetpack works; relay not used — use ⋮ → **Open in Chrome for WebXR (+ face)** |
-| No `[native-face-relay] ingest` on PC | APK not rebuilt, face permission denied, or Jetpack session failed (logcat `CS-JetpackFace`) |
+| No `[native-face-relay] ingest` on PC | APK not rebuilt, face permission denied, or Jetpack session failed (logcat `ON-JetpackFace`) |
 
 **Restart `npm run dev`** after pulling relay changes (Vite plugin must load).
 
@@ -110,7 +111,7 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
 
 ## What’s implemented now
 
-- `MainActivity`: `MaterialToolbar` + full-screen `WebView`, JS enabled, loads `character_studio_url`.
+- `MainActivity`: `MaterialToolbar` + full-screen `WebView`, JS enabled, loads `open_nexus_3d_studio_url` (Gradle `resValue` from `local.properties`).
 - Menu action **Open in browser (WebXR)** for immersive sessions in Chrome.
 - **File import:** `onShowFileChooser` **does not** call `FileChooserParams.createIntent()` (that keeps the site’s `accept`/image MIME and opens **Gallery** on many devices). Instead it builds **`ACTION_OPEN_DOCUMENT`** with **`*/*`**, **`EXTRA_INITIAL_URI`** at internal storage (`primary:`), optional **`EXTRA_SHOW_ADVANCED`**, then **`Intent.createChooser`** so you can pick **My Files / Files** instead of Photos. In the chooser, avoid **Photos** / **Gallery** if you want folder paths.
 - Runtime request for **`android.permission.FACE_TRACKING`** (required before `xrCreateFaceTrackerANDROID` once OpenXR is wired).
@@ -122,7 +123,7 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
   - **Stale thresholds:** APK handoff relay stale = **10s** (`CHROME_HANDOFF_STALE_MS`); web cache during `xrPresenting` = **30s** (`nativeFaceBridge.js` / `sceneManager.js`) so Chrome does not flash to zero face while the APK recovers.
   - **Watchdog:** Recycle when relay is quiet **2×** handoff stale (~20s) even if `face.state` still ticks; collector “stuck” uses **20s** during handoff. Session full recycle debounced **15s**.
   - **FG service (Android 14+):** `dataSync|camera|microphone` types + `FOREGROUND_SERVICE_MICROPHONE` (microphone type only on API 34+).
-- Logcat: `CS-FaceKeeper`, `CS-FaceBridgeSvc`, `CS-JetpackFace`, `CS-OpenXrFace` (`face.state not TRACKING` during AR). Keep the PiP panel visible in Home Space during AR.
+- Logcat: `ON-FaceKeeper`, `ON-FaceBridgeSvc`, `ON-JetpackFace`, `ON-OpenXrFace` (`face.state not TRACKING` during AR). Keep the PiP panel visible in Home Space during AR.
 
 ## Prerequisites (OpenXR — next steps)
 
@@ -135,19 +136,19 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
 
 | Component | Role |
 |-----------|------|
-| [`FaceTrackingCoordinator.kt`](app/src/main/java/com/characterstudio/xrfacebridge/FaceTrackingCoordinator.kt) | Starts both backends; watchdog uses freshest `lastPostAgeMs()` |
-| [`XrFaceTrackingEngine.kt`](app/src/main/java/com/characterstudio/xrfacebridge/XrFaceTrackingEngine.kt) | Jetpack XR (activity-visible) |
-| [`OpenXrFaceEngine.kt`](app/src/main/java/com/characterstudio/xrfacebridge/OpenXrFaceEngine.kt) + `libcs_openxr_face.so` | OpenXR headless `xrGetFaceStateANDROID` → `openxrParameters` JSON |
+| [`FaceTrackingCoordinator.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/FaceTrackingCoordinator.kt) | Starts both backends; watchdog uses freshest `lastPostAgeMs()` |
+| [`XrFaceTrackingEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/XrFaceTrackingEngine.kt) | Jetpack XR (activity-visible) |
+| [`OpenXrFaceEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/OpenXrFaceEngine.kt) + `libon_openxr_face.so` | OpenXR headless `xrGetFaceStateANDROID` → `openxrParameters` JSON |
 
 Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR headers from [jetpack-xr-natives](https://github.com/google-ar/jetpack-xr-natives) on first build; cached under `third_party/openxr/`). First build needs network.
 
-**Logcat:** `CS-OpenXrNative` / `CS-OpenXrFace` — look for `OpenXR instance ok at apiVersion 1.0.34`, then `OpenXR session created with GLES binding` / `OpenXR face tracker ready`. Galaxy runtime rejects **1.1.x** (`Max supported version is 1.0`). Requires Khronos loader in APK (`prefab = true` + `openxr_loader_for_android` + `uses-native-library libopenxr.google.so`).
+**Logcat:** `ON-OpenXrNative` / `ON-OpenXrFace` — look for `OpenXR instance ok at apiVersion 1.0.34`, then `OpenXR session created with GLES binding` / `OpenXR face tracker ready`. Galaxy runtime rejects **1.1.x** (`Max supported version is 1.0`). Requires Khronos loader in APK (`prefab = true` + `openxr_loader_for_android` + `uses-native-library libopenxr.google.so`).
 
 **Phase 1b:** PBuffer EGL for `XrGraphicsBindingOpenGLESAndroidKHR` (`openxr_gfx_egl.cpp`, `openxr_face_engine.cpp`) — session can start **headless** when no window surface exists (e.g. Chrome immersive, `MainActivity` backgrounded). Optional hidden `TextureView` (1×1) still supported when a surface is available. Remote log payload field `source` / diag `faceSrc=jetpack|openxr` when relay is live.
 
 ## Phase 2 — WebView transport
 
-1. After the page loads, ensure `window.__characterStudioNativeFace` exists (Character Studio calls `initNativeFaceBridge()` on startup).
+1. After the page loads, ensure `window.__characterStudioNativeFace` exists (OpenNexus3DStudio calls `initNativeFaceBridge()` on startup).
 2. From Kotlin on the **main thread**, periodically:
 
    ```kotlin
@@ -156,7 +157,7 @@ Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR he
      put("t", System.currentTimeMillis())
    }
    webView.evaluateJavascript(
-     "__characterStudioNativeFace.push(${json});",
+     "window.__characterStudioNativeFace.push(${json});",
      null
    )
    ```
@@ -175,5 +176,5 @@ Prefer **in-process** `evaluateJavascript` over headset `localhost` WebSocket un
 
 ### Sharing logs with someone else (no guesswork)
 
-1. **WebView + dev PC** — Append **`?remoteLog=1`** to the URL in `local.properties` (`characterStudio.url`). Run **`npm run dev`** on the PC. The page POSTs console output to `/__remote_log`; Vite appends **`logs/remote-log.txt`**. Every few seconds you should see **`[CS-NATIVE-FACE-DIAG]`** with `nativeKeys`, `vrms`, and `exprMgr` (confirms native weights vs. which VRM is wired).
-2. **Native (Kotlin)** — From the repo root, run **`.\scripts\capture-apk-logcat.ps1`** after reproducing on device; it appends **`CS-JetpackFace`** / **`CS-XR-WebView`** lines to **`logs/apk-logcat.txt`**. Look for **`First native face push`** from Jetpack face.
+1. **WebView + dev PC** — Append **`?remoteLog=1`** to the URL in `local.properties` (`openNexus3dStudio.url`). Run **`npm run dev`** on the PC. The page POSTs console output to `/__remote_log`; Vite appends **`logs/remote-log.txt`**. Every few seconds you should see **`[ON-NATIVE-FACE-DIAG]`** with `nativeKeys`, `vrms`, and `exprMgr` (confirms native weights vs. which VRM is wired).
+2. **Native (Kotlin)** — From the repo root, run **`.\scripts\capture-apk-logcat.ps1`** after reproducing on device; it appends **`ON-JetpackFace`** / **`ON-XR-WebView`** lines to **`logs/apk-logcat.txt`**. Look for **`First native face push`** from Jetpack face.

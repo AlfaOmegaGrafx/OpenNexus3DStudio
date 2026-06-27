@@ -6,7 +6,7 @@ sidebar_position: 3
 # Character Traits
 
 
-Setting up this manifest will populate the asset trait section with your own traits that people can select from. It will also serve the character studio for cull trait model options (remove faces underneath) based on the layers, so the triangles disappear underneath the clothing for example.
+Setting up this manifest will populate the asset trait section with your own traits that people can select from. It will also serve the OpenNexus3DStudio for cull trait model options (remove faces underneath) based on the layers, so the triangles disappear underneath the clothing for example.
 
 ![](/img/By1NZXbhT.jpg)
 
@@ -46,7 +46,7 @@ Example:
 "traitsDirectory":"/traits/"
 ```
 
-Character studio will search on assetLocation + traitsDirectory: 
+OpenNexus3DStudio will search on assetLocation + traitsDirectory: 
 
 ```./character-assets/traits/```
 
@@ -62,7 +62,7 @@ Example:
 "thumbnailsDirectory":"/traitsThumbnails/"
 ```
 
-Character studio will search on assetLocation + thumbnailsDirectory: 
+OpenNexus3DStudio will search on assetLocation + thumbnailsDirectory: 
 
 ```./character-assets/traitThumbnails/```
 
@@ -78,7 +78,7 @@ Example:
 "traitIconsDirectorySvg":"/traitIcons/"
 ```
 
-Character studio will search on assetLocation + traitIconsDirectorySvg: 
+OpenNexus3DStudio will search on assetLocation + traitIconsDirectorySvg: 
 
 ```./character-assets/traitIcons/```
 
@@ -92,7 +92,7 @@ Example:
 ```json
 "animationPath":["/animations/idle.fbx", "/animations/t-pose.fbx"]
 ```
-Character studio will search on root directory + each animation path:
+OpenNexus3DStudio will search on root directory + each animation path:
 
 ```./character-assets/animations/idle.fbx```
 

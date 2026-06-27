@@ -49,6 +49,7 @@ Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API]
 | Mesh UV unwrapping | `uv_unwrapping` | xatlas |
 | Mesh editing (text / image) | `text_mesh_editing` / `image_mesh_editing` | VoxHammer |
 | Auto rigging | `auto_rig` | **SkinTokens** (full GLB, recommended), UniRig (template VRM) |
+| Text to Motion (Kimodo) | `text_to_motion` | **Kimodo SOMA-RP-v1.1** → studio motion JSON → VRM / rigged GLB playback |
 | Image to Gaussian Splat | `image_to_splat` | TripoSplat (1 photo), WorldMirror 2.0 (2+), COLMAP (3+) |
 | Image to World | `image_to_world` | `opennexus_image_to_world` (splat env + optional TRELLIS.2 props) |
 | Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig template rig → GLB |
@@ -58,7 +59,7 @@ Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API]
 
 - **Multi-image input** — primary + up to 7 reference photos on splat, world, and avatar tasks ([`docs/MULTI_IMAGE_SPLAT_ROADMAP.md`](docs/MULTI_IMAGE_SPLAT_ROADMAP.md))
 - **Publish RP1 / OMB validate** — mesh jobs → spatial fabric via MSF Map Service ([`docs/SPATIAL_FABRIC_INTEGRATION.md`](docs/SPATIAL_FABRIC_INTEGRATION.md))
-- **Job handoff** — chain completed jobs into rig, world, or export (`jobHandoff.js`)
+- **Kimodo text-to-motion** — animation bar prompt → SOMA motion job → viewport playback on VRM and rigged GLB ([`KimodoMotionPromptBar.jsx`](src/components/KimodoMotionPromptBar.jsx), [`kimodoMotionLoader.js`](src/library/kimodoMotionLoader.js))
 
 **Not in UI:** “Part completion” (legacy upstream docs only). **License-blocked** on commercial tiers: PartField, PartPacker, FastMesh — see [3DAIGC-API `MODEL_LICENSES.md`](https://github.com/AlfaOmegaGrafx/3DAIGC-API/blob/main/docs/MODEL_LICENSES.md).
 
@@ -145,7 +146,7 @@ Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in t
 - **Avatar Structure**: Base body VRM avatar is **soulbound** (non-transferable); clothing, hair, and accessories are equippable layers (see [Modder getting-started](docs/docs/Modders/getting-started.md)—base body layer 0)
 - **Trait System**: Mix and match character components (body, clothing, hair, accessories, etc.)
 - **Drag & Drop Customization**: Overwrite textures and models by dragging files into the browser
-- **Animation Support**: Full animation system with Mixamo integration, bone remapping, and animation blending
+- **Animation Support**: Full animation system with Mixamo integration, **Kimodo text-to-motion**, bone remapping, and animation blending
 - **Facial Expressions**: Blend shapes, lip sync, eye tracking, and automatic blinking
 - **VRM Export**: Optimized VRM export with texture atlasing and mesh merging
 - **Batch Processing**: Generate multiple VRMs from manifest.json files
@@ -257,7 +258,7 @@ npm run dist-linux  # Linux
 3. Point OpenNexus3DStudio at the API:
    - **Direct:** `VITE_API_ENDPOINT=http://<api-host>:7842` in `.env`
    - **Surface HTTPS dev (recommended):** `VITE_API_ENDPOINT=/__dev_dgx_proxy` — Vite proxies to DGX (see [Dev machine topology](docs/DEV_MACHINE_TOPOLOGY.md))
-4. Confirm models: `curl http://<api-host>:7842/api/v1/system/models` — should list **22** enabled models across **13** features (Jun 2026)
+4. Confirm models: `curl http://<api-host>:7842/api/v1/system/models` — should list **23** enabled models across **14** features (Jun 2026)
 
 ### OpenNexus3DStudio Asset Setup
 

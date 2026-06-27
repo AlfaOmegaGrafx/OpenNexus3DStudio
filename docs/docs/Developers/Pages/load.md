@@ -4,7 +4,7 @@
 
 **Summary**
 
-The `Load` page allows to load an existing character from your wallet or page preferences into the character studio viewer.
+The `Load` page allows to load an existing character from your wallet or page preferences into the OpenNexus3DStudio viewer.
 
 
 **Functions**

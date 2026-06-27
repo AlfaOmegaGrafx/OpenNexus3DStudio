@@ -1,6 +1,6 @@
 # World Package Format
 
-Explorable Gaussian-splat environments with optional mesh props for Character Studio / Galaxy XR.
+Explorable Gaussian-splat environments with optional mesh props for OpenNexus3DStudio / Galaxy XR.
 
 ## Layout
 

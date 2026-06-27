@@ -19,7 +19,7 @@ Use this when reading **`logs/remote-log.txt`**, planning Galaxy XR tests, or wr
     ↑ POST /__remote_log, /__native_face_ingest
     │
 [Galaxy XR Chrome]  ?nativeFaceRelay=1&remoteLog=1  (AR/VR, relay, playback)
-    ↑ POST face JSON from CS XR Face APK (same origin ingest on Surface)
+    ↑ POST face JSON from OpenNexus XR Face APK (same origin ingest on Surface)
 
 [DGX Spark]  SSH / API / builds via NVIDIA Sync  —  not required for headset → Surface LAN URL
 ```

@@ -1,6 +1,6 @@
 # Character Manager
 
-Character Manager is the main manager for the character studio, it provides functions to load manifests and traits within your three.js application
+Character Manager is the main manager for OpenNexus3DStudio, it provides functions to load manifests and traits within your three.js application
 
 ## Constructor
 

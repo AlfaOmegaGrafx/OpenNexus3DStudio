@@ -1,4 +1,4 @@
-# Appends a filtered adb logcat dump to logs/apk-logcat.txt (Character Studio Android XR face bridge).
+# Appends a filtered adb logcat dump to logs/apk-logcat.txt (OpenNexus XR Face / Android XR face bridge).
 # Requires: adb in PATH, USB debugging or wireless adb paired to the device.
 # Usage: .\scripts\capture-apk-logcat.ps1
 

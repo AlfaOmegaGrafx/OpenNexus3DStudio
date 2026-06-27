@@ -50,7 +50,7 @@ On **Android XR**, Chrome can fold several sensitive capabilities into the **ini
 
 Separately, **`expression-tracking` is optional**: if your Chrome build does not implement the draft **`XRFrame.expressions`** API yet, `session.enabledFeatures` may **not** list `expression-tracking`, and you will not get XR-driven mouth/blink (the avatar face stays neutral in XR unless you use another path).
 
-**Galaxy XR workaround (dev):** Install the [**CS XR Face** APK](../native/android-xr-face-bridge/README.md), run **`npm run dev`** on your PC, open **⋮ → Open in Chrome for WebXR (+ face)** (`?nativeFaceRelay=1`), and **keep the APK visible or in PiP** so **Jetpack** and/or **OpenXR PBuffer** face tracking can relay to the dev server during Chrome **Full Space** AR (see [OpenXR face tracking](./OPENXR_FACE_TRACKING_ANDROID_XR.md) and [Android Studio AI brief](./ANDROID_STUDIO_AI_BRIEF.md)).
+**Galaxy XR workaround (dev):** Install the [**OpenNexus XR Face** APK](../native/android-xr-face-bridge/README.md), run **`npm run dev`** on your PC, open **⋮ → Open in Chrome for WebXR (+ face)** (`?nativeFaceRelay=1`), and **keep the APK visible or in PiP** so **Jetpack** and/or **OpenXR PBuffer** face tracking can relay to the dev server during Chrome **Full Space** AR (see [OpenXR face tracking](./OPENXR_FACE_TRACKING_ANDROID_XR.md) and [Android Studio AI brief](./ANDROID_STUDIO_AI_BRIEF.md)).
 
 **What to look for in logs:** on the first XR frame the app logs:
 
