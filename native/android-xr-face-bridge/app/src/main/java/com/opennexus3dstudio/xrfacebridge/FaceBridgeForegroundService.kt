@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -138,7 +138,7 @@ class FaceBridgeForegroundService : LifecycleService() {
         if (wakeLock?.isHeld == true) return
         wakeLock = pm.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "CharacterStudio:FaceBridge"
+            "OpenNexus3dStudio:FaceBridge"
         ).apply {
             setReferenceCounted(false)
             acquire(WAKE_LOCK_TIMEOUT_MS)
@@ -193,8 +193,8 @@ class FaceBridgeForegroundService : LifecycleService() {
     }
 
     companion object {
-        private const val TAG = "CS-FaceBridgeSvc"
-        private const val CHANNEL_ID = "cs_face_bridge"
+        private const val TAG = "ON-FaceBridgeSvc"
+        private const val CHANNEL_ID = "on_face_bridge"
         private const val NOTIFICATION_ID = 4102
         private const val WATCHDOG_INTERVAL_MS = 1000L
         private const val WATCHDOG_INTERVAL_CHROME_MS = 2000L

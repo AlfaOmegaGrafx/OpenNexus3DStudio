@@ -2,11 +2,11 @@
 
 sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
 
-# Character Studio dev server URL for the WebView (physical headset = your PC's LAN IP).
+# OpenNexus3dStudio dev server URL for the WebView (physical headset = your PC's LAN IP).
 # Do NOT use 10.0.2.2 on a real headset — that is emulator-only (maps to the host PC).
 #
 # Examples (replace with your PC LAN IPv4 from ipconfig):
-# characterStudio.url=https://192.168.1.100/
-# characterStudio.url=https://192.168.1.100:3000/
+# openNexus3dStudio.url=https://192.168.1.100/
+# openNexus3dStudio.url=https://192.168.1.100:3000/
 
-# characterStudio.url=https://YOUR_PC_LAN_IP:3000/
+# openNexus3dStudio.url=https://YOUR_PC_LAN_IP:3000/

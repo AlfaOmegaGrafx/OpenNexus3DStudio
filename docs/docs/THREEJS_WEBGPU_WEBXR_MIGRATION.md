@@ -403,7 +403,7 @@ function updateAvatar(bodyData, faceData) {
 
 ### Android XR Integration
 - Native Android XR app using OpenXR (`XR_ANDROID_face_tracking`) — see [OPENXR_FACE_TRACKING_ANDROID_XR.md](./OPENXR_FACE_TRACKING_ANDROID_XR.md)
-- Face tracking data streaming to web app via `window.__characterStudioNativeFace` ([`nativeFaceBridge.js`](../src/library/nativeFaceBridge.js))
+- Face tracking data streaming to web app via `window.__openNexus3dStudioNativeFace` ([`nativeFaceBridge.js`](../src/library/nativeFaceBridge.js))
 - Complete avatar animation (body + face + eye)
 
 ---

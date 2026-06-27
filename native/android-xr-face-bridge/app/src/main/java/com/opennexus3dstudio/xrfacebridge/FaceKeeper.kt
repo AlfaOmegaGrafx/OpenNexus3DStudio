@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.app.Activity
 import android.content.Context
@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object FaceKeeper {
 
-    private const val TAG = "CS-FaceKeeper"
+    private const val TAG = "ON-FaceKeeper"
 
     private val resumed = AtomicBoolean(false)
 

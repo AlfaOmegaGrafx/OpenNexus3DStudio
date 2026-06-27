@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -33,11 +33,11 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.characterstudio.xrfacebridge.databinding.ActivityMainBinding
+import com.opennexus3dstudio.xrfacebridge.databinding.ActivityMainBinding
 
 /**
- * WebView shell for Character Studio.
- * - Native: Jetpack XR → [window.onNativeFaceData] / [__characterStudioNativeFace] (APK WebView).
+ * WebView shell for OpenNexus3dStudio.
+ * - Native: Jetpack XR → [window.onNativeFaceData] / [__openNexus3dStudioNativeFace] (APK WebView).
  * - Chrome WebXR: HTTP relay to dev server ([FaceHttpRelay]) + optional PiP.
  */
 class MainActivity : AppCompatActivity() {
@@ -49,7 +49,7 @@ class MainActivity : AppCompatActivity() {
     private var openXrGlesSurface: Surface? = null
 
     private var webXrHintShown = false
-    private var characterStudioPageReady = false
+    private var openNexus3dStudioPageReady = false
     /** Skip WebView pause when switching to Chrome so XR face collection is less likely to stall. */
     private var pausingForChrome = false
 
@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         val cameraOk = !results.containsKey(Manifest.permission.CAMERA) ||
             results[Manifest.permission.CAMERA] == true
         Log.d(TAG, "Face permissions face=$faceOk camera=$cameraOk results=$results")
-        if (characterStudioPageReady && faceOk && cameraOk) {
+        if (openNexus3dStudioPageReady && faceOk && cameraOk) {
             tryStartFaceTracking()
         }
     }
@@ -162,7 +162,7 @@ class MainActivity : AppCompatActivity() {
             clearChromeHandoff()
         }
 
-        FaceHttpRelay.configure(getString(R.string.character_studio_url), BuildConfig.DEBUG)
+        FaceHttpRelay.configure(getString(R.string.open_nexus_3d_studio_url), BuildConfig.DEBUG)
         requestRuntimePermissionsInOrder()
         requestMicrophoneIfNeeded()
 
@@ -185,13 +185,13 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.action_reload_page -> {
-                    characterStudioPageReady = false
+                    openNexus3dStudioPageReady = false
                     FaceTrackingCoordinator.stop()
                     binding.webView.reload()
                     true
                 }
                 R.id.action_open_browser -> {
-                    openCharacterStudioInExternalBrowser()
+                    openOpenNexus3dStudioInExternalBrowser()
                     true
                 }
                 else -> false
@@ -311,7 +311,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     Log.d(TAG, "onPageFinished $url")
-                    characterStudioPageReady = true
+                    openNexus3dStudioPageReady = true
                     updateWebHistoryMenuState()
                     tryStartFaceTracking()
                     val act = this@MainActivity
@@ -374,7 +374,7 @@ class MainActivity : AppCompatActivity() {
                         if (isFinishing) return@runOnUiThread
                         Log.i(TAG, "AndroidXRBridge.onBridgeReady — web native face hook active")
                         FaceTrackingCoordinator.setWebView(binding.webView)
-                        if (characterStudioPageReady) {
+                        if (openNexus3dStudioPageReady) {
                             tryStartFaceTracking()
                         }
                         FaceTrackingCoordinator.ensureFacePipeline("bridge-ready")
@@ -391,7 +391,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val url = getString(R.string.character_studio_url)
+        val url = getString(R.string.open_nexus_3d_studio_url)
         Log.i(TAG, "loadUrl $url (debug=${BuildConfig.DEBUG})")
         binding.webView.loadUrl(url)
         binding.toolbar.post { updateWebHistoryMenuState() }
@@ -461,12 +461,12 @@ class MainActivity : AppCompatActivity() {
         menu.findItem(R.id.action_web_forward)?.isEnabled = binding.webView.canGoForward()
     }
 
-    private fun openCharacterStudioInExternalBrowser() {
+    private fun openOpenNexus3dStudioInExternalBrowser() {
         pausingForChrome = true
         FaceTrackingCoordinator.setChromeHandoff(true)
         FaceKeeper.acquire(this, "pre-chrome")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val url = buildCharacterStudioUrlForChromeWebXr()
+        val url = buildOpenNexus3dStudioUrlForChromeWebXr()
         Toast.makeText(this, R.string.toast_face_bridge_chrome, Toast.LENGTH_LONG).show()
         tryStartFaceTracking()
         FaceTrackingCoordinator.ensureFacePipeline("pre-chrome")
@@ -642,8 +642,8 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun buildCharacterStudioUrlForChromeWebXr(): String {
-        val base = getString(R.string.character_studio_url).trim()
+    private fun buildOpenNexus3dStudioUrlForChromeWebXr(): String {
+        val base = getString(R.string.open_nexus_3d_studio_url).trim()
         val uri = Uri.parse(base)
         var builder = uri.buildUpon()
         if (uri.getQueryParameter("nativeFaceRelay") == null) {
@@ -656,7 +656,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun tryStartFaceTracking() {
-        if (!characterStudioPageReady) return
+        if (!openNexus3dStudioPageReady) return
         if (ContextCompat.checkSelfPermission(this, faceTrackingPermission) !=
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -721,8 +721,8 @@ class MainActivity : AppCompatActivity() {
         binding.webView.onResume()
         binding.webView.post {
             binding.webView.evaluateJavascript(
-                "(function(){try{if(typeof window.__characterStudioWebViewResume==='function'){" +
-                    "window.__characterStudioWebViewResume();}}catch(e){console.warn('CS WebView resume',e);}})()",
+                "(function(){try{if(typeof window.__openNexus3dStudioWebViewResume==='function'){" +
+                    "window.__openNexus3dStudioWebViewResume();}}catch(e){console.warn('ON WebView resume',e);}})()",
                 null
             )
         }
@@ -786,7 +786,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val TAG = "CS-XR-WebView"
+        private const val TAG = "ON-XR-WebView"
         private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
         private const val PRIMARY_ROOT_DOCUMENT_ID = "primary:"
     }

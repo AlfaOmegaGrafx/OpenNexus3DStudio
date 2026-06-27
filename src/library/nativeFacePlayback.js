@@ -1,7 +1,7 @@
 /**
  * Record-and-replay face tracking for Chrome WebXR.
  *
- * The dev relay ({@link nativeFaceRelay.js}) only flows while the CS XR Face APK
+ * The dev relay ({@link nativeFaceRelay.js}) only flows while the OpenNexus XR Face APK
  * (the tracking source) stays foregrounded — but entering an immersive Chrome
  * WebXR session backgrounds/throttles that APK, so live weights stop arriving.
  *
@@ -30,7 +30,7 @@
  *    `/__native_face_recording` (the Vite dev relay).
  */
 
-import { pushNativeFaceWeights } from './nativeFaceBridge.js';
+import { NATIVE_FACE_WINDOW_API, pushNativeFaceWeights } from './nativeFaceBridge.js';
 import {
   prepareFaceRecordingAudioPlayback,
   syncFaceRecordingAudioPlayback,
@@ -366,7 +366,7 @@ function sampleAt(elapsed) {
  * @param {Record<string, number>} weights
  */
 function feed(weights) {
-  const api = typeof window !== 'undefined' ? window.__characterStudioNativeFace : null;
+  const api = typeof window !== 'undefined' ? window[NATIVE_FACE_WINDOW_API] : null;
   if (api?.push) {
     api.push({ weights, source: _source, t: Date.now() });
   } else {
@@ -472,7 +472,7 @@ export function startNativeFacePlayback(input, options = {}) {
     void unlockFaceRecordingAudioPlayback();
   }
   try {
-    window.__characterStud__characterStudioNativeFaceonNeutral?.();
+    window[NATIVE_FACE_WINDOW_API]?.resetExpressionNeutral?.();
   } catch {
     /* ignore */
   }

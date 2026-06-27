@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.content.Context
 import java.util.concurrent.atomic.AtomicBoolean

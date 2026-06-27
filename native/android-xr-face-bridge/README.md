@@ -1,6 +1,6 @@
 # Android XR — OpenXR face bridge
 
-Native **WebView** shell for **OpenNexus3DStudio** plus (TODO) **OpenXR `XR_ANDROID_face_tracking`** → `evaluateJavascript("window.__characterStudioNativeFace.push(...)")` (stable inject global; see [`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)).
+Native **WebView** shell for **OpenNexus3DStudio** plus (TODO) **OpenXR `XR_ANDROID_face_tracking`** → `evaluateJavascript("window.__openNexus3dStudioNativeFace.push(...)")` (stable inject global; see [`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)).
 
 The web side is implemented in:
 
@@ -15,6 +15,23 @@ The web side is implemented in:
 | `settings.gradle.kts` / `build.gradle.kts` | Root project |
 | `app/` | Application module (`com.opennexus3dstudio.xrfacebridge`) |
 | `gradle/wrapper/` | Wrapper 8.9 (also `gradlew` / `gradlew.bat`) |
+
+### Critical package rename (Jun 2026)
+
+| Before | After |
+|--------|--------|
+| `com.characterstudio.xrfacebridge` | **`com.opennexus3dstudio.xrfacebridge`** |
+| App label “CS XR Face” | **OpenNexus3dStudio** (launcher) |
+| Log tags `CS-*` | **`ON-*`** (e.g. `ON-JetpackFace`, `ON-XR-WebView`) |
+| JS inject `window.__characterStudioNativeFace` | **`window.__openNexus3dStudioNativeFace`** |
+
+**Uninstall the old APK** before installing a new debug build — Android treats this as a different app (new `applicationId`). Set dev URL in `local.properties`:
+
+```properties
+openNexus3dStudio.url=https://YOUR_PC_LAN_IP:3000/
+```
+
+Legacy alias `characterStudio.url=` is still read by Gradle for one release cycle.
 
 **Open in Android Studio:** `File → Open` → select `native/android-xr-face-bridge`. Let it sync Gradle.
 
@@ -70,7 +87,7 @@ On **Android XR / supported** devices, after permissions and page load, [`XrFace
 2. [`Face.getUserFace`](https://developer.android.com/develop/xr/jetpack-xr-sdk/arcore/face) → blend shapes (~30 Hz)
 3. Map to **WebXR-style keys** (`jaw_drop`, `mouth_left`, …) → inject into the WebView:
    - `window.onNativeFaceData(weights)` — optional thin hook
-   - `window.__characterStudioNativeFace.push({ weights, t })` — used by OpenNexus3DStudio ([`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js))
+   - `window.__openNexus3dStudioNativeFace.push({ weights, t })` — used by OpenNexus3DStudio ([`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js))
 4. Web calls `AndroidXRBridge.onBridgeReady()` after `initNativeFaceBridge()` ([`AndroidXrBridgeInterface.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/AndroidXrBridgeInterface.kt))
 
 **No PC relay required** for face in the APK WebView. Load the dev site in the APK (or ship a build to the headset); VRM expressions apply via `sceneManager.js` like desktop.
@@ -148,7 +165,7 @@ Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR he
 
 ## Phase 2 — WebView transport
 
-1. After the page loads, ensure `window.__characterStudioNativeFace` exists (OpenNexus3DStudio calls `initNativeFaceBridge()` on startup).
+1. After the page loads, ensure `window.__openNexus3dStudioNativeFace` exists (OpenNexus3DStudio calls `initNativeFaceBridge()` on startup).
 2. From Kotlin on the **main thread**, periodically:
 
    ```kotlin
@@ -157,7 +174,7 @@ Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR he
      put("t", System.currentTimeMillis())
    }
    webView.evaluateJavascript(
-     "window.__characterStudioNativeFace.push(${json});",
+     "window.__openNexus3dStudioNativeFace.push(${json});",
      null
    )
    ```

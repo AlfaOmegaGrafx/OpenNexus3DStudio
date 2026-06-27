@@ -23,7 +23,7 @@ import styles from './NativeFaceRelayHud.module.css';
 
 /**
  * Dev-only overlay shown with `?nativeFaceRelay=1` or `?nativeFacePlayback=<id>`.
- * Mirrors [CS-NATIVE-FACE-DIAG] without reading log files, and exposes a one-tap
+ * Mirrors [ON-NATIVE-FACE-DIAG] without reading log files, and exposes a one-tap
  * recorder so you can capture a relay session and replay it inside Chrome WebXR.
  */
 export default function NativeFaceRelayHud() {

@@ -496,7 +496,7 @@ AST-only, no API keys. Output: `graphify-out/` (gitignored).
 ### Filter face-relay lines
 
 ```powershell
-Get-Content .\logs\remote-log.txt -Wait -Tail 50 | Select-String "REMOTE_LOG|native-face-relay|CS-NATIVE-FACE|nativeFaceRelay|\[XR\]\[expression\]|nativeFaceBridge|WebcamAvatarDriver"
+Get-Content .\logs\remote-log.txt -Wait -Tail 50 | Select-String "REMOTE_LOG|native-face-relay|ON-NATIVE-FACE|nativeFaceRelay|\[XR\]\[expression\]|nativeFaceBridge|WebcamAvatarDriver"
 ```
 
 ### Capture Galaxy XR APK logcat

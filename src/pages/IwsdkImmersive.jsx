@@ -158,7 +158,7 @@ export default function IwsdkImmersive() {
         <strong>Props use IWSDK grab</strong> (DistanceGrabbable + OneHandGrabbable); splat env is visual only.
         Stuck? Exit XR here, red panel, or Menu/B.
         {' '}
-        <strong>VRM face tracking</strong> (CS XR Face APK relay) runs on the main app at{' '}
+        <strong>VRM face tracking</strong> (OpenNexus XR Face APK relay) runs on the main app at{' '}
         <code>/</code>, not this IWSDK lab — use <code>https://&lt;PC-IP&gt;:3000/?nativeFaceRelay=1</code> and load a VRM there.
         {' '}
         <strong>Product path:</strong> load worlds on <code>/</code> (SceneManager + Spark); this lab is for IWSDK interaction regression.

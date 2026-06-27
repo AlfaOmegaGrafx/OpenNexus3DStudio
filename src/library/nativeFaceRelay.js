@@ -5,6 +5,7 @@
  * Enable with `?nativeFaceRelay=1` (APK “Open in Chrome for WebXR” adds this automatically).
  * Requires `npm run dev` and {@link nativeFaceRelayPlugin} in vite.config.js.
  */
+import { NATIVE_FACE_WINDOW_API } from './nativeFaceBridge.js';
 
 const RELAY_PATH_SSE = '/__native_face_sse';
 const RELAY_PATH_LATEST = '/__native_face_latest';
@@ -53,8 +54,10 @@ export function isNativeFaceRelayEnabledInUrl() {
  */
 function applyRelayPayload(obj) {
   if (!obj || typeof obj !== 'object') return;
-  if (!window.__characterStudioNativeFace?.push) return;
-  window.__characterStud__characterStudioNativeFacelastRelayPushTs = typeof obj.t === 'number' ? obj.t : Date.now();
+  const api = window[NATIVE_FACE_WINDOW_API];
+  if (!api?.push) return;
+  api.push(obj);
+  _lastRelayPushTs = typeof obj.t === 'number' ? obj.t : Date.now();
 }
 
 /**
@@ -163,7 +166,7 @@ export function connectNativeFaceRelaySse(options = {}) {
     if (!_connectedLogged) {
       _connectedLogged = true;
       console.info(
-        '[nativeFaceRelay] SSE connected — keep CS XR Face APK open while in Chrome WebXR'
+        '[nativeFaceRelay] SSE connected — keep OpenNexus XR Face APK open while in Chrome WebXR'
       );
     }
   };
@@ -192,7 +195,7 @@ export function connectNativeFaceRelay() {
   disconnectNativeFaceRelay();
 
   console.info(
-    '[nativeFaceRelay] Starting (poll + SSE) — open CS XR Face APK first, then Chrome WebXR'
+    '[nativeFaceRelay] Starting (poll + SSE) — open OpenNexus XR Face APK first, then Chrome WebXR'
   );
   startPollLoop();
   connectNativeFaceRelaySse();

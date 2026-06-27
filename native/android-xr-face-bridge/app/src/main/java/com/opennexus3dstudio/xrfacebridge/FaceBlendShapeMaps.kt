@@ -1,7 +1,7 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 /**
- * ARCore / Jetpack XR blend-shape names → WebXR expression keys (Character Studio).
+ * ARCore / Jetpack XR blend-shape names → WebXR expression keys (OpenNexus3DStudio).
  */
 object FaceBlendShapeMaps {
 

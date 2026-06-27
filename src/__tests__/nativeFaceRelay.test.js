@@ -5,7 +5,7 @@ import {
   disconnectNativeFaceRelay,
   getNativeFaceRelayStatus
 } from '../library/nativeFaceRelay.js';
-import { clearNativeFaceWeights, getNativeFaceWeightsIfFresh, initNativeFaceBridge } from '../library/nativeFaceBridge.js';
+import { clearNativeFaceWeights, getNativeFaceWeightsIfFresh, initNativeFaceBridge, NATIVE_FACE_WINDOW_API } from '../library/nativeFaceBridge.js';
 
 describe('nativeFaceRelay', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('nativeFaceRelay', () => {
   afterEach(() => {
     disconnectNativeFaceRelay();
     clearNativeFaceWeights();
-    delete window.__characterStudioNativeFace;
+    delete window[NATIVE_FACE_WINDOW_API];
     delete window.__CS_NATIVE_FACE_RELAY_STATUS;
     vi.unstubAllGlobals();
     vi.useRealTimers();

@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity

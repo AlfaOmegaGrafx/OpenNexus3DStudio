@@ -13,12 +13,12 @@
 #define EGL_OPENGL_ES3_BIT 0x00000040
 #endif
 
-#define LOG_TAG "CS-OpenXrEgl"
+#define LOG_TAG "ON-OpenXrEgl"
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-namespace cs::openxr {
+namespace on::openxr {
 namespace {
 
 EGLDisplay g_display = EGL_NO_DISPLAY;
@@ -152,4 +152,4 @@ EGLDisplay GetEglDisplay() { return g_display; }
 EGLConfig GetEglConfig() { return g_config; }
 EGLContext GetEglContext() { return g_context; }
 
-}  // namespace cs::openxr
+}  // namespace on::openxr

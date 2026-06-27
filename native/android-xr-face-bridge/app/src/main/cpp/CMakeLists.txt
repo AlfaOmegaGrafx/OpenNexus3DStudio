@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(cs_openxr_face)
+project(on_openxr_face)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,13 +31,13 @@ foreach(hdr IN LISTS OPENXR_HEADERS)
     endif()
 endforeach()
 
-add_library(cs_openxr_face SHARED
-    cs_openxr_face_jni.cpp
+add_library(on_openxr_face SHARED
+    on_openxr_face_jni.cpp
     openxr_face_engine.cpp
     openxr_gfx_egl.cpp
 )
 
-target_include_directories(cs_openxr_face PRIVATE
+target_include_directories(on_openxr_face PRIVATE
     "${OPENXR_VENDOR_DIR}"
 )
 
@@ -48,7 +48,7 @@ find_library(gles-lib GLESv3)
 
 # Khronos loader (Prefab from openxr_loader_for_android) — packages libopenxr_loader.so into APK.
 find_package(OpenXR REQUIRED CONFIG)
-target_link_libraries(cs_openxr_face
+target_link_libraries(on_openxr_face
     ${log-lib}
     ${android-lib}
     ${egl-lib}

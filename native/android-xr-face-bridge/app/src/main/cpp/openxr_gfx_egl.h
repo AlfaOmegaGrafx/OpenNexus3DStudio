@@ -3,7 +3,7 @@
 #include <EGL/egl.h>
 #include <android/native_window.h>
 
-namespace cs::openxr {
+namespace on::openxr {
 
 /** EGL for XrGraphicsBindingOpenGLESAndroidKHR (PBuffer; window optional). */
 bool InitEgl(ANativeWindow* window, int glesMajorVersion = 3);
@@ -15,4 +15,4 @@ EGLDisplay GetEglDisplay();
 EGLConfig GetEglConfig();
 EGLContext GetEglContext();
 
-}  // namespace cs::openxr
+}  // namespace on::openxr

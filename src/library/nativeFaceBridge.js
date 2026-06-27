@@ -6,9 +6,9 @@
  * Alternatively pass **`openxrParameters`**: a dense float array in
  * `XrFaceParameterIndicesANDROID` order; see `openxrFaceParameterMap.js`.
  *
- * Native side (APK WebView):
+ * Native side (OpenNexus XR Face APK WebView):
  * - `window.onNativeFaceData(weights)` — thin hook (weights use WebXR keys, e.g. `jaw_drop`)
- * - `window.__characterStudioNativeFace.push(payload)` — full payload `{ weights, t }`
+ * - `window.__openNexus3dStudioNativeFace.push(payload)` — full payload `{ weights, t }`
  * - `window.AndroidXRBridge.onBridgeReady()` — call from web after init; native restarts pipeline
  *
  * Chrome WebXR still uses the dev HTTP relay (`nativeFaceRelay.js`), not this bridge.
@@ -19,6 +19,9 @@
 
 import { openxrFloatParametersToWebXRRecord } from './openxrFaceParameterMap.js';
 import { resetFaceExpressionNeutralBaseline } from './xrExpressionTrackingDriver.js';
+
+/** Window global injected by `com.opennexus3dstudio.xrfacebridge` WebView evaluateJavascript. */
+export const NATIVE_FACE_WINDOW_API = '__openNexus3dStudioNativeFace';
 
 /**
  * Web-side OpenXR toggle.  When `false` the `openxrParameters` dense-float
@@ -66,10 +69,6 @@ export function clearNativeFaceWeights() {
 
 /**
  * @param {number} [maxAgeMs]
- * @returns {Record<string, number>|null}
- */
-/**
- * @param {number} [maxAgeMs]
  * @param {boolean} [xrPresenting] — when true, uses longer hold during Chrome WebXR + relay gaps
  */
 export function getNativeFaceWeightsIfFresh(
@@ -93,11 +92,7 @@ export function getNativeFaceWeightsMaxAgeMs(xrPresenting = false) {
   return xrPresenting ? XR_PRESENTING_MAX_AGE_MS : DEFAULT_MAX_AGE_MS;
 }
 
-/**
- * Attach `window.__characterStud__characterStudioNativeFacenjection.
- * Idempotent: safe to call multiple times.
- */
-/** True when running inside the CS XR Face APK WebView (`AndroidXRBridge` injected). */
+/** True when running inside the OpenNexus XR Face APK WebView (`AndroidXRBridge` injected). */
 export function isAndroidXrWebView() {
   if (typeof window === 'undefined') return false;
   try {
@@ -126,20 +121,27 @@ function installOnNativeFaceDataHook(api) {
   };
 }
 
-export function initNativeFaceBridge() {
-  if (typeof window === 'undefined') return;
-
-  /** Payloads pushed from native WebView before this module ran (see XrFaceTrackingEngine). */
-  let pendingFromNative = [];
+function drainNativeFacePendingQueue() {
+  /** @type {unknown[]} */
+  let pending = [];
   try {
-    const q = window.__CS_NATIVE_FACE_Q;
-    if (Array.isArray(q) && q.length) {
-      pendingFromNative = q.splice(0, q.length);
-      window.__CS_NATIVE_FACE_Q = [];
+    for (const key of ['__ON_NATIVE_FACE_Q', '__CS_NATIVE_FACE_Q']) {
+      const q = window[key];
+      if (Array.isArray(q) && q.length) {
+        pending = pending.concat(q.splice(0, q.length));
+        window[key] = [];
+      }
     }
   } catch (_) {
     /* ignore */
   }
+  return pending;
+}
+
+export function initNativeFaceBridge() {
+  if (typeof window === 'undefined') return;
+
+  const pendingFromNative = drainNativeFacePendingQueue();
 
   const api = {
     /**
@@ -189,10 +191,11 @@ export function initNativeFaceBridge() {
     /** Re-capture relaxed face as “zero” on the next preprocess (after you return to neutral). */
     resetExpressionNeutral: resetFaceExpressionNeutralBaseline,
     /** @param {number} [maxAgeMs] */
-    getFresh: (maxAgeMs) => getNativeFaceWeightsIfFresh(maxAgeMs ?? DEFAULT_MAX_AGE_MS)
+    getFresh: (maxAgeMs) => getNativeFaceWeightsIfFresh(maxAgeMs ?? DEFAULT_MAX_AGE_MS),
   };
 
-  window.__characterStudioNativeFace = __characterStudioNativeFaceataHook(api);
+  window[NATIVE_FACE_WINDOW_API] = api;
+  installOnNativeFaceDataHook(api);
   notifyAndroidXrBridgeReady();
 
   for (const item of pendingFromNative) {
@@ -204,7 +207,9 @@ export function initNativeFaceBridge() {
   }
 
   try {
-    window.dispatchEvent(new CustomEvent('characterstudio-native-face-ready', { detail: { api } }));
+    window.dispatchEvent(
+      new CustomEvent('opennexus3dstudio-native-face-ready', { detail: { api } }),
+    );
   } catch (_) {
     /* ignore */
   }

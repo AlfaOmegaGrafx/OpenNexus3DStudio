@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.util.Log
 import android.webkit.WebView
@@ -30,7 +30,7 @@ import org.json.JSONObject
  */
 object XrFaceTrackingEngine {
 
-    private const val TAG = "CS-JetpackFace"
+    private const val TAG = "ON-JetpackFace"
     private const val MIN_INTERVAL_MS = 33L
     /** If no payload posted for this long, consider restarting (normal mode). */
     const val STALE_MS = 5000L
@@ -132,12 +132,12 @@ object XrFaceTrackingEngine {
                     "var p=$payloadJs;" +
                     "if(typeof window.onNativeFaceData==='function'&&p.weights){" +
                     "window.onNativeFaceData(p.weights);}" +
-                    "if(window.__characterStudioNativeFace&&" +
-                    "window.__characterStudioNativeFace.push){" +
-                    "window.__characterStudioNativeFace.push(p);" +
-                    "}else{var q=(window.__CS_NATIVE_FACE_Q=window.__CS_NATIVE_FACE_Q||[]);" +
+                    "if(window.__openNexus3dStudioNativeFace&&" +
+                    "window.__openNexus3dStudioNativeFace.push){" +
+                    "window.__openNexus3dStudioNativeFace.push(p);" +
+                    "}else{var q=(window.__ON_NATIVE_FACE_Q=window.__ON_NATIVE_FACE_Q||[]);" +
                     "if(q.length<120)q.push(p);}" +
-                    "}catch(e){console.warn('CS-nativeFace',e&&e.message);}})();",
+                    "}catch(e){console.warn('ON-nativeFace',e&&e.message);}})();",
                 null
             )
         }
@@ -382,7 +382,7 @@ object XrFaceTrackingEngine {
 
     /**
      * Direct WebView injection (no HTTP relay). Feeds [window.onNativeFaceData] and
-     * [window.__characterStudioNativeFace.push] used by Character Studio.
+     * [window.__openNexus3dStudioNativeFace.push] used by OpenNexus3dStudio.
      */
     private suspend fun pushToWebView(weights: JSONObject, payload: JSONObject) {
         val wv = webViewRef?.get() ?: return
@@ -394,12 +394,12 @@ object XrFaceTrackingEngine {
                     "var w=$weightsJs;" +
                     "if(typeof window.onNativeFaceData==='function'){window.onNativeFaceData(w);}" +
                     "var p=$payloadJs;" +
-                    "if(window.__characterStudioNativeFace&&" +
-                    "window.__characterStudioNativeFace.push){" +
-                    "window.__characterStudioNativeFace.push(p);" +
-                    "}else{var q=(window.__CS_NATIVE_FACE_Q=window.__CS_NATIVE_FACE_Q||[]);" +
+                    "if(window.__openNexus3dStudioNativeFace&&" +
+                    "window.__openNexus3dStudioNativeFace.push){" +
+                    "window.__openNexus3dStudioNativeFace.push(p);" +
+                    "}else{var q=(window.__ON_NATIVE_FACE_Q=window.__ON_NATIVE_FACE_Q||[]);" +
                     "if(q.length<120)q.push(p);}" +
-                    "}catch(e){console.warn('CS-nativeFace',e&&e.message);}})();",
+                    "}catch(e){console.warn('ON-nativeFace',e&&e.message);}})();",
                 null
             )
         }

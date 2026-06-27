@@ -57,7 +57,7 @@ Older drafts or slides sometimes mention different function names; **trust the K
 | Path | Where it runs | Feature | Data shape | Implementation in repo |
 |------|----------------|---------|------------|-------------------------|
 | WebXR | Chrome immersive session | Optional `expression-tracking` | `XRFrame.expressions` | [`src/library/xrExpressionTrackingDriver.js`](../src/library/xrExpressionTrackingDriver.js) → `applyXRFrameExpressionsToVRMS` |
-| Native bridge | Android XR host (OpenXR) | `XR_ANDROID_face_tracking` | Serialized weights or `openxrParameters[]` | Native app → `window.__characterStudioNativeFace.push()` → [`src/library/nativeFaceBridge.js`](../src/library/nativeFaceBridge.js) → `applyExpressionWeightRecordToVRMS` |
+| Native bridge | Android XR host (OpenXR) | `XR_ANDROID_face_tracking` | Serialized weights or `openxrParameters[]` | Native app → `window.__openNexus3dStudioNativeFace.push()` → [`src/library/nativeFaceBridge.js`](../src/library/nativeFaceBridge.js) → `applyExpressionWeightRecordToVRMS` |
 
 **Index → key mapping in repo:** [`src/library/openxrFaceParameterMap.js`](../src/library/openxrFaceParameterMap.js) (`OPENXR_ANDROID_FACE_PARAMETER_WEBXR_KEYS`, `openxrFloatParametersToWebXRRecord`).
 
@@ -108,7 +108,7 @@ From Kotlin/Java WebView:
 
 ```java
 webView.evaluateJavascript(
-  "window.__characterStudioNativeFace.push(" + json + ");",
+  "window.__openNexus3dStudioNativeFace.push(" + json + ");",
   null
 );
 ```

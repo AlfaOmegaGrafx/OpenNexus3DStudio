@@ -21,11 +21,11 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/ic_app_icon"
+        android:icon="@mipmap/ic_app_icon"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/ic_app_icon"
+        android:roundIcon="@mipmap/ic_app_icon"
         android:supportsRtl="true"
-        android:theme="@style/Theme.CharacterStudioXrFaceBridge"
+        android:theme="@style/Theme.OpenNexus3dStudioXrFaceBridge"
         android:usesCleartextTraffic="false">
 
         <!-- Android XR runtime broker (required for Khronos loader to resolve runtime on device). -->
@@ -49,7 +49,7 @@
             android:exported="false"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
-            android:taskAffinity="com.characterstudio.xrfacebridge.keeper"
+            android:taskAffinity="com.opennexus3dstudio.xrfacebridge.keeper"
             android:theme="@style/Theme.FaceKeeper"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode|density|fontScale" />
         <service

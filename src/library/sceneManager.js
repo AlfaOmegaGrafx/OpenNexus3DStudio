@@ -308,7 +308,7 @@ export class SceneManager {
     }
     const faceSrc = getLastNativeFaceSource();
     console.info(
-      '[CS-NATIVE-FACE-DIAG]',
+      '[ON-NATIVE-FACE-DIAG]',
       `nativeKeys=${nk} faceSrc=${faceSrc} relay=${relay} vrms=${list.length} exprMgr=${exprN} curVRM=${!!this.currentVRM} xrPresenting=${presenting}`,
     );
   }

@@ -29,7 +29,7 @@ describe('nativeFacePlayback', () => {
   afterEach(() => {
     stopNativeFacePlayback();
     clearNativeFaceWeights();
-    delete window.__characterStudioNativeFace;
+    delete window.__openNexus3dStudioNativeFace;
     delete window.__characterStudioWebXrRenderer;
     delete window.__CS_NATIVE_FACE_PLAYBACK_STATUS;
     vi.unstubAllGlobals();

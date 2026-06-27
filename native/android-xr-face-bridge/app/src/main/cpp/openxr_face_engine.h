@@ -4,7 +4,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace cs::openxr {
+namespace on::openxr {
 
 /** Initialize loader with Android VM + activity jobject (global ref held internally). */
 bool SetActivity(JNIEnv* env, jobject activity);
@@ -22,4 +22,4 @@ bool IsRunning();
 /** Milliseconds since last successful face sample, or LONG_MAX if never. */
 int64_t LastPostAgeMs();
 
-}  // namespace cs::openxr
+}  // namespace on::openxr

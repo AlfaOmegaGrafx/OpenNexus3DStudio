@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.app.Activity
 import android.util.Log
@@ -19,7 +19,7 @@ import org.json.JSONObject
  */
 object OpenXrFaceEngine {
 
-    private const val TAG = "CS-OpenXrFace"
+    private const val TAG = "ON-OpenXrFace"
     private const val PARAM_COUNT = 68
 
     private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -51,9 +51,9 @@ object OpenXrFaceEngine {
         try {
             // Prefab AAR ships loader via CMake link; explicit load helps dlopen find it on Galaxy XR.
             System.loadLibrary("openxr_loader")
-            System.loadLibrary("cs_openxr_face")
+            System.loadLibrary("on_openxr_face")
             nativeLoaded = true
-            Log.i(TAG, "Native libraries openxr_loader + cs_openxr_face loaded")
+            Log.i(TAG, "Native libraries openxr_loader + on_openxr_face loaded")
         } catch (e: UnsatisfiedLinkError) {
             Log.w(TAG, "OpenXR native lib unavailable (emulator / non-XR build): ${e.message}")
         }

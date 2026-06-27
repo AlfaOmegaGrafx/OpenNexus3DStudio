@@ -1,4 +1,4 @@
-package com.characterstudio.xrfacebridge
+package com.opennexus3dstudio.xrfacebridge
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -18,12 +18,12 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
- * POSTs face payloads to the Character Studio dev server ([/__native_face_ingest])
+ * POSTs face payloads to the OpenNexus3dStudio dev server ([/__native_face_ingest])
  * so Chrome WebXR on the headset can subscribe via same-origin SSE ([/__native_face_sse]).
  */
 object FaceHttpRelay {
 
-    private const val TAG = "CS-FaceHttpRelay"
+    private const val TAG = "ON-FaceHttpRelay"
     private const val INGEST_PATH = "/__native_face_ingest"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -35,14 +35,14 @@ object FaceHttpRelay {
     private var lastFailureLogMs = 0L
 
     /**
-     * @param characterStudioUrl e.g. https://YOUR_PC_LAN_IP:3000/ from [R.string.character_studio_url]
+     * @param openNexus3dStudioUrl e.g. https://YOUR_PC_LAN_IP:3000/ from [R.string.open_nexus_3d_studio_url]
      * @param trustDevCerts when true (debug), accept self-signed mkcert for LAN dev HTTPS
      */
     @Synchronized
-    fun configure(characterStudioUrl: String, trustDevCerts: Boolean) {
-        val base = characterStudioUrl.trim().trimEnd('/')
+    fun configure(openNexus3dStudioUrl: String, trustDevCerts: Boolean) {
+        val base = openNexus3dStudioUrl.trim().trimEnd('/')
         if (base.isEmpty()) {
-            Log.w(TAG, "Empty character studio URL — relay disabled")
+            Log.w(TAG, "Empty OpenNexus3dStudio URL — relay disabled")
             stop()
             return
         }
@@ -51,7 +51,7 @@ object FaceHttpRelay {
             val portPart = if (uri.port > 0) ":${uri.port}" else ""
             "${uri.scheme}://${uri.host}$portPart$INGEST_PATH"
         } catch (e: Exception) {
-            Log.e(TAG, "Invalid character studio URL: $characterStudioUrl", e)
+            Log.e(TAG, "Invalid OpenNexus3dStudio URL: $openNexus3dStudioUrl", e)
             null
         }
         client = buildClient(trustDevCerts)

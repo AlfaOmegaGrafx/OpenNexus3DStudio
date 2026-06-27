@@ -90,7 +90,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 ### Success criteria (re-test after rebuild)
 
 - In Chrome AR: **`nativeKeys > 25`**, **`relay=poll+sse/<500ms`**, sustained while **`xrPresenting=true`** (live ingest, not frozen cache).
-- Logcat: `CS-OpenXrFace` `OpenXR GLES face started` / `First OpenXR face push`; or `CS-JetpackFace` `TRACKING` + `CS-FaceHttpRelay` posts.
+- Logcat: `ON-OpenXrFace` `OpenXR GLES face started` / `First OpenXR face push`; or `ON-JetpackFace` `TRACKING` + `ON-FaceHttpRelay` posts.
 
 ## Key Kotlin / native files (open these first)
 
@@ -107,7 +107,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 | `FaceBlendShapeMaps.kt` | Jetpack → WebXR key mapping |
 | `AndroidXrBridgeInterface.kt` | JS `AndroidXRBridge.onBridgeReady()` |
 
-**Log tags:** `CS-JetpackFace`, `CS-FaceKeeper`, `CS-FaceBridgeSvc`, `CS-FaceHttpRelay`, `CS-OpenXrNative`, `CS-XR-WebView`
+**Log tags:** `ON-JetpackFace`, `ON-FaceKeeper`, `ON-FaceBridgeSvc`, `ON-FaceHttpRelay`, `ON-OpenXrNative`, `ON-XR-WebView`
 
 ## Platform constraints (do not violate)
 
@@ -120,7 +120,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 
 ## Follow-up tasks (if Full Space AR still fails after May 2026 build)
 
-1. **Verify OpenXR actually posts in AR** — logcat `CS-OpenXrFace`; remote log `faceSrc=openxr` or payload `"source":"openxr"`.
+1. **Verify OpenXR actually posts in AR** — logcat `ON-OpenXrFace`; remote log `faceSrc=openxr` or payload `"source":"openxr"`.
 2. **Reduce Jetpack/OpenXR contention** — consider Jetpack **only** when `!OpenXrFaceEngine.isCollecting()` during handoff (today Jetpack always runs on handoff).
 3. **Runtime permission** — ensure `FACE_TRACKING` granted before OpenXR `xrCreateFaceTrackerANDROID`.
 4. **Optional:** If Google documents face → Chrome WebXR without relay, prefer that for production.
@@ -133,7 +133,7 @@ See also [`OPENXR_FACE_TRACKING_ANDROID_XR.md`](./OPENXR_FACE_TRACKING_ANDROID_X
 2. Install debug APK; grant face + notifications + camera.
 3. Open app → load site → **⋮ → Open in Chrome for WebXR (+ face)**.
 4. Keep OpenNexus XR Face visible or PiP bubble in Home Space.
-5. Enter AR in Chrome; watch PC `logs/remote-log.txt` for `[CS-NATIVE-FACE-DIAG] nativeKeys=… relay=… xrPresenting=…`
+5. Enter AR in Chrome; watch PC `logs/remote-log.txt` for `[ON-NATIVE-FACE-DIAG] nativeKeys=… relay=… xrPresenting=…`
 6. `adb logcat` with tags above, or repo script `scripts/capture-apk-logcat.ps1`
 
 ## Related web repo paths
