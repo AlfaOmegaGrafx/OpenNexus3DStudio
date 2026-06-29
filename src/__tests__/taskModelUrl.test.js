@@ -14,6 +14,8 @@ import {
   enrichCompletedJobPayload,
   normalizeTaskLoadPayload,
   getTaskResultMotionUrl,
+  getTaskResultImageUrl,
+  isTextToImageTaskResult,
   isTextToMotionTaskResult,
 } from '../library/taskModelUrl.js';
 
@@ -34,6 +36,28 @@ describe('taskModelUrl', () => {
     );
   });
 
+  it('text-to-image jobs do not resolve as mesh downloads', () => {
+    const imageResult = {
+      job_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+      feature: 'text_to_image',
+      output_image_path: 'outputs/images/krea2_turbo_text_to_image_image_123.png',
+      mesh_file_info: { file_extension: '.png' },
+      generation_info: { inference_mode: 'local_open_weights', output_format: 'png' },
+    };
+    expect(isTextToImageTaskResult(imageResult)).toBe(true);
+    expect(getTaskResultMeshUrl(imageResult)).toBeNull();
+    expect(getTaskResultModelUrl(imageResult)).toBeNull();
+    expect(getTaskResultImageUrl(imageResult)).toBe(
+      'outputs/images/krea2_turbo_text_to_image_image_123.png',
+    );
+    expect(getTaskResultFileExtension(imageResult)).toBe('png');
+    const enriched = enrichCompletedJobPayload(imageResult, imageResult.job_id, 'text-to-image');
+    expect(enriched.mesh_url).toBeUndefined();
+    expect(enriched.image_url).toBe(
+      'outputs/images/krea2_turbo_text_to_image_image_123.png',
+    );
+  });
+
   it('text-to-motion jobs do not resolve as mesh downloads', () => {
     const motionResult = {
       job_id: '850ff7ae-1d86-4a7c-b75d-58f78be425b9',
@@ -49,7 +73,7 @@ describe('taskModelUrl', () => {
     expect(getTaskResultMeshUrl(motionResult)).toBeNull();
     expect(getTaskResultModelUrl(motionResult)).toBeNull();
     expect(getTaskResultMotionUrl(motionResult)).toBe(
-      '/api/v1/system/jobs/850ff7ae-1d86-4a7c-b75d-58f78be425b9/download',
+      'http://127.0.0.1:7842/api/v1/system/jobs/850ff7ae/download',
     );
     const enriched = enrichCompletedJobPayload(motionResult, motionResult.job_id, 'text-to-motion');
     expect(enriched.mesh_url).toBeUndefined();

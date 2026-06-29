@@ -30,6 +30,7 @@ import {
   getTaskResultFbxUrl,
   getAutoRigMetaFromResult,
   getTaskResultFileExtension,
+  isTextToImageTaskResult,
   isTextToMotionTaskResult,
   normalizeTaskLoadPayload,
   resolveTaskModelUrl,
@@ -401,12 +402,22 @@ function AppContent() {
         taskResult?.humanoid_template_id != null ||
         taskResult?.inputs?.humanoid_template_id != null ||
         taskResult?.result?.generation_info?.rig_mode === 'template';
+      const isCreatureTemplateRig =
+        autoRigMeta.rig_info?.rig_mode === 'creature_template' ||
+        autoRigMeta.rig_info?.rig_type === 'creature_template' ||
+        autoRigMeta.rig_info?.generation_method === 'mesh2motion_creature_template' ||
+        taskResult?.inputs?.rig_mode === 'creature_template' ||
+        taskResult?.creature_template_id != null ||
+        taskResult?.inputs?.creature_template_id != null ||
+        taskResult?.result?.generation_info?.rig_mode === 'creature_template';
       const isAutoRig =
         taskResult?.feature === 'auto_rig' ||
         taskResult?.result?.rig_info != null ||
         autoRigMeta.bone_count > 0 ||
-        isTemplateRig;
-      const preserveExportedOrientation = isAvatarFromImage || isTemplateRig || isAutoRig;
+        isTemplateRig ||
+        isCreatureTemplateRig;
+      const preserveExportedOrientation =
+        isAvatarFromImage || isTemplateRig || isCreatureTemplateRig || isAutoRig;
       const shouldExportVrm = task?.options?.export_vrm_after === true;
 
       const runLoad = async () => {
@@ -424,7 +435,7 @@ function AppContent() {
           fileExtension: fileExtension || undefined,
           autoRigMeta: isAutoRig ? autoRigMeta : null,
           attachRigFbxUrl: isAutoRig ? attachRigFbxUrl : null,
-          templateRig: isTemplateRig,
+          templateRig: isTemplateRig || isCreatureTemplateRig,
           preserveExportedOrientation,
         });
 
@@ -545,6 +556,9 @@ function AppContent() {
         await playTextToMotionFromTask(loadPayload, task, 'taskCompleted');
         return;
       }
+      if (isTextToImageTaskResult(loadPayload) || task?.type === 'text-to-image') {
+        return;
+      }
       const rawUrl = getTaskResultMeshUrl(loadPayload);
       if (rawUrl) await loadGeneratedModel(rawUrl, 'taskCompleted', loadPayload, task);
     };
@@ -583,6 +597,9 @@ function AppContent() {
       }
       if (isTextToMotionTaskResult(loadPayload) || task?.type === 'text-to-motion') {
         await playTextToMotionFromTask(loadPayload, task, 'loadModelFromUrl');
+        return;
+      }
+      if (isTextToImageTaskResult(loadPayload) || task?.type === 'text-to-image') {
         return;
       }
       const rawUrl =

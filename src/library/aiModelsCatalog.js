@@ -11,6 +11,7 @@
  * - World props / mesh paint: TRELLIS.2
  */
 import { AUTO_RIG_MODES, TEMPLATE_RIG_MODEL_ID } from './avatarPipelineCatalog.js';
+import { CREATURE_TEMPLATE_RIG_MODEL_ID } from './creaturePipelineCatalog.js';
 
 /** @type {{ value: string, label: string, feature: string }[]} */
 export const ALL_MODELS = [
@@ -36,10 +37,20 @@ export const ALL_MODELS = [
   { value: 'p3sam_mesh_segmentation', label: 'P3-SAM Mesh Segmentation', feature: 'mesh_segmentation' },
   { value: 'skintokens_auto_rig', label: 'SkinTokens Auto Rig (recommended — full rig + GLB)', feature: 'auto_rig' },
   { value: 'unirig_auto_rig', label: 'UniRig Auto Rig (template VRM / FBX skeleton)', feature: 'auto_rig' },
+  {
+    value: 'creature_template_auto_rig',
+    label: 'Creature Template Rig (Mesh2Motion fox / quadruped → GLB)',
+    feature: 'auto_rig',
+  },
   { value: 'instant_meshes_retopology', label: 'Instant Meshes Retopology', feature: 'mesh_retopology' },
   { value: 'xatlas_uv_unwrapping', label: 'xatlas UV Unwrapping', feature: 'uv_unwrapping' },
   { value: 'voxhammer_text_mesh_editing', label: 'VoxHammer Text Mesh Editing', feature: 'text_mesh_editing' },
   { value: 'voxhammer_image_mesh_editing', label: 'VoxHammer Image Mesh Editing', feature: 'image_mesh_editing' },
+  {
+    value: 'krea2_turbo_text_to_image',
+    label: 'Krea 2 Turbo Text-to-Image (local, recommended)',
+    feature: 'text_to_image',
+  },
   { value: 'kimodo_text_to_motion', label: 'Kimodo Text-to-Motion (SOMA → VRM)', feature: 'text_to_motion' },
 ];
 
@@ -74,6 +85,13 @@ export const PREFERRED_PIPELINES = {
     envModel: 'opennexus_image_to_world',
     propMeshModel: 'trellis2_image_to_textured_mesh',
   },
+  textToImageTo3d: {
+    label: 'Concept art → 3D (recommended)',
+    steps: ['Krea 2 Turbo text→image', 'TRELLIS.2 image→3D'],
+    taskTypes: ['text-to-image', 'image-to-3d'],
+    imageModel: 'krea2_turbo_text_to_image',
+    meshModel: 'trellis2_image_to_textured_mesh',
+  },
 };
 
 /** Map UI task types (task sidebar) to API feature keys from /api/v1/system/models */
@@ -91,6 +109,7 @@ export const TASK_TYPE_TO_FEATURE = {
   'mesh-editing-image': 'image_mesh_editing',
   'image-to-splat': 'image_to_splat',
   'image-to-world': 'image_to_world',
+  'text-to-image': 'text_to_image',
   'text-to-motion': 'text_to_motion',
   'avatar-from-image': null,
   'avatar-from-photo': null,
@@ -136,7 +155,9 @@ export function getModelLabel(modelId) {
 /** Default rig job output_format per backend (3DAIGC-API contract). */
 export function getDefaultAutoRigOutputFormat(modelPreference, rigMode) {
   if (rigMode === AUTO_RIG_MODES.TEMPLATE) return 'glb';
+  if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) return 'glb';
   if (modelPreference === 'skintokens_auto_rig') return 'glb';
+  if (modelPreference === CREATURE_TEMPLATE_RIG_MODEL_ID) return 'glb';
   return 'fbx';
 }
 
@@ -155,6 +176,7 @@ const DEFAULT_MODEL_BY_FEATURE = {
   uv_unwrapping: 'xatlas_uv_unwrapping',
   text_mesh_editing: 'voxhammer_text_mesh_editing',
   image_mesh_editing: 'voxhammer_image_mesh_editing',
+  text_to_image: 'krea2_turbo_text_to_image',
   text_to_motion: 'kimodo_text_to_motion',
 };
 
@@ -174,6 +196,9 @@ export function getDefaultAutoRigModel(rigMode) {
   if (rigMode === AUTO_RIG_MODES.TEMPLATE) {
     return TEMPLATE_RIG_MODEL_ID;
   }
+  if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) {
+    return CREATURE_TEMPLATE_RIG_MODEL_ID;
+  }
   return DEFAULT_MODEL_BY_FEATURE.auto_rig;
 }
 
@@ -186,9 +211,18 @@ export function resolveAutoRigModelForTask(rigMode, selectedModel) {
   if (rigMode === AUTO_RIG_MODES.TEMPLATE) {
     return TEMPLATE_RIG_MODEL_ID;
   }
+  if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) {
+    return CREATURE_TEMPLATE_RIG_MODEL_ID;
+  }
   const autoRigModels = ALL_MODELS.filter((m) => m.feature === 'auto_rig');
   if (selectedModel && autoRigModels.some((m) => m.value === selectedModel)) {
     if (selectedModel === TEMPLATE_RIG_MODEL_ID && rigMode !== AUTO_RIG_MODES.TEMPLATE) {
+      return getDefaultAutoRigModel(rigMode);
+    }
+    if (
+      selectedModel === CREATURE_TEMPLATE_RIG_MODEL_ID &&
+      rigMode !== AUTO_RIG_MODES.CREATURE_TEMPLATE
+    ) {
       return getDefaultAutoRigModel(rigMode);
     }
     return selectedModel;

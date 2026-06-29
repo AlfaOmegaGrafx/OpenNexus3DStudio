@@ -16,6 +16,7 @@ import {
   enrichCompletedJobPayload,
   extractJobProgress,
   getTaskResultModelUrl,
+  isTextToImageTaskResult,
   isTextToMotionTaskResult,
   resolveTaskModelUrl,
 } from './taskModelUrl.js';
@@ -38,6 +39,11 @@ import {
   normalizeHumanoidTemplateId,
   TEMPLATE_RIG_MODEL_ID,
 } from './avatarPipelineCatalog.js';
+import {
+  CREATURE_TEMPLATE_RIG_MODEL_ID,
+  DEFAULT_CREATURE_TEMPLATE_ID,
+  normalizeCreatureTemplateId,
+} from './creaturePipelineCatalog.js';
 import {
   applyJobTimestampsToTask,
   isApiJobStale,
@@ -196,6 +202,7 @@ export class TaskManager {
       'avatar-from-image',
       'avatar-from-photo',
       'image-to-world',
+      'text-to-image',
       'text-to-motion',
     ];
   }
@@ -489,6 +496,7 @@ export class TaskManager {
           task.type === 'image-to-splat' ||
           task.type === 'avatar-from-image' ||
           task.type === 'image-to-world' ||
+          task.type === 'text-to-image' ||
           task.type === 'text-to-motion'
             ? { maxAttempts: 600, pollInterval: 3000 }
             : {};
@@ -516,7 +524,9 @@ export class TaskManager {
           this.updateTaskStatus(taskId, 'completed', 100, completedResult);
           this.emit('taskCompleted', { task: this.tasks.get(taskId), result: completedResult });
           const isMotionTask = task.type === 'text-to-motion';
-          const modelUrl = isMotionTask ? null : getTaskResultModelUrl(completedResult);
+          const isImageTask =
+            task.type === 'text-to-image' || isTextToImageTaskResult(completedResult);
+          const modelUrl = isMotionTask || isImageTask ? null : getTaskResultModelUrl(completedResult);
           const isWorldTask =
             task.type === 'image-to-world' ||
             completedResult.pipelineStage === 'world_package' ||
@@ -528,6 +538,8 @@ export class TaskManager {
                 detail: { taskId, task: taskRow, result: completedResult },
               }),
             );
+          } else if (isImageTask) {
+            // Raster image — no viewport auto-load; TaskManager row shows preview + chain to image-to-3d.
           } else if (modelUrl || isWorldTask) {
             console.log('Auto-loading task result:', {
               modelUrl,
@@ -738,6 +750,8 @@ export class TaskManager {
         return await this.executeAvatarFromImage(prompt, imageFile, options);
       case 'image-to-world':
         return await this.executeImageToWorld(prompt, imageFile, options);
+      case 'text-to-image':
+        return await this.executeTextToImage(prompt, options);
       case 'text-to-motion':
         return await this.executeTextToMotion(prompt, options);
       default:
@@ -777,6 +791,44 @@ export class TaskManager {
     } catch (error) {
       performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, error.response?.status ?? 0, error);
       logger.error('Text-to-3D task failed', error, { prompt, endpoint });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute text-to-image (Krea 2 Turbo local weights → PNG/WebP).
+   */
+  async executeTextToImage(prompt, options) {
+    const endpoint = `${this.apiEndpoint}/api/v1/image-generation/text-to-image`;
+    const requestData = {
+      text_prompt: prompt,
+      width: options?.width ?? 1024,
+      height: options?.height ?? 1024,
+      output_format: options?.output_format ?? 'png',
+      model_preference: options?.model_preference ?? 'krea2_turbo_text_to_image',
+    };
+    const mp = options?.model_parameters;
+    if (mp && typeof mp === 'object') {
+      const cleaned = { ...mp };
+      for (const key of Object.keys(cleaned)) {
+        if (cleaned[key] == null) delete cleaned[key];
+      }
+      if (Object.keys(cleaned).length > 0) {
+        requestData.model_parameters = cleaned;
+      }
+    }
+
+    const startTime = Date.now();
+    try {
+      const response = await axios.post(endpoint, requestData, {
+        headers: { 'Content-Type': 'application/json', ...get3daigcAuthHeaders() },
+        timeout: 120000,
+      });
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, response.status);
+      return response.data;
+    } catch (error) {
+      performanceMonitor.trackAPICall(endpoint, 'POST', Date.now() - startTime, error.response?.status ?? 0, error);
+      logger.error('Text-to-image task failed', error, { prompt, endpoint });
       throw error;
     }
   }
@@ -1370,6 +1422,19 @@ export class TaskManager {
           using: TEMPLATE_RIG_MODEL_ID,
         });
         rigBody.model_preference = TEMPLATE_RIG_MODEL_ID;
+      }
+    }
+
+    if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) {
+      rigBody.creature_template_id = normalizeCreatureTemplateId(
+        options?.creature_template_id ?? DEFAULT_CREATURE_TEMPLATE_ID,
+      );
+      if (modelPreference !== CREATURE_TEMPLATE_RIG_MODEL_ID) {
+        logger.warn('Creature template rig requires creature_template_auto_rig; overriding model_preference', {
+          requested: modelPreference,
+          using: CREATURE_TEMPLATE_RIG_MODEL_ID,
+        });
+        rigBody.model_preference = CREATURE_TEMPLATE_RIG_MODEL_ID;
       }
     }
 
@@ -2043,6 +2108,12 @@ export class TaskManager {
           },
         }),
       );
+      return;
+    }
+    if (
+      task?.type === 'text-to-image' ||
+      isTextToImageTaskResult(completedResult)
+    ) {
       return;
     }
     const modelUrl = getTaskResultModelUrl(completedResult);

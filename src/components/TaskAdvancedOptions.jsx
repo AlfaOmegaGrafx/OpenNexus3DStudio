@@ -6,6 +6,11 @@ import {
   HUMANOID_TEMPLATE_OPTIONS,
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
+import {
+  CREATURE_TEMPLATE_OPTIONS,
+  CREATURE_TEMPLATE_RIG_MODEL_ID,
+  DEFAULT_CREATURE_TEMPLATE_ID,
+} from '../library/creaturePipelineCatalog.js';
 import { getDefaultAutoRigOutputFormat } from '../library/aiModelsCatalog.js';
 import {
   OMB_EXPORT_PRESETS,
@@ -18,6 +23,7 @@ import {
  */
 const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }) => {
   const isAutoRig = taskType === 'auto-rigging';
+  const isTextToImage = taskType === 'text-to-image';
   const [expanded, setExpanded] = useState(false);
   const [schema, setSchema] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -67,6 +73,10 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
     if (mode === AUTO_RIG_MODES.TEMPLATE) {
       next.output_format = 'glb';
       next.humanoid_template_id = next.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID;
+    }
+    if (mode === AUTO_RIG_MODES.CREATURE_TEMPLATE) {
+      next.output_format = 'glb';
+      next.creature_template_id = next.creature_template_id ?? DEFAULT_CREATURE_TEMPLATE_ID;
     }
     if (mode !== AUTO_RIG_MODES.FULL && next.model_parameters?.with_skinning !== undefined) {
       const { with_skinning: _removed, ...rest } = next.model_parameters;
@@ -120,7 +130,51 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
             background: '#111',
           }}
         >
-          {!isAutoRig && (
+          {!isAutoRig && isTextToImage && (
+            <>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <label style={labelStyle}>Width (px)</label>
+                <input
+                  type="number"
+                  min={512}
+                  max={2048}
+                  step={64}
+                  style={inputStyle}
+                  value={value?.image_width ?? 1024}
+                  onChange={(e) => setField('image_width', Number(e.target.value) || 1024)}
+                />
+              </div>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <label style={labelStyle}>Height (px)</label>
+                <input
+                  type="number"
+                  min={512}
+                  max={2048}
+                  step={64}
+                  style={inputStyle}
+                  value={value?.image_height ?? 1024}
+                  onChange={(e) => setField('image_height', Number(e.target.value) || 1024)}
+                />
+              </div>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <label style={labelStyle}>Output format</label>
+                <select
+                  style={inputStyle}
+                  value={value?.output_format ?? 'png'}
+                  onChange={(e) => setField('output_format', e.target.value)}
+                >
+                  <option value="png">PNG</option>
+                  <option value="webp">WebP</option>
+                </select>
+              </div>
+              <p style={{ ...hintStyle, marginBottom: '0.5rem' }}>
+                Krea 2 Turbo defaults: 8 steps, CFG 0. Use seed in model parameters below for
+                reproducibility. Generation is local (~6–8 min on GB10); no Krea cloud API.
+              </p>
+            </>
+          )}
+
+          {!isAutoRig && !isTextToImage && (
             <>
               <div style={{ marginBottom: '0.5rem' }}>
                 <label style={labelStyle}>OMB Spatial Fabric preset (generation)</label>
@@ -225,6 +279,9 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                   <option value="full">Full — SkinTokens rig + skin weights (recommended on DGX)</option>
                   <option value="skin">Skin — skin-focused rig pass</option>
                   <option value="template">Template VRM — UniRig fits mesh to template.vrm (GLB)</option>
+                  <option value="creature_template">
+                    Creature template — Mesh2Motion fox / quadruped skeleton (GLB)
+                  </option>
                 </select>
               </div>
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE && (
@@ -247,6 +304,28 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                     Uses <code style={{ fontSize: '0.55rem' }}>{HUMANOID_TEMPLATE_OPTIONS[0]?.vrmFile}</code>{' '}
                     on the API (CC-Wrap-style bone fit). Output is GLB with template skeleton; facial
                     blend shapes stay on the template topology until non-rigid wrap is added.
+                  </p>
+                </>
+              )}
+              {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.CREATURE_TEMPLATE && (
+                <>
+                  <div style={{ marginBottom: '0.4rem' }}>
+                    <label style={labelStyle}>Creature template</label>
+                    <select
+                      style={inputStyle}
+                      value={value?.creature_template_id ?? DEFAULT_CREATURE_TEMPLATE_ID}
+                      onChange={(e) => setField('creature_template_id', e.target.value)}
+                    >
+                      {CREATURE_TEMPLATE_OPTIONS.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p style={{ fontSize: '0.55rem', color: '#888', margin: '0 0 0.4rem' }}>
+                    Uses Mesh2Motion <code style={{ fontSize: '0.55rem' }}>rig-fox.glb</code> on the
+                    API (48 named bones). Best for quadrupeds; bird/dragon templates come later.
                   </p>
                 </>
               )}
@@ -276,7 +355,10 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                     getDefaultAutoRigOutputFormat(modelId, value?.rig_mode ?? 'skeleton')
                   }
                   onChange={(e) => setField('output_format', e.target.value)}
-                  disabled={(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE}
+                  disabled={
+                    (value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE ||
+                    (value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.CREATURE_TEMPLATE
+                  }
                 >
                   <option value="fbx">FBX (UniRig default)</option>
                   <option value="glb">GLB (template / SkinTokens default)</option>
@@ -288,9 +370,14 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                 <code style={{ fontSize: '0.55rem' }}>mesh_file_id</code>, rig mode
                 {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE
                   ? ', humanoid_template_id,'
-                  : ','}{' '}
+                  : (value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.CREATURE_TEMPLATE
+                    ? ', creature_template_id,'
+                    : ','}{' '}
                 output format, and model preference. Template mode requires{' '}
-                <code style={{ fontSize: '0.55rem' }}>{TEMPLATE_RIG_MODEL_ID}</code> and outputs GLB.
+                <code style={{ fontSize: '0.55rem' }}>{TEMPLATE_RIG_MODEL_ID}</code>; creature
+                template requires{' '}
+                <code style={{ fontSize: '0.55rem' }}>{CREATURE_TEMPLATE_RIG_MODEL_ID}</code>. Both
+                output GLB.
               </p>
             </>
           )}

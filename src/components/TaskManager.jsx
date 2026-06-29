@@ -21,8 +21,12 @@ import {
   getTaskResultModelUrl,
   getTaskResultMeshUrl,
   getTaskResultMotionUrl,
+  getTaskResultImageUrl,
+  getTaskResultFileExtension,
+  isTextToImageTaskResult,
   isTextToMotionTaskResult,
   normalizeTaskLoadPayload,
+  resolveTaskModelUrl,
 } from '../library/taskModelUrl.js';
 import {
   getWorldManifestUrlFromTaskResult,
@@ -49,6 +53,9 @@ import {
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
 import {
+  DEFAULT_CREATURE_TEMPLATE_ID,
+} from '../library/creaturePipelineCatalog.js';
+import {
   MAX_TOTAL_IMAGES,
   multiImageUploadHint,
   splitPrimaryAndReferenceFiles,
@@ -58,6 +65,54 @@ import TaskAdvancedOptions from './TaskAdvancedOptions.jsx';
 import './TaskManager.css';
 
 export { ALL_MODELS, TASK_TYPE_TO_FEATURE };
+
+/** Authenticated thumbnail for completed text-to-image jobs. */
+function TaskImageThumbnail({ url, apiEndpoint }) {
+  const [src, setSrc] = useState(null);
+
+  useEffect(() => {
+    if (!url) {
+      setSrc(null);
+      return undefined;
+    }
+    const abs = resolveTaskModelUrl(url, apiEndpoint);
+    let cancelled = false;
+    let objectUrl = null;
+    fetch(abs, { headers: get3daigcAuthHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, apiEndpoint]);
+
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt="Generated"
+      style={{
+        display: 'block',
+        maxWidth: '100%',
+        maxHeight: '120px',
+        marginTop: '0.35rem',
+        borderRadius: '4px',
+        border: '1px solid #444',
+      }}
+    />
+  );
+}
 
 const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   console.log('TaskManager: Component rendered with props:', { 
@@ -85,11 +140,14 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     mesh_simplify: 0.95,
     rig_mode: AUTO_RIG_MODES.FULL,
     humanoid_template_id: DEFAULT_HUMANOID_TEMPLATE_ID,
+    creature_template_id: DEFAULT_CREATURE_TEMPLATE_ID,
     include_splat_preview: false,
     use_multiview_mesh: true,
     prop_regions_json: '',
     world_name: '',
     prop_mesh_model_preference: 'trellis2_image_to_textured_mesh',
+    image_width: 1024,
+    image_height: 1024,
     num_parts: 8,
     source_prompt: '',
     target_prompt: '',
@@ -237,6 +295,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         world_name: prev.world_name ?? '',
       }));
       if (defaultModel) setNewTaskModel(defaultModel);
+    } else if (newTaskType === 'text-to-image') {
+      setTaskOptions((prev) => ({
+        ...prev,
+        output_format: 'png',
+        image_width: prev.image_width ?? 1024,
+        image_height: prev.image_height ?? 1024,
+      }));
     } else {
       setTaskOptions((prev) => ({ ...prev, output_format: 'glb' }));
     }
@@ -441,6 +506,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           taskOptions.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID;
         options.output_format = 'glb';
       }
+      if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) {
+        options.creature_template_id =
+          taskOptions.creature_template_id ?? DEFAULT_CREATURE_TEMPLATE_ID;
+        options.output_format = 'glb';
+      }
     }
     if (newTaskType === 'avatar-from-image') {
       options.humanoid_template_id =
@@ -479,6 +549,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       } else {
         options.prop_regions = [];
       }
+    }
+    if (newTaskType === 'text-to-image') {
+      options.width = Number(taskOptions.image_width) || 1024;
+      options.height = Number(taskOptions.image_height) || 1024;
+      options.output_format = taskOptions.output_format === 'webp' ? 'webp' : 'png';
     }
     const modelsForTask = getModelsForTaskType(newTaskType);
     if (modelsForTask.length > 0 && newTaskModel) {
@@ -659,6 +734,67 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     };
   }, []);
 
+  const handleUseImageForImageTo3d = async (task, event) => {
+    event?.stopPropagation?.();
+    const loadPayload = normalizeTaskLoadPayload(task);
+    const imageUrl = getTaskResultImageUrl(loadPayload);
+    if (!imageUrl) {
+      alert('No generated image URL on this task.');
+      return;
+    }
+    try {
+      const abs = resolveTaskModelUrl(imageUrl, apiEndpoint);
+      const response = await fetch(abs, { headers: get3daigcAuthHeaders() });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const ext = getTaskResultFileExtension(loadPayload) || 'png';
+      const baseName = slugifyObjectName(
+        task.options?.object_name || task.name,
+        'generated-image',
+      );
+      const file = new File([blob], `${baseName}.${ext}`, {
+        type: blob.type || (ext === 'webp' ? 'image/webp' : 'image/png'),
+      });
+      setNewTaskType('image-to-3d');
+      setNewTaskPrompt(task.prompt || '');
+      setNewObjectName(task.options?.object_name || task.name || '');
+      setNewTaskModel(getDefaultModelForFeature('image-to-3d'));
+      setNewTaskImage(file);
+      setNewTaskImages([]);
+      setShowNewTask(true);
+    } catch (error) {
+      alert(error?.message || 'Failed to fetch generated image for Image to 3D.');
+    }
+  };
+
+  const handleDownloadTaskImage = async (task, event) => {
+    event?.stopPropagation?.();
+    const loadPayload = normalizeTaskLoadPayload(task);
+    const imageUrl = getTaskResultImageUrl(loadPayload);
+    if (!imageUrl) {
+      alert('No generated image URL on this task.');
+      return;
+    }
+    try {
+      const abs = resolveTaskModelUrl(imageUrl, apiEndpoint);
+      const response = await fetch(abs, { headers: get3daigcAuthHeaders() });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const ext = getTaskResultFileExtension(loadPayload) || 'png';
+      const baseName = slugifyObjectName(
+        task.options?.object_name || task.name,
+        resolveTaskJobId(task) || 'image',
+      );
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${baseName}.${ext}`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert(error?.message || 'Failed to download image.');
+    }
+  };
+
   const handleDeleteTask = async (task) => {
     setDeleteError(null);
     setDeletingTaskId(task.id);
@@ -679,6 +815,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
     const loadPayload = normalizeTaskLoadPayload(task);
     if (!loadPayload) return;
+    const isImage = task.type === 'text-to-image' || isTextToImageTaskResult(loadPayload);
+    if (isImage) return;
     const isMotion = task.type === 'text-to-motion' || isTextToMotionTaskResult(loadPayload);
     if (isMotion) {
       if (!getTaskResultMotionUrl(loadPayload) && !jobId) {
@@ -776,30 +914,40 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const renderTaskItem = (task) => {
     const taskJobId = resolveTaskJobId(task);
+    const loadPayload =
+      task.status === 'completed' ? normalizeTaskLoadPayload(task) : null;
+    const isImageTask =
+      task.type === 'text-to-image' ||
+      (loadPayload && isTextToImageTaskResult(loadPayload));
     const isViewportLoading = viewportLoadingJobId && taskJobId === viewportLoadingJobId;
     const isViewportActive = viewportActiveJobId && taskJobId === viewportActiveJobId;
     const isViewportFailed = viewportFailedJobId && taskJobId === viewportFailedJobId;
+    const canOpenInViewport =
+      task.status === 'completed' && task.result && !isImageTask;
     return (
       <div
                 key={task.id}
                 className="task-item"
-                role={task.status === 'completed' && task.result ? 'button' : undefined}
-                tabIndex={task.status === 'completed' && task.result ? 0 : undefined}
+                role={canOpenInViewport ? 'button' : undefined}
+                tabIndex={canOpenInViewport ? 0 : undefined}
                 onClick={(event) => handleTaskRowClick(task, event)}
                 onKeyDown={(event) => {
+                  if (!canOpenInViewport) return;
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     dispatchLoadTask(task, 'taskRowKey');
                   }
                 }}
                 title={
-                  task.status === 'completed' && task.result
+                  canOpenInViewport
                     ? isViewportLoading
                       ? 'Loading into viewport…'
                       : task.type === 'text-to-motion' || isTextToMotionTaskResult(task.result)
                         ? 'Click to load animation on the VRM'
                         : 'Click to open in viewport'
-                    : undefined
+                    : isImageTask && task.status === 'completed'
+                      ? 'Generated image — use Download or Image to 3D below'
+                      : undefined
                 }
                 style={{
                 padding: '0.375rem',
@@ -816,7 +964,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     : isViewportActive
                       ? '#2a332a'
                       : '#2a2a2a',
-                cursor: task.status === 'completed' && task.result ? 'pointer' : 'default',
+                cursor: canOpenInViewport ? 'pointer' : 'default',
                 opacity: viewportLoadingJobId && !isViewportLoading ? 0.75 : 1,
               }}>
                 <div className="flex justify-between items-center mb-0.5">
@@ -909,18 +1057,22 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 )}
 
                 {(task.result || (task.status === 'completed' && resolveTaskJobId(task))) && (() => {
-                  const loadPayload = normalizeTaskLoadPayload(task);
+                  const rowPayload = loadPayload || normalizeTaskLoadPayload(task);
                   const isMotion =
-                    task.type === 'text-to-motion' || isTextToMotionTaskResult(loadPayload);
-                  const isFullWorld = isFullWorldPackageTaskResult(loadPayload);
-                  const isSplatEnv = isSplatEnvironmentTaskResult(loadPayload);
+                    task.type === 'text-to-motion' || isTextToMotionTaskResult(rowPayload);
+                  const isImage =
+                    task.type === 'text-to-image' || isTextToImageTaskResult(rowPayload);
+                  const isFullWorld = isFullWorldPackageTaskResult(rowPayload);
+                  const isSplatEnv = isSplatEnvironmentTaskResult(rowPayload);
                   const isWorld = isFullWorld || isSplatEnv;
-                  const modelUrl = getTaskResultModelUrl(loadPayload);
-                  const meshUrl = getTaskResultMeshUrl(loadPayload);
+                  const modelUrl = getTaskResultModelUrl(rowPayload);
+                  const meshUrl = getTaskResultMeshUrl(rowPayload);
                   const taskJobId = resolveTaskJobId(task);
-                  const motionUrl = isMotion ? getTaskResultMotionUrl(loadPayload) : null;
+                  const motionUrl = isMotion ? getTaskResultMotionUrl(rowPayload) : null;
+                  const imageUrl = isImage ? getTaskResultImageUrl(rowPayload) : null;
                   const canLoadMotion = isMotion && Boolean(motionUrl || taskJobId);
-                  const canPublishRp1 = canPublishTaskToSpatialFabric(task, loadPayload, {
+                  const canUseImage = isImage && Boolean(imageUrl || taskJobId);
+                  const canPublishRp1 = canPublishTaskToSpatialFabric(task, rowPayload, {
                     isSplatOnly: isSplatEnv && !meshUrl,
                     hasMesh: Boolean(meshUrl),
                     meshUrl,
@@ -981,6 +1133,41 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       >
                         Load Animation
                       </button>
+                    ) : canUseImage ? (
+                      <>
+                        <button
+                          onClick={(event) => void handleDownloadTaskImage(task, event)}
+                          style={{
+                            marginLeft: '0.5rem',
+                            padding: '0.1rem 0.3rem',
+                            fontSize: '0.6rem',
+                            background: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                          }}
+                          title="Download generated PNG/WebP"
+                        >
+                          Download Image
+                        </button>
+                        <button
+                          onClick={(event) => void handleUseImageForImageTo3d(task, event)}
+                          style={{
+                            marginLeft: '0.35rem',
+                            padding: '0.1rem 0.3rem',
+                            fontSize: '0.6rem',
+                            background: '#0d6efd',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                          }}
+                          title="Start Image to 3D with this generated image"
+                        >
+                          Use for Image to 3D
+                        </button>
+                      </>
                     ) : (
                       modelUrl && (
                         <button
@@ -1023,7 +1210,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         {isPublishing ? '…' : 'Publish RP1'}
                       </button>
                     )}
-                    {!isWorld && !isMotion && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
+                    {!isWorld && !isMotion && !isImage && sceneAssemblerReady && (canPublishRp1 || taskJobId) && (
                       <button
                         onClick={(event) => void handleOpenMetaverseBrowser(event)}
                         style={{
@@ -1044,6 +1231,15 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   </div>
                   );
                 })()}
+
+                {loadPayload &&
+                  (task.type === 'text-to-image' || isTextToImageTaskResult(loadPayload)) &&
+                  getTaskResultImageUrl(loadPayload) && (
+                    <TaskImageThumbnail
+                      url={getTaskResultImageUrl(loadPayload)}
+                      apiEndpoint={apiEndpoint}
+                    />
+                  )}
 
                 {isViewportFailed && viewportFailedMessage ? (
                   <div
@@ -1290,6 +1486,11 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 Pipeline: {PREFERRED_PIPELINES.explorableWorld.steps.join(' → ')}
               </p>
             )}
+            {newTaskType === 'text-to-image' && (
+              <p style={{ fontSize: '0.55rem', color: '#8f8', margin: '0 0 0.5rem', lineHeight: 1.35 }}>
+                Pipeline: {PREFERRED_PIPELINES.textToImageTo3d.steps.join(' → ')} (local Krea 2 Turbo, ~6–8 min on GB10)
+              </p>
+            )}
             <form onSubmit={handleSubmitTask}>
               <div className="mb-1.5">
                 <select 
@@ -1299,6 +1500,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   style={{ padding: '0.375rem', fontSize: '0.65rem' }}
                 >
                   <option value="text-to-3d">Text to 3D</option>
+                  <option value="text-to-image">Text to Image (Krea 2)</option>
                   <option value="image-to-3d">Image to 3D (textured mesh)</option>
                   <option value="image-to-raw-mesh">Image to Raw Mesh</option>
                   <option value="image-to-splat">Image to Gaussian Splat</option>

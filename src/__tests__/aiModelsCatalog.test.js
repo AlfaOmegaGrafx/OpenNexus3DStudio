@@ -55,6 +55,12 @@ describe('aiModelsCatalog auto-rig helpers', () => {
     expect(getDefaultModelForFeature('image-to-raw-mesh')).toBe('hunyuan3dv21_image_to_raw_mesh');
   });
 
+  it('lists Krea 2 Turbo for text-to-image tasks', () => {
+    const models = getModelsForTaskType('text-to-image');
+    expect(models.map((m) => m.value)).toContain('krea2_turbo_text_to_image');
+    expect(getDefaultModelForFeature('text-to-image')).toBe('krea2_turbo_text_to_image');
+  });
+
   it('defaults auto-rig to SkinTokens and image mesh paint to TRELLIS.2', () => {
     expect(getDefaultModelForFeature('auto-rigging')).toBe('skintokens_auto_rig');
     expect(getDefaultModelForFeature('mesh-painting')).toBe('trellis2_image_mesh_painting');

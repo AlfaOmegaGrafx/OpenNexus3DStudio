@@ -80,6 +80,81 @@ export function isTextToMotionTaskResult(result) {
   return false;
 }
 
+const IMAGE_URL_KEYS = [
+  'image_url',
+  'output_image_path',
+  'preview_url',
+];
+
+/**
+ * Text-to-image jobs (Krea 2) return PNG/WebP — not viewport meshes.
+ * @param {object|null|undefined} result
+ * @returns {boolean}
+ */
+export function isTextToImageTaskResult(result) {
+  if (!result || typeof result !== 'object') return false;
+
+  const feature = result.feature || result.result?.feature || null;
+  const taskType = result.type || result.taskType || null;
+  if (feature === 'text_to_image' || taskType === 'text-to-image') {
+    return true;
+  }
+
+  const imagePath =
+    result.output_image_path ||
+    result.result?.output_image_path ||
+    null;
+  if (typeof imagePath === 'string' && /\.(png|webp|jpe?g)$/i.test(imagePath)) {
+    const fmt =
+      result.generation_info?.output_format ||
+      result.result?.generation_info?.output_format;
+    if (fmt === 'png' || fmt === 'webp' || imagePath.includes('/images/')) {
+      return true;
+    }
+  }
+
+  const ext =
+    result.mesh_file_info?.file_extension ||
+    result.result?.mesh_file_info?.file_extension;
+  if (ext === '.png' || ext === '.webp') {
+    const inference =
+      result.generation_info?.inference_mode ||
+      result.result?.generation_info?.inference_mode;
+    if (inference === 'local_open_weights' || feature === 'text_to_image') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Download URL for generated raster images (Krea 2 text-to-image).
+ * @param {object|null|undefined} result
+ * @returns {string|null}
+ */
+export function getTaskResultImageUrl(result) {
+  if (!result || typeof result !== 'object') return null;
+
+  const nested = result.result && typeof result.result === 'object' ? result.result : null;
+
+  const fetchable =
+    pickFetchableUrlFromObject(result, IMAGE_URL_KEYS) ||
+    pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS);
+  if (fetchable) return fetchable;
+
+  const path =
+    pickUrlFromObject(result, ['output_image_path']) ||
+    pickUrlFromObject(nested, ['output_image_path']);
+  if (path) return path;
+
+  if (isTextToImageTaskResult(result)) {
+    return resolveJobDownloadPath(result);
+  }
+
+  return null;
+}
+
 function pickUrlFromObject(obj, keys) {
   if (!obj || typeof obj !== 'object') return null;
   for (const key of keys) {
@@ -136,6 +211,7 @@ function resolveJobDownloadPath(result) {
 export function getTaskResultModelUrl(result) {
   if (!result || typeof result !== 'object') return null;
   if (isTextToMotionTaskResult(result)) return null;
+  if (isTextToImageTaskResult(result)) return null;
 
   const top = pickUrlFromObject(result, URL_KEYS);
   if (top) return top;
@@ -163,6 +239,7 @@ export function getTaskResultModelUrl(result) {
 export function getTaskResultMeshUrl(result) {
   if (!result || typeof result !== 'object') return null;
   if (isTextToMotionTaskResult(result)) return null;
+  if (isTextToImageTaskResult(result)) return null;
 
   const feature = result.feature || result.result?.feature || null;
   const splatOnly =
@@ -279,10 +356,28 @@ export function getAutoRigMetaFromResult(result) {
 export function getTaskResultFileExtension(result, options = {}) {
   if (!result || typeof result !== 'object') return '';
 
+  if (isTextToImageTaskResult(result)) {
+    const nested = result.result && typeof result.result === 'object' ? result.result : null;
+    for (const obj of [result, nested]) {
+      if (!obj) continue;
+      const fromInfo = obj.mesh_file_info?.file_extension;
+      if (typeof fromInfo === 'string' && fromInfo.length > 1) {
+        return fromInfo.replace(/^\./, '').toLowerCase();
+      }
+      const imagePath = obj.output_image_path;
+      if (typeof imagePath === 'string') {
+        const ext = inferModelFileExtensionFromSource(imagePath);
+        if (ext) return ext;
+      }
+      const fmt = obj.generation_info?.output_format;
+      if (fmt === 'png' || fmt === 'webp') return fmt;
+    }
+  }
+
   const preferMesh = options.preferMesh !== false;
   const pathKeys = preferMesh
-    ? ['output_mesh_path', 'mesh_path', 'output_path', 'output_splat_path']
-    : ['output_splat_path', 'output_mesh_path', 'mesh_path', 'output_path'];
+    ? ['output_image_path', 'output_mesh_path', 'mesh_path', 'output_path', 'output_splat_path']
+    : ['output_splat_path', 'output_image_path', 'output_mesh_path', 'mesh_path', 'output_path'];
 
   const pickFromObject = (obj) => {
     if (!obj || typeof obj !== 'object') return '';
@@ -337,6 +432,7 @@ export function inferModelFileExtensionFromSource(source) {
     if (pathname.endsWith('/download') || /\/jobs\/[^/]+\/download$/.test(pathname)) {
       const params = new URL(source, base).searchParams;
       if (params.get('asset') === 'fbx') return 'fbx';
+      if (params.get('asset') === 'manifest') return 'json';
       return 'glb';
     }
 
@@ -470,6 +566,18 @@ export function enrichCompletedJobPayload(jobStatus, jobId = null, taskType = nu
     jobStatus.feature === 'text_to_motion' ||
     pickUrlFromObject(jobStatus, MOTION_ARTIFACT_PATH_KEYS) ||
     pickUrlFromObject(nested, MOTION_ARTIFACT_PATH_KEYS);
+  const isImageJob =
+    normalizedTaskType === 'text_to_image' ||
+    nested?.feature === 'text_to_image' ||
+    jobStatus.feature === 'text_to_image' ||
+    isTextToImageTaskResult(jobStatus) ||
+    (nested && isTextToImageTaskResult(nested));
+  const imageUrl =
+    pickFetchableUrlFromObject(jobStatus, IMAGE_URL_KEYS) ||
+    pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS) ||
+    pickUrlFromObject(jobStatus, ['output_image_path']) ||
+    pickUrlFromObject(nested, ['output_image_path']) ||
+    (isImageJob && downloadPath ? downloadPath : null);
   const motionUrl =
     pickFetchableUrlFromObject(jobStatus, ['motion_url', 'studio_motion_url']) ||
     pickFetchableUrlFromObject(nested, ['motion_url', 'studio_motion_url']) ||
@@ -497,6 +605,15 @@ export function enrichCompletedJobPayload(jobStatus, jobId = null, taskType = nu
 
   if (isMotionJob) {
     payload.feature = 'text_to_motion';
+    delete payload.mesh_url;
+    delete payload.modelUrl;
+    delete payload.downloadUrl;
+    return payload;
+  }
+
+  if (isImageJob) {
+    payload.feature = 'text_to_image';
+    payload.image_url = imageUrl;
     delete payload.mesh_url;
     delete payload.modelUrl;
     delete payload.downloadUrl;
