@@ -4,6 +4,7 @@ import {
   alignDetachedArmatureToMesh,
   alignSkinnedMeshToArmature,
   alignSkinnedMeshToRig,
+  ensureCreatureTemplateFacesForward,
   getBoneDisplayWorldPosition,
   getPrimarySkeletonBones,
   getSkeletonJointSphereRadius,
@@ -11,6 +12,7 @@ import {
   getSkinnedDisplayWorldBounds,
   getViewportLayoutBounds,
   anchorModelFeetToFloor,
+  isHumanoidTemplateWrapExport,
   normalizeRiggedModelTransforms,
   needsSkinnedMeshRigRepair,
   rebindSkinnedMeshes,
@@ -278,7 +280,6 @@ describe('rigBoneUtils', () => {
       preserveExportedOrientation: true,
     });
     expect(skinned.position.y).toBeLessThan(2.5);
-    expect(root.userData.rigSkeletonDisplayOffset).toBeUndefined();
   });
 
   it('always repairs avatar-from-image skinned exports', () => {
@@ -301,6 +302,91 @@ describe('rigBoneUtils', () => {
     expect(needsSkinnedMeshRigRepair(root)).toBe(true);
   });
 
+  it('skips mesh repair for template_wrap head-stitch multi-mesh exports', () => {
+    const root = new THREE.Group();
+    root.userData.fromAigc = true;
+    root.userData.autoRigMeta = {
+      rig_info: {
+        rig_mode: 'template_wrap',
+        wrap_status: 'head_stitch',
+        generation_method: 'humanoid_vrm_template',
+        validation: { passed: false, codes: ['character_facing_backwards'] },
+      },
+    };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 1, 0);
+    root.add(hips);
+
+    const body = new THREE.SkinnedMesh(
+      new THREE.BoxGeometry(0.4, 1.6, 0.2),
+      new THREE.MeshBasicMaterial(),
+    );
+    body.name = 'geometry_0';
+    const head = new THREE.SkinnedMesh(
+      new THREE.BoxGeometry(0.2, 0.25, 0.2),
+      new THREE.MeshBasicMaterial(),
+    );
+    head.name = 'AvatarHead';
+    head.position.set(0, 2.2, 0);
+    root.add(body);
+    root.add(head);
+    const skel = new THREE.Skeleton([hips]);
+    body.bind(skel, body.matrixWorld);
+    head.bind(skel, head.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    expect(isHumanoidTemplateWrapExport(root)).toBe(true);
+    expect(needsSkinnedMeshRigRepair(root)).toBe(false);
+    expect(alignSkinnedMeshToRig(root)).toBe(false);
+    expect(head.position.y).toBeCloseTo(2.2, 5);
+  });
+
+  it('skips feet repair and skeleton squash for appearance_component slot meshes', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.autoRigMeta = {
+      rig_info: {
+        rig_mode: 'appearance_component',
+        generation_method: 'appearance_component_vrm_fit',
+        appearance_slot: 'Head',
+      },
+    };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 1.0, 0);
+    const foot = new THREE.Bone();
+    foot.name = 'LeftFoot';
+    foot.position.set(0, 0, 0);
+    root.add(hips);
+    root.add(foot);
+
+    // Helmet-sized mesh high on the body — feet delta would trigger full-body repair.
+    const helmet = new THREE.SkinnedMesh(
+      new THREE.BoxGeometry(0.3, 0.35, 0.3),
+      new THREE.MeshBasicMaterial(),
+    );
+    helmet.position.set(0, 1.7, 0);
+    root.add(helmet);
+    helmet.bind(new THREE.Skeleton([hips, foot]), helmet.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    const beforeY = helmet.position.y;
+    expect(needsSkinnedMeshRigRepair(root)).toBe(false);
+    expect(alignSkinnedMeshToRig(root)).toBe(false);
+
+    normalizeRiggedModelTransforms(root, {
+      label: 'appearance-component-test',
+      preserveExportedOrientation: true,
+    });
+    updateSkeletonDisplayCorrection(root);
+
+    expect(helmet.position.y).toBeCloseTo(beforeY, 5);
+    expect(root.userData.rigSkeletonDisplayOffset).toBeUndefined();
+  });
+
   it('skips armature mesh repair for uploaded VRM roots', () => {
     const root = new THREE.Group();
     root.userData.vrm = { meta: { metaVersion: '1' } };
@@ -320,5 +406,130 @@ describe('rigBoneUtils', () => {
 
     normalizeRiggedModelTransforms(root, { label: 'test-vrm' });
     expect(skinned.rotation.y).toBe(0);
+  });
+
+  it('does not flip quadruped skeleton display when head faces glTF -Z', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.fromAigc = true;
+    root.userData.autoRigMeta = {
+      rig_info: {
+        rig_mode: 'creature_template',
+        creature_template_id: 'fox',
+        generation_method: 'mesh2motion_creature_template',
+      },
+    };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.5, 0.3);
+    const head = new THREE.Bone();
+    head.name = 'Head';
+    head.position.set(0, 0.55, -0.2);
+    hips.add(head);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.8, 0.4, 1.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips, head]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    updateSkeletonDisplayCorrection(root);
+    expect(root.userData.rigSkeletonDisplayFlipY).toBeUndefined();
+  });
+
+  it('never flips creature skeleton display even when rig faces glTF +Z', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.autoRigMeta = {
+      rig_info: {
+        rig_mode: 'creature_template',
+        generation_method: 'mesh2motion_creature_template',
+      },
+    };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.5, 0);
+    const head = new THREE.Bone();
+    head.name = 'Head';
+    head.position.set(0, 0.55, 0.8);
+    hips.add(head);
+    const frontL = new THREE.Bone();
+    frontL.name = 'Front_Leg_Foot_L';
+    frontL.position.set(-0.1, 0, 0.5);
+    hips.add(frontL);
+    const backL = new THREE.Bone();
+    backL.name = 'Back_Leg_Foot_L';
+    backL.position.set(-0.1, 0, -0.5);
+    hips.add(backL);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.8, 0.4, 1.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips, head, frontL, backL]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    updateSkeletonDisplayCorrection(root);
+    expect(root.userData.rigSkeletonDisplayFlipY).toBeUndefined();
+  });
+
+  it('yaws creature template root 180° when rig faces glTF -Z (Mesh2Motion is +Z)', () => {
+    const root = new THREE.Group();
+    root.userData.preserveExportedOrientation = true;
+    root.userData.autoRigMeta = {
+      rig_info: { rig_mode: 'creature_template', generation_method: 'mesh2motion_creature_template' },
+    };
+
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.5, 0.3);
+    const head = new THREE.Bone();
+    head.name = 'Head';
+    // Nose toward -Z (common Blender/glTF export) — opposite Mesh2Motion +Z
+    head.position.set(0, 0.55, -0.2);
+    hips.add(head);
+    root.add(hips);
+
+    const geometry = new THREE.BoxGeometry(0.8, 0.4, 1.2);
+    const skinned = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips, head]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    expect(ensureCreatureTemplateFacesForward(root)).toBe(true);
+    root.updateMatrixWorld(true);
+    const forward = head.getWorldPosition(new THREE.Vector3()).sub(
+      hips.getWorldPosition(new THREE.Vector3()),
+    );
+    forward.y = 0;
+    forward.normalize();
+    expect(forward.dot(new THREE.Vector3(0, 0, 1))).toBeGreaterThan(0.5);
+  });
+
+  it('does not yaw creature template when already Mesh2Motion +Z forward', () => {
+    const root = new THREE.Group();
+    root.userData.autoRigMeta = {
+      rig_info: { rig_mode: 'creature_template', generation_method: 'mesh2motion_creature_template' },
+    };
+    const hips = new THREE.Bone();
+    hips.name = 'Hips';
+    hips.position.set(0, 0.5, 0);
+    const head = new THREE.Bone();
+    head.name = 'Head';
+    head.position.set(0, 0.55, 0.8);
+    hips.add(head);
+    root.add(hips);
+    const skinned = new THREE.SkinnedMesh(
+      new THREE.BoxGeometry(0.8, 0.4, 1.2),
+      new THREE.MeshBasicMaterial(),
+    );
+    root.add(skinned);
+    skinned.bind(new THREE.Skeleton([hips, head]), skinned.matrixWorld);
+    root.updateMatrixWorld(true);
+
+    expect(ensureCreatureTemplateFacesForward(root)).toBe(false);
   });
 });

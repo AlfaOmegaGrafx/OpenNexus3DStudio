@@ -5,7 +5,17 @@ alwaysApply: true
 
 # App chrome layout — protected (do not regress)
 
-**User-confirmed good state (2026-06-18).** Read `memory-bank/app-chrome-layout-protected-state.md` before editing header, task progress, or side rail layout.
+**User-confirmed good state (2026-06-18; Avatar Creator chrome refreshed 2026-08-13).**  
+Read `memory-bank/app-chrome-layout-protected-state.md` before editing header, task progress, or side rail layout.
+
+**If chrome regresses by mistake:** restore the frozen good state, do not reinvent layout:
+
+```bash
+bash scripts/restore-ui-chrome.sh
+bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete   # when on DGX
+```
+
+Snapshot lives in `backups/ui-chrome-good-state/`. Only refresh with `bash scripts/snapshot-ui-chrome.sh` after the user confirms a **new** good UI. Map/docs: `SCENE_CONTROLS_UI_BACKUP.md`.
 
 ## Invariants
 
@@ -13,7 +23,7 @@ alwaysApply: true
 |------|------|
 | Task progress | In **document flow** after `.scene-controls-row`; never `position: fixed` over header |
 | App content | No `.has-progress` margin hack — flex layout handles progress bar height |
-| Right rail top | `.opennexus-sidebar` uses measured `--app-content-top` on `:root`, not chrome calc alone |
+| Right rail top | `.opennexus-sidebar` (expanded + collapsed) uses measured `--app-content-top` — below scene-controls/XR row, never `--app-header-height` alone |
 | CSS vars | Do **not** define `--app-content-top` on `.app` (shadows measured px value) |
 | Collapsed rails | Mirror left/right via shared `--collapsed-rail-*` tokens and paired selectors |
 | Z-index | Side panels ≤ 998; fix overlap by adjusting `top`, not raising panel z-index |
@@ -24,11 +34,12 @@ alwaysApply: true
 - Right rail `top: var(--app-chrome-top-height)` without `--app-content-top`.
 - Asymmetric collapsed-rail `padding-top` on one side only.
 - Removing `TaskAdvancedOptions` import from `TaskManager.jsx`.
+- Re-running `snapshot-ui-chrome.sh` after a bad/regressed layout (restore first).
 
 ## Protected files
 
-`App.jsx`, `App.css`, `TaskProgressBar.jsx`, `TaskProgressBar.css`, `TaskManager.jsx` (import)
+`App.jsx`, `App.css`, `TaskProgressBar.jsx`, `TaskProgressBar.css`, `TaskManager.jsx` (import), Avatar Creator appearance CSS/panels in the ui-chrome snapshot
 
 ## Before merging layout touches
 
-Visual check: both rails collapsed — icon rows align; running task — bar below scene-controls, header clickable, rails still aligned.
+Visual check: both rails collapsed — icon rows align; running task — bar below scene-controls, header clickable, rails still aligned; Avatar Creator title readable below XR/tools row.

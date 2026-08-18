@@ -45,6 +45,12 @@ describe('shouldPreserveExportedOrientation', () => {
         autoRigMeta: { rig_info: { rig_mode: 'template' } },
       }),
     ).toBe(true);
+    expect(
+      shouldPreserveExportedOrientation({
+        fromAigc: true,
+        autoRigMeta: { rig_info: { rig_mode: 'template_wrap', wrap_status: 'head_stitch' } },
+      }),
+    ).toBe(true);
   });
 
   it('preserves DGX Blender-exported skinned GLBs', () => {

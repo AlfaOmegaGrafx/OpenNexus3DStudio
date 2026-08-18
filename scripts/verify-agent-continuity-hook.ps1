@@ -1,7 +1,7 @@
 # Cursor sessionStart hook (Surface) — verify continuity and emit JSON context
 $ErrorActionPreference = 'Continue'
 try { $null = [Console]::In.ReadToEnd() } catch {}
-$root = '<OPENNEXUS_REPO_ROOT>'
+$root = 'C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio'
 $verify = Join-Path $root 'scripts\verify-agent-continuity.ps1'
 $status = 'fail'
 $summary = 'verify script missing'

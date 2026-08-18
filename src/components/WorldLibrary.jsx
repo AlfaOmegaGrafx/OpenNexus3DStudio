@@ -8,20 +8,28 @@ import {
   listWorldsFromCompletedTasks,
 } from '../library/worldPackage.js';
 import { buildIwsdkXrExploreUrl } from '../library/iwsdkWorldPackage.js';
-import { getSyncSceneAssemblerUrl, preopenSpatialFabricTab } from '../library/spatialFabricAdapter.js';
+import { getSyncSceneAssemblerUrl, preopenSpatialFabricTab, queueBakeEnvMesh } from '../library/spatialFabricAdapter.js';
 import styles from './WorldLibrary.module.css';
 
 /**
  * Pick and load explorable world packages (splat env + mesh props).
  */
 export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
-  const { activeWorldId, loadWorldFromManifestUrl, clearWorld, isLoading } = useScene();
+  const {
+    activeWorldId,
+    loadWorldFromManifestUrl,
+    clearWorld,
+    isLoading,
+    worldEnvVisibility,
+    setWorldEnvironmentLayerVisible,
+  } = useScene();
   const { tasks } = useTask();
   const [staticWorlds, setStaticWorlds] = useState([]);
   const [indexWarning, setIndexWarning] = useState(null);
   const [error, setError] = useState(null);
   const [manifestDraft, setManifestDraft] = useState('');
   const [publishingWorldId, setPublishingWorldId] = useState(null);
+  const [bakingWorldId, setBakingWorldId] = useState(null);
   const {
     openSceneAssembler,
     openOmbGuidelines,
@@ -94,6 +102,26 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
     }
   };
 
+  const handleBakeEnvMesh = async (world) => {
+    try {
+      setError(null);
+      setBakingWorldId(world.id);
+      const data = await queueBakeEnvMesh(apiEndpoint, world.id, { quality: 'photo' });
+      setError(
+        null,
+      );
+      alert(
+        `Photo-quality env mesh bake queued (job ${data.job_id || '?'}). ` +
+          'When complete, re-enter the world and Show GLB (Hide 3DGS).',
+      );
+    } catch (err) {
+      console.error('[WorldLibrary] bake-env-mesh failed', err);
+      setError(err?.message || String(err));
+    } finally {
+      setBakingWorldId(null);
+    }
+  };
+
   return (
     <div className={`world-library ${styles.root} ${compact ? '' : styles.rootExpanded}`}>
       <div className={styles.header}>
@@ -111,9 +139,53 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
       </div>
 
       {activeWorldId ? (
-        <p className={styles.statusActive} title={activeWorldId}>
-          Active: {activeWorldId}
-        </p>
+        <>
+          <p className={styles.statusActive} title={activeWorldId}>
+            Active: {activeWorldId}
+          </p>
+          {(worldEnvVisibility?.hasSplat || worldEnvVisibility?.hasMesh) && (
+            <div className={styles.layerToggles} role="group" aria-label="World environment layers">
+              {worldEnvVisibility.hasSplat ? (
+                <button
+                  type="button"
+                  className={`btn btn-sm ${styles.layerBtn} ${
+                    worldEnvVisibility.splatVisible ? styles.layerBtnOn : ''
+                  }`}
+                  disabled={isLoading}
+                  title={
+                    worldEnvVisibility.splatVisible
+                      ? 'Hide Gaussian splat (3DGS)'
+                      : 'Show Gaussian splat (hides env GLB)'
+                  }
+                  onClick={() =>
+                    setWorldEnvironmentLayerVisible('splat', !worldEnvVisibility.splatVisible)
+                  }
+                >
+                  {worldEnvVisibility.splatVisible ? 'Hide 3DGS' : 'Show 3DGS'}
+                </button>
+              ) : null}
+              {worldEnvVisibility.hasMesh ? (
+                <button
+                  type="button"
+                  className={`btn btn-sm ${styles.layerBtn} ${
+                    worldEnvVisibility.meshVisible ? styles.layerBtnOn : ''
+                  }`}
+                  disabled={isLoading}
+                  title={
+                    worldEnvVisibility.meshVisible
+                      ? 'Hide baked environment GLB'
+                      : 'Show baked environment GLB (hides 3DGS)'
+                  }
+                  onClick={() =>
+                    setWorldEnvironmentLayerVisible('mesh', !worldEnvVisibility.meshVisible)
+                  }
+                >
+                  {worldEnvVisibility.meshVisible ? 'Hide GLB' : 'Show GLB'}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </>
       ) : (
         <p className={styles.statusIdle}>No world loaded (avatar stays in scene).</p>
       )}
@@ -148,7 +220,21 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
                   <button
                     type="button"
                     className={`btn btn-sm ${styles.actionBtn}`}
-                    title="Publish world mesh props to MSF object library and open Scene Assembler"
+                    title="Photo-quality bake: denser TSDF mesh + vertex colors from walk frames (for viewport / OMB)"
+                    disabled={
+                      isLoading ||
+                      bakingWorldId === world.id ||
+                      !apiEndpoint ||
+                      !fromTask
+                    }
+                    onClick={() => void handleBakeEnvMesh(world)}
+                  >
+                    {bakingWorldId === world.id ? '…' : 'Bake'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${styles.actionBtn}`}
+                    title="Publish env mesh + props GLBs to MSF object library and open Scene Assembler"
                     disabled={
                       isLoading ||
                       publishingWorldId === world.id ||
@@ -238,9 +324,10 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
       ) : null}
 
       <p className={styles.hint}>
-        Viewport: SceneManager + Spark (VRM + splat env in same scene). Enter VR on{' '}
-        <code>/</code> to experience loaded worlds with your avatar.{' '}
-        <strong>XR lab</strong> (<code>/xr</code>) — IWSDK grab regression on mesh props.
+        Viewport loads Spark 3DGS and baked <code>environment_mesh.glb</code> when present — only
+        one is visible at a time (use Hide/Show 3DGS and Hide/Show GLB). Enter VR on <code>/</code>.{' '}
+        <strong>XR lab</strong> (<code>/xr</code>) — IWSDK grab on mesh props. RP1 needs a linked MSF
+        host (<code>VITE_MSF_PUBLIC_URL</code>).
       </p>
 
       {indexWarning ? <p className={styles.warning}>{indexWarning}</p> : null}

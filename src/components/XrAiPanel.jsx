@@ -7,6 +7,7 @@ import {
   useXrHubLiveEmbed,
 } from '../library/xrHubConfig.js';
 import './XrAiPanel.css';
+import ZeroShotDetectPanel from './ZeroShotDetectPanel.jsx';
 
 function XrVoiceDemoPreview() {
   return (
@@ -37,7 +38,7 @@ function XrVoiceDemoPreview() {
  * Left-sidebar XR voice client (NVIDIA xr-ai hub on DGX).
  * Vercel public demo shows a static preview; local dev embeds the Spark hub iframe.
  */
-export default function XrAiPanel({ isApiConnected }) {
+export default function XrAiPanel({ isApiConnected, sceneManager }) {
   const publicDemo = isXrVoicePublicDemo();
   const liveEmbed = useXrHubLiveEmbed();
   const hubUrl = liveEmbed ? getXrHubEmbedUrl() : '';
@@ -143,6 +144,7 @@ export default function XrAiPanel({ isApiConnected }) {
             ) : (
               <XrVoiceDemoPreview />
             )}
+            <ZeroShotDetectPanel sceneManager={sceneManager} disabled={publicDemo} />
           </div>
         ) : (
           <p className="xr-ai-panel-message">

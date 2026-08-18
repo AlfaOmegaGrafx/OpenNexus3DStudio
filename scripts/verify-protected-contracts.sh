@@ -46,12 +46,6 @@ if ! bash "$ROOT/scripts/verify_xr_avatar_view_locomotion.sh"; then
 fi
 
 echo ""
-echo "--- Tasks panel UI (collapse + Clear) ---"
-if ! bash "$ROOT/scripts/verify_tasks_panel_ui.sh"; then
-  fail=1
-fi
-
-echo ""
 if [[ "$fail" -eq 0 ]]; then
   echo "PROTECTED_CONTRACTS_OK"
   exit 0

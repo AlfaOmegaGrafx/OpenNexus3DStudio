@@ -32,7 +32,6 @@ describe('TaskManager template auto-rig', () => {
       {
         rig_mode: AUTO_RIG_MODES.TEMPLATE,
         humanoid_template_id: DEFAULT_HUMANOID_TEMPLATE_ID,
-        output_format: 'glb',
         model_preference: 'unirig_auto_rig',
       },
       file,
@@ -44,7 +43,7 @@ describe('TaskManager template auto-rig', () => {
     expect(rigCall[1]).toMatchObject({
       rig_mode: 'template',
       humanoid_template_id: 'template',
-      output_format: 'glb',
+      output_format: 'vrm',
       model_preference: 'unirig_auto_rig',
     });
   });

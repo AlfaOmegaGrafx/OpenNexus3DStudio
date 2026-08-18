@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTask } from '../context/TaskContext';
 import { useScene } from '../context/SceneContext';
 import avatarSdkService from '../services/avatarSdkService.js';
@@ -31,6 +32,16 @@ import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
   TEMPLATE_RIG_MODEL_ID,
+  ARC2AVATAR_TASK_TYPE,
+  ARC2AVATAR_API_READY,
+  BODY_CLOTH_STUDIO_TASK_TYPE,
+  HEAD_TRACK,
+  HEAD_TRACK_OPTIONS,
+  buildBodyClothStudioPath,
+  normalizeHeadTrack,
+  isArc2AvatarTaskType,
+  isBodyClothStudioTaskType,
+  fetchArc2AvatarStatus,
 } from '../library/avatarPipelineCatalog.js';
 import {
   CREATURE_TEMPLATE_OPTIONS,
@@ -54,7 +65,7 @@ import {
   isSplatEnvironmentTaskResult,
   isWorldLayerTaskResult,
 } from '../library/worldPackage.js';
-import { formatTaskDurationMs, getTaskElapsedMs, resolveTaskJobId, sortCompletedTasksByRecency } from '../library/taskPersistence.js';
+import { formatTaskDurationMs, formatTaskTimestamp, getTaskElapsedMs, resolveTaskJobId, sortCompletedTasksByRecency } from '../library/taskPersistence.js';
 import { useSpatialFabric } from '../hooks/useSpatialFabric.js';
 import { canPublishTaskToSpatialFabric, getSyncSceneAssemblerUrl, preopenSpatialFabricTab } from '../library/spatialFabricAdapter.js';
 import {
@@ -149,6 +160,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     onAITask: !!onAITask, 
     isApiConnected 
   });
+
+  const navigate = useNavigate();
   
   const [viewportLoadingJobId, setViewportLoadingJobId] = useState(null);
   const [viewportActiveJobId, setViewportActiveJobId] = useState(null);
@@ -177,16 +190,20 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     humanoid_template_id: DEFAULT_HUMANOID_TEMPLATE_ID,
     creature_template_id: DEFAULT_CREATURE_TEMPLATE_ID,
     include_splat_preview: false,
+    /** Body+Cloth Studio discovery — GNM+MeshMonk / Arc2Avatar / Both */
+    head_track: HEAD_TRACK.MESHMONK,
     use_multiview_mesh: true,
     prop_regions_json: '',
     world_name: '',
     prop_mesh_model_preference: 'trellis2_image_to_textured_mesh',
-    metric_mode: 'auto_bbox',
-    metric_true_meters: '',
-    metric_recon_length: '',
-    refine_to_3dgs: false,
-    train_3dgs: false,
-    train_3dgs_steps: 7000,
+    metric_mode: 'reference_length',
+    metric_true_meters: '0.762',
+    metric_recon_length: '0.47',
+    metric_axis: 'horizontal',
+    refine_to_3dgs: true,
+    train_3dgs: true,
+    train_3dgs_steps: 10100,
+    bake_env_mesh: true,
     image_width: 1024,
     image_height: 1024,
     text_to_image_prompt_options: { ...DEFAULT_TEXT_TO_IMAGE_PROMPT_OPTIONS },
@@ -318,7 +335,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     if (fileInputRef.current) return;
     const needsImageInput =
       showNewTask &&
-      ['image-to-3d', 'image-to-raw-mesh', 'image-to-splat', 'image-to-world', 'environment-scan', 'avatar-from-image', 'mesh-painting', 'mesh-editing-image', 'avatar-from-photo'].includes(newTaskType);
+      ['image-to-3d', 'image-to-raw-mesh', 'image-to-splat', 'image-to-world', 'environment-scan', 'avatar-from-image', ARC2AVATAR_TASK_TYPE, 'mesh-painting', 'mesh-editing-image', 'avatar-from-photo'].includes(newTaskType);
     if (needsImageInput) {
       console.warn('TaskManager: file input ref missing while task needs image upload');
     }
@@ -400,7 +417,10 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       setTaskOptions((prev) => ({
         ...prev,
         world_name: prev.world_name ?? '',
-        metric_mode: prev.metric_mode || 'auto_bbox',
+        metric_mode: prev.metric_mode || 'reference_length',
+        metric_true_meters: prev.metric_true_meters ?? '0.762',
+        metric_recon_length: prev.metric_recon_length ?? '0.47',
+        metric_axis: prev.metric_axis || 'horizontal',
         metric_true_meters: prev.metric_true_meters ?? '',
         metric_recon_length: prev.metric_recon_length ?? '',
       }));
@@ -466,7 +486,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           ? appearance_slot || prev.appearance_slot || 'Legs'
           : prev.appearance_slot,
       humanoid_template_id:
-        rigMode === AUTO_RIG_MODES.TEMPLATE
+        rigMode === AUTO_RIG_MODES.TEMPLATE || rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
           ? prev.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID
           : prev.humanoid_template_id,
       creature_template_id:
@@ -511,7 +531,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               ? prev.creature_template_id ?? DEFAULT_CREATURE_TEMPLATE_ID
               : prev.creature_template_id,
           humanoid_template_id:
-            rigMode === AUTO_RIG_MODES.TEMPLATE
+            rigMode === AUTO_RIG_MODES.TEMPLATE || rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
               ? prev.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID
               : prev.humanoid_template_id,
         }));
@@ -582,6 +602,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     if (
       taskType === 'avatar-from-photo' ||
       taskType === 'avatar-from-image' ||
+      isArc2AvatarTaskType(taskType) ||
+      isBodyClothStudioTaskType(taskType) ||
       taskType === 'image-to-world' ||
       taskType === 'environment-scan'
     ) {
@@ -597,8 +619,14 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     return [parts[0], parts[1], parts[2]];
   };
 
-  const handleSubmitTask = (e) => {
+  const handleSubmitTask = async (e) => {
     e.preventDefault();
+    // Discovery entry — open Studio Body+Cloth with chosen head track (thin wrapper, not a Task API job).
+    if (isBodyClothStudioTaskType(newTaskType)) {
+      navigate(buildBodyClothStudioPath(taskOptions.head_track));
+      setShowNewTask(false);
+      return;
+    }
     if (!canStartAnyTask) {
       alert(canBrowseCatalog ? AI_BACKEND_UNAVAILABLE_MSG : 'Configure DGX API or AvatarSDK before starting tasks.');
       return;
@@ -665,19 +693,28 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         );
         return;
       }
+      const metricMode = taskOptions.metric_mode || 'reference_length';
       const trueMeters = Number(taskOptions.metric_true_meters);
       if (!Number.isFinite(trueMeters) || trueMeters <= 0) {
         alert(
-          '⚠️ Enter a real-world length in meters for 1:1 scale (e.g. measured door width, or approximate room diagonal for auto bbox).',
+          '⚠️ Enter a real-world length in meters for 1:1 scale (Office door lock: 0.762 m with recon 0.47).',
+        );
+        return;
+      }
+      if (metricMode === 'auto_bbox' && trueMeters < 1.5) {
+        alert(
+          '⚠️ Auto bbox expects the real room span (diagonal / longest wall), typically ≥1.5–4+ m.\n\n' +
+            '0.762 m (30 in) is a door width — use Reference length mode (horizontal) for doors.\n\n' +
+            'Wrong value shrinks/stretches the whole Office splat into a mess.',
         );
         return;
       }
       if (
-        taskOptions.metric_mode === 'reference_length' &&
+        metricMode === 'reference_length' &&
         !(Number(taskOptions.metric_recon_length) > 0)
       ) {
         alert(
-          '⚠️ reference_length mode needs recon_length (same feature measured in reconstruction units), or switch mode to auto_bbox.',
+          '⚠️ reference_length mode needs recon_length (Office door ≈ 0.47), or switch mode to auto_bbox.',
         );
         return;
       }
@@ -685,6 +722,33 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     if (newTaskType === 'avatar-from-image' && !newTaskImage) {
       alert('⚠️ Avatar from Image requires a photo (mesh + template.vrm rig).');
       return;
+    }
+    if (isArc2AvatarTaskType(newTaskType)) {
+      if (!newTaskImage) {
+        alert('⚠️ Avatar head (Arc2Avatar) requires a face photo.');
+        return;
+      }
+      try {
+        const status = await fetchArc2AvatarStatus(getApiEndpoint());
+        if (!status?.integrated) {
+          const reasons = (status?.blocking_reasons || []).join('\n• ') || 'not installed';
+          alert(
+            '⚠️ Arc2Avatar API not ready on DGX.\n\n• ' +
+              reasons +
+              '\n\nInstall thirdparty/Arc2Avatar env + weights (docs/ARC2AVATAR_TRACK.md), then retry.\n' +
+              'Meanwhile use Avatar from Image / template_wrap.',
+          );
+          return;
+        }
+      } catch (err) {
+        alert(
+          `⚠️ Could not reach Arc2Avatar status: ${err?.message || err}\n\n` +
+            (ARC2AVATAR_API_READY
+              ? ''
+              : 'API may need restart after adapter deploy.'),
+        );
+        return;
+      }
     }
     if (newTaskType === 'avatar-from-photo' && !avatarSdkReady) {
       alert('⚠️ AvatarSDK is not configured. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET in .env.');
@@ -748,7 +812,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       const rigMode = taskOptions.rig_mode ?? getDefaultRigModeForTaskType('auto-rigging');
       options.rig_mode = rigMode;
       options.model_preference = resolveAutoRigModelForTask(rigMode, newTaskModel);
-      if (rigMode === AUTO_RIG_MODES.TEMPLATE) {
+      if (rigMode === AUTO_RIG_MODES.TEMPLATE || rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) {
         options.humanoid_template_id =
           taskOptions.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID;
         options.output_format = 'glb';
@@ -834,12 +898,19 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       options.refine_to_3dgs = Boolean(taskOptions.refine_to_3dgs);
       options.train_3dgs = Boolean(taskOptions.train_3dgs);
       options.train_3dgs_steps = Number(taskOptions.train_3dgs_steps) || 7000;
+      options.bake_env_mesh = Boolean(taskOptions.bake_env_mesh);
       const trueMeters = Number(taskOptions.metric_true_meters);
-      const mode = taskOptions.metric_mode || 'auto_bbox';
+      const mode = taskOptions.metric_mode || 'reference_length';
       const metric = {
         mode,
         true_meters: trueMeters,
       };
+      // Locked Office door path: reference_length defaults to horizontal (never stretch Y).
+      if (mode === 'reference_length' || mode === 'two_points') {
+        metric.axis = taskOptions.metric_axis || 'horizontal';
+      } else if (taskOptions.metric_axis) {
+        metric.axis = taskOptions.metric_axis;
+      }
       const recon = Number(taskOptions.metric_recon_length);
       if (Number.isFinite(recon) && recon > 0) {
         if (mode === 'player_height') {
@@ -968,10 +1039,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   };
 
-  const formatDate = (date) => {
-    if (!date) return '—';
-    return new Date(date).toLocaleTimeString();
-  };
+  const formatDate = (date) => formatTaskTimestamp(date);
 
   const renderTaskTiming = (task) => {
     const started = task.startedAt || task.createdAt;
@@ -1104,7 +1172,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
           ? appearance_slot || 'Legs'
           : prev.appearance_slot,
       humanoid_template_id:
-        rigMode === AUTO_RIG_MODES.TEMPLATE
+        rigMode === AUTO_RIG_MODES.TEMPLATE || rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
           ? prev.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID
           : prev.humanoid_template_id,
       creature_template_id:
@@ -1186,7 +1254,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         output_format: getDefaultAutoRigOutputFormat(modelPreference, rigMode),
         sourceMeshFile,
       };
-      if (rigMode === AUTO_RIG_MODES.TEMPLATE) {
+      if (rigMode === AUTO_RIG_MODES.TEMPLATE || rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) {
         options.humanoid_template_id =
           taskOptions.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID;
       }
@@ -1317,7 +1385,27 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     setIsSyncingTasks(true);
     try {
       const synced = await syncTasksFromApi();
-      setSyncMessage(`Synced ${synced.length} task(s) from DGX Spark`);
+      setIsCompletedExpanded(true);
+      const imageJobs = (synced || []).filter(
+        (t) =>
+          t?.status === 'completed' &&
+          (t.type === 'text-to-image' || isTextToImageTaskResult(normalizeTaskLoadPayload(t))),
+      );
+      const meshJobs = (synced || []).filter((t) => {
+        if (t?.status !== 'completed') return false;
+        if (t.type === 'text-to-image' || t.type === 'text-to-motion') return false;
+        return Boolean(resolveTaskJobId(t));
+      });
+      const parts = [`Synced ${synced.length} task(s) from DGX`];
+      if (imageJobs.length) {
+        parts.push(
+          `${imageJobs.length} image(s) — open Completed → Download Image`,
+        );
+      }
+      if (meshJobs.length) {
+        parts.push(`${meshJobs.length} mesh(es) — Load Model`);
+      }
+      setSyncMessage(parts.join(' · '));
     } catch (error) {
       setSyncMessage(error?.message || 'Failed to sync from DGX Spark');
     } finally {
@@ -2097,6 +2185,36 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 Recommended: {PREFERRED_PIPELINES.avatarCharacter.steps.join(' → ')}
               </p>
             )}
+            {isBodyClothStudioTaskType(newTaskType) && (
+              <p
+                style={{
+                  fontSize: '0.6rem',
+                  color: '#8f8',
+                  margin: '0 0 0.5rem',
+                  lineHeight: 1.35,
+                }}
+              >
+                Thin wrapper: pick head track below, then <strong>Open Studio</strong> — Body+Cloth
+                with Face selfie, likeness, and body skin tone. Not a separate API pipeline. Steps:{' '}
+                {PREFERRED_PIPELINES.bodyClothStudio.steps.join(' → ')}.
+              </p>
+            )}
+            {isArc2AvatarTaskType(newTaskType) && (
+              <p
+                style={{
+                  fontSize: '0.6rem',
+                  color: '#c9a227',
+                  margin: '0 0 0.5rem',
+                  lineHeight: 1.35,
+                }}
+              >
+                Same humanoid <strong>head track</strong> as Body+Cloth / GNM+MeshMonk — Arc2Avatar
+                engine only (selfie → FLAME 3DGS <code>.ply</code>). Prefer{' '}
+                <em>Head track · Body+Cloth (Studio)</em> for the full path. Status:{' '}
+                <code>/api/v1/arc2avatar/status</code>. Pipeline:{' '}
+                {PREFERRED_PIPELINES.arc2AvatarHead.steps.join(' → ')}.
+              </p>
+            )}
             {newTaskType === 'avatar-from-image' && (
               <p style={{ fontSize: '0.55rem', color: '#8f8', margin: '0 0 0.5rem', lineHeight: 1.35 }}>
                 Pipeline: {PREFERRED_PIPELINES.avatarFromImage.steps.join(' → ')}
@@ -2133,6 +2251,12 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   <option value="image-to-world">Image to World (splat + props)</option>
                   <option value="environment-scan">Environment scan (walk → 1:1 twin)</option>
                   <option value="avatar-from-image">Avatar from Image (VRM)</option>
+                  <option value={BODY_CLOTH_STUDIO_TASK_TYPE}>
+                    Head track · Body+Cloth (Studio)
+                  </option>
+                  <option value={ARC2AVATAR_TASK_TYPE}>
+                    Head track · Arc2Avatar (Body+Cloth)
+                  </option>
                   <option value="mesh-painting-text">Mesh painting (text)</option>
                   <option value="mesh-painting">Mesh painting (image)</option>
                   <option value="mesh-segmentation">Mesh Segmentation</option>
@@ -2144,6 +2268,48 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   <option value="avatar-from-photo">Avatar From Photo</option>
                 </select>
               </div>
+
+              {isBodyClothStudioTaskType(newTaskType) && (
+                <div className="mb-1.5">
+                  <label
+                    style={{
+                      fontSize: '0.65rem',
+                      marginBottom: '0.25rem',
+                      display: 'block',
+                      color: '#ccc',
+                    }}
+                  >
+                    Head track engine:
+                  </label>
+                  <select
+                    value={normalizeHeadTrack(taskOptions.head_track)}
+                    onChange={(e) =>
+                      setTaskOptions((prev) => ({
+                        ...prev,
+                        head_track: normalizeHeadTrack(e.target.value),
+                      }))
+                    }
+                    className="input w-full"
+                    data-testid="body-cloth-head-track-select"
+                    style={{ padding: '0.375rem', fontSize: '0.65rem' }}
+                  >
+                    {HEAD_TRACK_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id} title={opt.title}>
+                        {opt.label}
+                        {opt.id === HEAD_TRACK.MESHMONK
+                          ? ' — morph head + XR blendshapes'
+                          : opt.id === HEAD_TRACK.ARC2AVATAR
+                            ? ' — photoreal splat (needs selfie)'
+                            : ' — morph head + Arc2Avatar overlay'}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
+                    Same engines as Studio Image options → Head track. Open Studio applies this
+                    choice and continues the Body+Cloth flow there.
+                  </p>
+                </div>
+              )}
 
               <div className="mb-1.5">
                 <label
@@ -2176,7 +2342,10 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 </p>
               </div>
 
-              {isApiConnected && newTaskType !== 'avatar-from-photo' && newTaskType !== 'avatar-from-image' && (
+              {isApiConnected &&
+                newTaskType !== 'avatar-from-photo' &&
+                newTaskType !== 'avatar-from-image' &&
+                !isBodyClothStudioTaskType(newTaskType) && (
                 <TaskAdvancedOptions
                   apiEndpoint={apiEndpoint}
                   modelId={newTaskModel}
@@ -2265,6 +2434,43 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                               ? 'Detected template/UniRig hint → UniRig pipeline selected.'
                               : 'Tip: name the object “Joggers” or “Fox” to auto-select the right pipeline.'}
                       </p>
+                      {(taskOptions.rig_mode === AUTO_RIG_MODES.TEMPLATE ||
+                        taskOptions.rig_mode === AUTO_RIG_MODES.TEMPLATE_WRAP) && (
+                        <label
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '0.35rem',
+                            marginTop: '0.4rem',
+                            fontSize: '0.6rem',
+                            color: '#ccc',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={taskOptions.rig_mode === AUTO_RIG_MODES.TEMPLATE_WRAP}
+                            data-testid="auto-rig-template-wrap-checkbox"
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? AUTO_RIG_MODES.TEMPLATE_WRAP
+                                : AUTO_RIG_MODES.TEMPLATE;
+                              setTaskOptions((prev) => ({
+                                ...prev,
+                                rig_mode: next,
+                                humanoid_template_id:
+                                  prev.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID,
+                                output_format: 'glb',
+                              }));
+                              setNewTaskModel(TEMPLATE_RIG_MODEL_ID);
+                            }}
+                          />
+                          <span>
+                            XR face morphs (Phase 5 head stitch) — keep{' '}
+                            <code>template.vrm</code> head blend shapes + AIGC body. Humanoid only;
+                            not for creatures/SkinTokens.
+                          </span>
+                        </label>
+                      )}
                       {taskOptions.rig_mode === AUTO_RIG_MODES.CREATURE_TEMPLATE && (
                         <div style={{ marginTop: '0.35rem' }}>
                           <label
@@ -2490,23 +2696,66 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   </label>
                   <select
                     className="input w-full"
-                    value={taskOptions.metric_mode || 'auto_bbox'}
+                    value={taskOptions.metric_mode || 'reference_length'}
                     onChange={(e) =>
-                      setTaskOptions((prev) => ({ ...prev, metric_mode: e.target.value }))
+                      setTaskOptions((prev) => ({
+                        ...prev,
+                        metric_mode: e.target.value,
+                        // Office door lock: reference_length → horizontal axis.
+                        metric_axis:
+                          e.target.value === 'reference_length'
+                            ? 'horizontal'
+                            : e.target.value === 'player_height'
+                              ? 'uniform'
+                              : prev.metric_axis || 'horizontal',
+                        metric_true_meters:
+                          e.target.value === 'reference_length' && !prev.metric_true_meters
+                            ? '0.762'
+                            : prev.metric_true_meters,
+                        metric_recon_length:
+                          e.target.value === 'reference_length' && !prev.metric_recon_length
+                            ? '0.47'
+                            : prev.metric_recon_length,
+                      }))
                     }
                     style={{ padding: '0.375rem', fontSize: '0.65rem', marginBottom: '0.5rem' }}
                     data-testid="environment-scan-metric-mode"
                   >
+                    <option value="reference_length">
+                      Reference length — Office door lock (0.762 m / 0.47 recon, horizontal)
+                    </option>
                     <option value="auto_bbox">
                       Auto bbox — true_meters = real room span (diagonal / longest wall)
-                    </option>
-                    <option value="reference_length">
-                      Reference length — measured door/wall in meters + recon length
                     </option>
                     <option value="player_height">
                       Player height — true_meters ≈ avatar height, recon_length = height in recon
                     </option>
                   </select>
+                  {(taskOptions.metric_mode || 'reference_length') === 'reference_length' ? (
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        marginBottom: '0.5rem',
+                        fontSize: '0.6rem',
+                      }}
+                    >
+                      <span>Scale axis</span>
+                      <select
+                        className="input"
+                        value={taskOptions.metric_axis || 'horizontal'}
+                        onChange={(e) =>
+                          setTaskOptions((prev) => ({ ...prev, metric_axis: e.target.value }))
+                        }
+                        style={{ padding: '0.25rem', fontSize: '0.6rem', flex: 1 }}
+                        title="Door width must stay horizontal — do not stretch room height"
+                      >
+                        <option value="horizontal">horizontal (XZ only — locked Office door)</option>
+                        <option value="uniform">uniform (XYZ — only if measuring full height span)</option>
+                      </select>
+                    </label>
+                  ) : null}
                   <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}>
                     True length (meters) <span style={{ color: '#f88' }}>*</span>
                   </label>
@@ -2520,8 +2769,18 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     onChange={(e) =>
                       setTaskOptions((prev) => ({ ...prev, metric_true_meters: e.target.value }))
                     }
-                    placeholder="e.g. 0.762 (30 in door), or 4.2 room diagonal"
-                    title="Millimeter precision OK — 30 in door = 0.762 m"
+                    placeholder={
+                      taskOptions.metric_mode === 'auto_bbox'
+                        ? 'e.g. 4.2 (room diagonal / longest wall in meters)'
+                        : taskOptions.metric_mode === 'player_height'
+                          ? 'e.g. 1.6 (avatar / eye height in meters)'
+                          : 'e.g. 0.762 (30 in door) or 0.9 (wall segment)'
+                    }
+                    title={
+                      taskOptions.metric_mode === 'auto_bbox'
+                        ? 'Auto bbox: enter the REAL room span (meters), not a door width'
+                        : 'Millimeter precision OK — 30 in door = 0.762 m (use reference_length)'
+                    }
                     data-testid="environment-scan-true-meters"
                     style={{ padding: '0.375rem', fontSize: '0.65rem', marginBottom: '0.5rem' }}
                   />
@@ -2607,11 +2866,36 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       />
                     </label>
                   )}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      marginTop: '0.35rem',
+                      fontSize: '0.65rem',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(taskOptions.bake_env_mesh)}
+                      onChange={(e) =>
+                        setTaskOptions((prev) => ({
+                          ...prev,
+                          bake_env_mesh: e.target.checked,
+                          refine_to_3dgs: e.target.checked ? true : prev.refine_to_3dgs,
+                        }))
+                      }
+                      data-testid="environment-scan-bake-env-mesh"
+                    />
+                    Bake env mesh GLB for OMB/RP1 (after Phase A/B)
+                  </label>
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
                     Best 1:1: tape a door/wall, use reference_length with recon points. auto_bbox is
                     approximate. Phase A is fast isotropic Gaussians; Phase B gsplat train is
-                    photometric (sharper) and can take a long time on a full walk. Docs:
-                    LINGBOT_MAP_ENVIRONMENT_SCAN.md. Does not change Image to World (TripoSplat).
+                    photometric (sharper) and can take a long time on a full walk. Bake writes
+                    environment_mesh.glb for Scene Assembler (Spark splat stays viewport-only).
+                    Image-to-World RP1 still uses TRELLIS props only — TripoSplat has no cameras
+                    for TSDF bake. Docs: LINGBOT_MAP_ENVIRONMENT_SCAN.md.
                   </p>
                 </div>
               )}
@@ -2632,7 +2916,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     Also generate Gaussian splat preview (TripoSplat → Spark.js)
                   </label>
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Pipeline: photo → TRELLIS mesh → template.vrm rig (GLB). Optional splat loads
+                    Pipeline: photo → TRELLIS mesh → template.vrm wrap (VRM). Optional splat loads
                     in parallel when ready.
                   </p>
                 </div>
@@ -2642,6 +2926,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               {!requiresModel(newTaskType) &&
                 newTaskType !== 'avatar-from-photo' &&
                 newTaskType !== 'avatar-from-image' &&
+                !isBodyClothStudioTaskType(newTaskType) &&
                 newTaskType !== 'image-to-world' &&
                 newTaskType !== 'environment-scan' && (
                 <div className="mb-1.5">
@@ -2690,6 +2975,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 newTaskType === 'image-to-world' ||
                 newTaskType === 'environment-scan' ||
                 newTaskType === 'avatar-from-image' ||
+                isArc2AvatarTaskType(newTaskType) ||
                 newTaskType === 'mesh-painting' ||
                 newTaskType === 'mesh-editing-image' ||
                 newTaskType === 'avatar-from-photo') && (
@@ -2707,6 +2993,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           ? 'Upload walk video or ≥3 frames:'
                         : newTaskType === 'avatar-from-image'
                           ? 'Upload Photo (avatar pipeline):'
+                          : isArc2AvatarTaskType(newTaskType)
+                            ? 'Upload face selfie (Arc2Avatar head — not a full-body shot):'
                           : newTaskType === 'mesh-painting' || newTaskType === 'mesh-editing-image'
                         ? 'Upload Reference Image:'
                         : 'Upload Face Photo:'}
@@ -2866,20 +3154,26 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   type="submit"
                   className="btn btn-primary"
                   data-testid="task-start-btn"
-                  disabled={!canSubmitNewTask || !canStartAnyTask}
+                  disabled={
+                    isBodyClothStudioTaskType(newTaskType)
+                      ? false
+                      : !canSubmitNewTask || !canStartAnyTask
+                  }
                   title={
-                    !canStartAnyTask
-                      ? canBrowseCatalog
-                        ? AI_BACKEND_UNAVAILABLE_MSG
-                        : 'Connect API or AvatarSDK to start'
-                      : canSubmitNewTask
-                        ? 'Start generation'
-                        : 'Enter an object name first'
+                    isBodyClothStudioTaskType(newTaskType)
+                      ? `Open Studio Body+Cloth (head track: ${normalizeHeadTrack(taskOptions.head_track)})`
+                      : !canStartAnyTask
+                        ? canBrowseCatalog
+                          ? AI_BACKEND_UNAVAILABLE_MSG
+                          : 'Connect API or AvatarSDK to start'
+                        : canSubmitNewTask
+                          ? 'Start generation'
+                          : 'Enter an object name first'
                   }
                   onClick={() => console.log('TaskManager: Submit button clicked')}
                   style={{ flex: 1 }}
                 >
-                  Start
+                  {isBodyClothStudioTaskType(newTaskType) ? 'Open Studio' : 'Start'}
                 </button>
                 <button
                   type="button"

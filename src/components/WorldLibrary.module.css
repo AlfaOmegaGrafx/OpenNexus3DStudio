@@ -32,11 +32,34 @@
 }
 
 .statusActive {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.35rem;
   color: #8f8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.layerToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 0 0.5rem;
+  min-width: 0;
+}
+
+.layerBtn {
+  flex: 0 0 auto;
+  font-size: 0.55rem;
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+  min-height: 24px;
+  height: auto;
+  opacity: 0.75;
+}
+
+.layerBtnOn {
+  opacity: 1;
+  background: #2a3a4a;
 }
 
 .statusIdle {

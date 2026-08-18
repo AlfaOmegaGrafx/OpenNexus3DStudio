@@ -43,6 +43,7 @@ import com.opennexus3dstudio.xrfacebridge.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     private val faceTrackingPermission = "android.permission.FACE_TRACKING"
+    private val bodyTrackingPermission = "android.permission.BODY_TRACKING"
 
     private lateinit var binding: ActivityMainBinding
 
@@ -57,9 +58,11 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         val faceOk = results[faceTrackingPermission] == true
+        val bodyOk = !results.containsKey(bodyTrackingPermission) ||
+            results[bodyTrackingPermission] == true
         val cameraOk = !results.containsKey(Manifest.permission.CAMERA) ||
             results[Manifest.permission.CAMERA] == true
-        Log.d(TAG, "Face permissions face=$faceOk camera=$cameraOk results=$results")
+        Log.d(TAG, "Face/body permissions face=$faceOk bodyOk=$bodyOk camera=$cameraOk results=$results")
         if (openNexus3dStudioPageReady && faceOk && cameraOk) {
             tryStartFaceTracking()
         }
@@ -622,6 +625,11 @@ class MainActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             missing.add(faceTrackingPermission)
+        }
+        if (ContextCompat.checkSelfPermission(this, bodyTrackingPermission) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            missing.add(bodyTrackingPermission)
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED

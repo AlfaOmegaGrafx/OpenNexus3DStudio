@@ -988,7 +988,9 @@ export class CharacterManager {
             if (selectedTrait) {
               await this._loadTraits(getAsArray(selectedTrait));
               resolve();
+              return;
             }
+            reject(new Error(`No custom trait option for slot ${groupTraitID}`));
 
           } catch (error) {
             // Reject the Promise with an error message if there's an error during custom trait retrieval

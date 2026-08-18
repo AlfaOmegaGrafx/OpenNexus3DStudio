@@ -13,8 +13,7 @@ Read `memory-bank/lingbot-env-scan-orientation-protected-state.md` before editin
 | Case | Rule |
 |------|------|
 | `gaussian_splat` / `spark` / gaussian source | Spark loader only |
-| LingBot Phase A/B Gaussian | `orientationMode: 'none'` |
-| LingBot gravity-aligned | Do **not** `anchorObjectBottomToFloor` (floaters hoist the room) |
+| LingBot Phase A Gaussian | `orientationMode: 'none'` |
 | `point_cloud` / `points` | XYZRGB point loader |
 
 ## Forbidden

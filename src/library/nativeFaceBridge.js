@@ -29,7 +29,7 @@ export const NATIVE_FACE_WINDOW_API = '__openNexus3dStudioNativeFace';
  * `FaceTrackingCoordinator.OPENXR_ENABLED`.  Flip to `true` when the APK
  * re-enables the OpenXR face engine.
  */
-export const OPENXR_WEB_ENABLED = false;
+export const OPENXR_WEB_ENABLED = true;
 
 /** WebView / main-thread jank can delay rAF; keep native weights usable longer than one XR frame. */
 const DEFAULT_MAX_AGE_MS = 2000;

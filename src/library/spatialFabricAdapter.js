@@ -429,8 +429,8 @@ function isGlbAssetUrl(url) {
 }
 
 /**
- * Publish interactable GLB props from a world manifest into MSF object library.
- * Splat environments stay in-app only — Scene Assembler accepts GLB/GLTF props.
+ * Publish interactable GLB props (+ optional baked environment mesh) from a world
+ * manifest into MSF object library. Splat PLYs stay in-app only.
  * @param {string} apiEndpoint
  * @param {string} manifestUrl
  * @param {{ assetNamePrefix?: string }} [opts]
@@ -447,11 +447,14 @@ export async function publishWorldPropsToSpatialFabric(
   const manifest = await fetchWorldPackage(manifestUrl, apiEndpoint);
   const resolved = resolveWorldPackageUrls(manifest, manifestUrl, apiEndpoint);
   const glbProps = resolved.props.filter((prop) => isGlbAssetUrl(prop.mesh_url));
+  const envMeshUrl = resolved.environment?.mesh_url;
+  const envGlb = envMeshUrl && isGlbAssetUrl(envMeshUrl) ? envMeshUrl : null;
 
-  if (glbProps.length === 0) {
+  if (glbProps.length === 0 && !envGlb) {
     throw new Error(
-      'This world has no mesh props to publish (prop_count is 0). ' +
-        'Image-to-World splat environments stay in the OpenNexus viewport; Scene Assembler only accepts GLB props.',
+      'This world has no GLB meshes to publish (no props and no environment.mesh_url). ' +
+        'Image-to-World: add TRELLIS props. Env-scan: run Bake env mesh (POST /bake-env-mesh) first. ' +
+        'Spark splat PLYs are not published to Scene Assembler.',
     );
   }
 
@@ -462,6 +465,26 @@ export async function publishWorldPropsToSpatialFabric(
     .slice(0, 48);
 
   const published = [];
+
+  if (envGlb) {
+    const response = await fetch(envGlb, {
+      headers: { Accept: 'model/gltf-binary,*/*', ...get3daigcAuthHeaders() },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch environment mesh (${response.status})`);
+    }
+    const blob = await response.blob();
+    const assetName = `${prefix}-environment`.replace(/[^a-z0-9._-]+/gi, '-');
+    const result = await publishGlbBlobToSpatialFabric(
+      apiEndpoint,
+      blob,
+      'environment_mesh.glb',
+      assetName,
+    );
+    published.push({ propId: 'environment', assetName, role: 'environment', ...result });
+    console.log('[SpatialFabric] world environment mesh published', result?.published?.object_url);
+  }
+
   for (const prop of glbProps) {
     const response = await fetch(prop.mesh_url, {
       headers: { Accept: 'model/gltf-binary,*/*', ...get3daigcAuthHeaders() },
@@ -487,6 +510,50 @@ export async function publishWorldPropsToSpatialFabric(
     manifestName: manifest.name,
     published,
   };
+}
+
+/**
+ * Queue env mesh bake on DGX for a world with gs_dataset/ (LingBot Phase A+).
+ * Defaults to photo quality (denser mesh + vertex colors for studio viewport).
+ * @param {string} apiEndpoint
+ * @param {string} worldId
+ * @param {{ quality?: string, targetFaceCount?: number, maxViews?: number, voxelResolution?: number, dataFactor?: number, colorExport?: string }} [opts]
+ */
+export async function queueBakeEnvMesh(apiEndpoint, worldId, opts = {}) {
+  if (!apiEndpoint) {
+    throw new Error('Configure API endpoint to bake environment mesh');
+  }
+  if (!worldId) {
+    throw new Error('worldId is required for bake-env-mesh');
+  }
+  const body = {
+    world_id: worldId,
+    quality: opts.quality ?? 'photo',
+    model_preference: 'env_mesh_bake',
+  };
+  if (opts.targetFaceCount != null) body.target_face_count = opts.targetFaceCount;
+  if (opts.maxViews != null) body.max_views = opts.maxViews;
+  if (opts.voxelResolution != null) body.voxel_resolution = opts.voxelResolution;
+  if (opts.dataFactor != null) body.data_factor = opts.dataFactor;
+  if (opts.colorExport != null) body.color_export = opts.colorExport;
+  const res = await fetch(apiUrl(apiEndpoint, '/api/v1/world-generation/bake-env-mesh'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...get3daigcAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      typeof data.detail === 'string'
+        ? data.detail
+        : `Bake env mesh failed (${res.status})`,
+    );
+  }
+  return data;
 }
 
 /**

@@ -1,98 +1,43 @@
-# DGX Spark — two devices
+# SSH: two hosts only (DGX Spark)
 
-Operational SSH nicknames for one physical DGX. **Do not commit real LAN/Tailscale IPs or Windows account paths** — keep those in local `~/.ssh/config` only (templates under `scripts/` are gitignored).
+One physical DGX. Two SSH nicknames in Cursor — nothing else.
 
-## What is what
+Real hostnames, LAN/Tailscale IPs, and Windows account paths belong in **local** `~/.ssh/config` only (repo SSH templates are gitignored).
 
-| You see in NVIDIA Sync | SSH name (Cursor) | Address underneath | When |
-|------------------------|-------------------|--------------------|------|
-| **DGX Sparks local** | `DGX-Local` | mDNS / LAN hostname from your local SSH config | At home |
-| **DGX Sparks remote** | `DGX-Remote` | Tailscale / Sync host from your local SSH config | Away |
+| Cursor name | When to use | Route |
+|-------------|-------------|--------|
+| **`DGX-Local`** | Spark on same Wi‑Fi / LAN | Direct → LAN host from your SSH config |
+| **`DGX-Remote`** | Away from LAN, NVIDIA Sync + Tailscale | Proxy / Tailscale host from your SSH config |
 
-**DGX-Local in SSH config is correct.** Prefer **Remote SSH → DGX-Local** or **DGX-Remote**.
+**`dgx-spark.local` is not a third host.** It is only an **address inside** a host block (like a phone number). Prefer picking **`DGX-Local`** / **`DGX-Remote`** in Cursor.
 
-**Old Cursor session still says `dgx-spark.local`?** That hostname is not a third machine — it is the address under DGX-Local. Cursor uses `~/.ssh/config-cursor` (includes main config + maps `dgx-spark.local` → your DGX Linux user). NVIDIA Sync still uses `~/.ssh/config` (two hosts only).
+**`Sifr-s-DGX-Spark`** was NVIDIA Sync’s label for the same remote route. Replaced by **`DGX-Remote`** so the list stays at two.
 
-NVIDIA Sync uses `~/.ssh/config` + `nvsync.key`. If Sync fails but Cursor worked before, the key on the Spark needs reinstalling — not deleting `DGX-Local`.
+## Files (keep in sync if you rename)
 
-## Auto-guard (keeps this layout after updates)
+1. Your user `~/.ssh/config` (Windows: under your profile `.ssh\config`)
+2. Cursor **Settings** → `remote.SSH.remotePlatform`
+3. `OpenNexus3DStudio/.vscode/settings.json`
+4. `scripts/dgx-spark.ssh.config` (local template + sign-in repair; gitignored)
 
-Golden templates live in `scripts/` (`dgx-spark.ssh.config`, `cursor-ssh-extras.config`, etc. — **gitignored**). The guard restores them when NVIDIA Sync or Cursor drifts.
+## Rules — stop extra “devices”
 
-**One-time install** (Windows sign-in + before every `npm run dev`), from your local OpenNexus clone:
+- **No** `Include` of NVIDIA `ssh_config` (duplicates hosts).
+- **No** `Match` blocks (Cursor cannot parse them).
+- **No** extra `Host` lines (`dgx-spark`, `dgx-spark-remote`, etc.).
+- **One** `Host` line per route = **one** name in Cursor.
 
-```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\install-dgx-ssh-guard.ps1
-```
+## After changes
 
-Manual check: `npm run dgx:guard`
+1. **Developer: Reload Window** in Cursor.
+2. Remote SSH → **`DGX-Local`** or **`DGX-Remote`** only.
+3. **Old workspace opens `dgx-spark.local`?** That’s a saved Cursor session, not a third machine. Prefer **`DGX-Remote`** for new connections.
 
-The guard **does not** re-pair NVIDIA Sync or delete hosts — it only restores config files, strips bad `Include` lines, fixes BOMs, and resets Cursor SSH settings. Use the repair scripts below if auth or remote pairing breaks.
-
-## Fix auth (from repo root)
-
-```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\repair-dgx-auth.ps1
-```
-
-This script:
-- **Keeps** `DGX-Local` and `DGX-Remote` in `~/.ssh/config`
-- **Installs** the NVIDIA Sync public key on the Spark (password once)
-- **Re-registers** with NVIDIA Sync without wiping SSH config
-
-## Fix DGX Sparks remote only (`knownhost: remote host not known`)
-
-Local already works — use this script. It does **not** change DGX-Local.
+## Verify
 
 ```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\repair-dgx-remote.ps1
+ssh -G DGX-Local 2>&1 | Select-String "^user |^hostname "
+ssh -G DGX-Remote 2>&1 | Select-String "^user |^hostname |^proxycommand "
 ```
 
-## Cursor terminal stuck reconnecting (cmd.exe spam)
-
-Stale `cursor-server` on the Spark causes multiplex **401** and an endless reconnect loop.
-
-```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\fix-cursor-remote-loop.ps1
-```
-
-Quit Cursor fully, run the script, reopen, connect via **DGX-Local** (not `dgx-spark.local`).
-
-## Other scripts
-
-```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\repair-nvidia-sync-devices.ps1   # remove old junk names only
-.\scripts\restart-nvidia-sync.ps1          # app won't open
-```
-
-## DGX → Surface (reverse SSH)
-
-Let the Spark SSH **into** the Surface PC for sync scripts, file pulls, etc. Host alias and LAN address live only in local SSH config (e.g. `Host Surface-PC`).
-
-**One-time (Administrator PowerShell on Surface):**
-
-```powershell
-cd <OPENNEXUS_REPO_ROOT>
-.\scripts\install-surface-openssh-server.ps1
-```
-
-**Then (normal PowerShell):**
-
-```powershell
-.\scripts\allow-dgx-ssh-to-surface.ps1
-```
-
-This fetches (or creates) an ed25519 key on the Spark, adds it to `authorized_keys` on the Surface, fixes key ACLs, and appends `Host Surface-PC` to the Spark `~/.ssh/config`.
-
-**Test from DGX:**
-
-```bash
-ssh Surface-PC hostname
-```
-
-Surface LAN IP is auto-detected (Wi-Fi first). Prefer LAN SSH for sync; add a separate Tailscale host block locally if needed.
+Sign-in repair: `scripts/ensure-dgx-ssh-config.ps1` (Startup shortcut) restores the two-host file if the DGX Linux user mapping breaks.

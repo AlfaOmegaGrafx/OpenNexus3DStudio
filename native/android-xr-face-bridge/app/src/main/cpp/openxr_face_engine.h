@@ -12,7 +12,9 @@ bool SetActivity(JNIEnv* env, jobject activity);
 /** Optional 1x1 Surface for GLES session binding (Phase 1b). */
 bool SetSurface(JNIEnv* env, jobject surface);
 
-/** Start headless OpenXR face loop on a worker thread. Returns false if unsupported. */
+/** Start headless OpenXR face (+ optional ANDROIDSYS upper-body) loop on a worker thread.
+ *  Returns false if unsupported. Body joints are delivered via the same JNI callback when available.
+ */
 bool Start(JNIEnv* env, jobject callback);
 
 void Stop();

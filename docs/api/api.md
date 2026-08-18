@@ -1,4 +1,4 @@
-﻿# 3D Generative Models Backend API Documentation
+# 3D Generative Models Backend API Documentation
 
 ## Overview
 
@@ -938,10 +938,11 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../API_A
   - `mesh_path`: Local file path (for server-side files)
   - `mesh_file_id`: File ID from upload endpoint (**recommended**)
 - **Parameters**:
-  - `rig_mode`: Rig mode (`skeleton`, `skin`, `full`, or **`template`** for humanoid template VRM)
-  - `humanoid_template_id`: When `rig_mode` is `template`, template id (default **`template`**; legacy alias `sifr2`)
-  - `output_format`: Output format (`glb` recommended for template mode)
-  - `model_preference`: Model to use for rigging (`unirig_auto_rig`)
+  - `rig_mode`: Rig mode (`skeleton`, `skin`, `full`, **`template`** for humanoid template VRM bones-only, **`template_wrap`** for Phase 5 head stitch (template morph head + AIGC body), **`appearance_component`** for Appearance Editor clothing fit on `appearance_base.vrm`, or `creature_template`)
+  - `humanoid_template_id`: When `rig_mode` is `template` or `template_wrap`, template id (default **`template`**; legacy alias `sifr2`)
+  - `appearance_slot`: When `rig_mode` is `appearance_component`, slot name (`Body`, `Head`, `Hands`, `Shoes`, `Chest`, `Waist`, `Neck`, `Legs`)
+  - `output_format`: Output format (`glb` recommended for template / appearance modes)
+  - `model_preference`: Model to use (`unirig_auto_rig` for template modes; `appearance_component_auto_rig` for clothing)
 
 **Template rig example** (bones-only; facial morphs require mesh wrap — see OpenNexus3DStudio `docs/AVATAR_PIPELINE.md`):
 
@@ -952,6 +953,30 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../API_A
   "humanoid_template_id": "template",
   "output_format": "glb",
   "model_preference": "unirig_auto_rig"
+}
+```
+
+**Template wrap (Phase 5 head stitch)**:
+
+```json
+{
+  "mesh_file_id": "<uploaded body glb>",
+  "rig_mode": "template_wrap",
+  "humanoid_template_id": "template",
+  "output_format": "glb",
+  "model_preference": "unirig_auto_rig"
+}
+```
+
+**Appearance clothing component** (fits garment to `appearance_base.vrm` slot):
+
+```json
+{
+  "mesh_file_id": "<uploaded garment glb>",
+  "rig_mode": "appearance_component",
+  "appearance_slot": "Legs",
+  "output_format": "glb",
+  "model_preference": "appearance_component_auto_rig"
 }
 ```
 

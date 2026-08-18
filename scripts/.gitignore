@@ -290,7 +290,7 @@ docs/SceneControlsIntegration.md
 scripts/restore-scene-controls.js
 scripts/restore-scene-controls.bat
 restore-scene-controls.js
-SCENE_CONTROLS_BACKUP.md
+SCENE_CONTROLS_UI_BACKUP.md
 
 # IDE / agent tooling (local only; may contain tokens or machine paths)
 .codex/
@@ -318,6 +318,7 @@ MONETIZATION_ROADMAP_*.md
 MONETIZATION_ROADMAP_*.html
 MONETIZATION_ROADMAP*.html
 MONETIZATION_ROADMAP_BACKUP.md
+/FUTURE_RD.md
 protect-monetization-roadmap.js
 protect-roadmap.bat
 Pitch Deck/
@@ -364,7 +365,7 @@ VRM_OPTIMIZATION_ANALYSIS.md
 VRM_OPTIMIZATION_IMPLEMENTATION.md
 VRM_OPTIMIZATION_PLAN.md
 VRM_OPTIMIZATION_STATUS.md
-SCENE_CONTROLS_BACKUP.md
+SCENE_CONTROLS_UI_BACKUP.md
 restore-scene-controls.js
 
 # Machine-specific dev scripts (keep locally; use docs/ for shared setup)
@@ -500,7 +501,7 @@ certs/
 **/VRM_OPTIMIZATION_IMPLEMENTATION.md
 **/VRM_OPTIMIZATION_PLAN.md
 **/VRM_OPTIMIZATION_STATUS.md
-**/SCENE_CONTROLS_BACKUP.md
+**/SCENE_CONTROLS_UI_BACKUP.md
 
 **/fix-ai-workbench-connection.ps1
 **/fix-nvidia-sync-daemon.ps1

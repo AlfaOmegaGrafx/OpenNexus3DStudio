@@ -364,10 +364,24 @@ For more details, see the [Animation Documentation](./character-traits.md#animat
 - Use web-safe colors for color options
 
 ### Culling Layers
-- Base body should be layer 0
-- Clothing should be layer 1
-- Accessories should be layer 2 or higher
-- Use -1 for things that shouldn't cull (like hair)
+
+OpenNexus uses integer **culling layers** so higher-layer traits hide (cull) mesh under them. See also [Character Traits — defaultCullingLayer](./manifest-files/character-traits.md#defaultcullinglayer).
+
+| Layer | Role | Examples |
+|------:|------|----------|
+| **0** | Base body (soulbound foundation) | Manifest `BODY` / base VRM |
+| **1** | Clothing | Tops, pants, shoes, **full-body outfits** (dress, pajamas, jumpsuit, onesie) |
+| **2+** | Accessories | Hair, hats, glasses, earrings, gloves, watches, bracelets, necklaces |
+| **−1** | No cull | Hair and other pieces that should never remove faces underneath |
+
+Tips:
+
+- Base body should be layer **0**
+- Clothing should be layer **1**
+- Accessories should be layer **2** or higher
+- Use **−1** for things that shouldn't cull (like hair)
+
+**Studio Body+Cloth smart layering** (see [Appearance](../Developers/Pages/appearance.md)): when a full-body garment is present, do not also equip separate Chest / Legs / Waist pieces; covering gloves (e.g. boxing gloves) exclude wristwear (watches, bracelets).
 
 ## Common Issues and Solutions
 

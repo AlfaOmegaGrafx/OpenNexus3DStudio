@@ -27,8 +27,10 @@ namespace on::openxr {
 namespace {
 
 constexpr int kFaceParamCount = 68;
+constexpr int kBodyUpperJointCount = XR_BODY_UPPER_BODY_JOINT_COUNT_ANDROIDSYS;  // 14
+constexpr int kFloatsPerBodyJoint = 7;  // pos.xyz + ori.xyzw
+constexpr int kBodyFloatCountMax = kBodyUpperJointCount * kFloatsPerBodyJoint;  // 98
 constexpr int kTargetHz = 30;
-constexpr int64_t kStaleMs = 5000;
 
 #define XR_CHECK(expr, msg)                                 \
     do {                                                    \
@@ -52,7 +54,9 @@ std::atomic<int64_t> g_last_post_ms{0};
 
 XrInstance g_instance = XR_NULL_HANDLE;
 XrSession g_session = XR_NULL_HANDLE;
+XrSpace g_local_space = XR_NULL_HANDLE;
 XrFaceTrackerANDROID g_face_tracker = XR_NULL_HANDLE;
+XrBodyTrackerANDROIDSYS g_body_tracker = XR_NULL_HANDLE;
 ANativeWindow* g_native_window = nullptr;
 
 void* g_loader_lib = nullptr;
@@ -66,9 +70,14 @@ PFN_xrCreateSession xrCreateSession = nullptr;
 PFN_xrDestroySession xrDestroySession = nullptr;
 PFN_xrBeginSession xrBeginSession = nullptr;
 PFN_xrEndSession xrEndSession = nullptr;
+PFN_xrCreateReferenceSpace xrCreateReferenceSpace = nullptr;
+PFN_xrDestroySpace xrDestroySpace = nullptr;
 PFN_xrCreateFaceTrackerANDROID xrCreateFaceTrackerANDROID = nullptr;
 PFN_xrDestroyFaceTrackerANDROID xrDestroyFaceTrackerANDROID = nullptr;
 PFN_xrGetFaceStateANDROID xrGetFaceStateANDROID = nullptr;
+PFN_xrCreateBodyTrackerANDROIDSYS xrCreateBodyTrackerANDROIDSYS = nullptr;
+PFN_xrDestroyBodyTrackerANDROIDSYS xrDestroyBodyTrackerANDROIDSYS = nullptr;
+PFN_xrLocateBodyJointsANDROIDSYS xrLocateBodyJointsANDROIDSYS = nullptr;
 PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR = nullptr;
 
 bool LoadCoreProc(const char* name, PFN_xrVoidFunction* pfn) {
@@ -126,6 +135,8 @@ bool LoadInstanceCoreProcs(XrInstance instance) {
     return load("xrDestroyInstance", xrDestroyInstance) && load("xrGetSystem", xrGetSystem) &&
            load("xrCreateSession", xrCreateSession) && load("xrDestroySession", xrDestroySession) &&
            load("xrBeginSession", xrBeginSession) && load("xrEndSession", xrEndSession) &&
+           load("xrCreateReferenceSpace", xrCreateReferenceSpace) &&
+           load("xrDestroySpace", xrDestroySpace) &&
            load("xrGetOpenGLESGraphicsRequirementsKHR", xrGetOpenGLESGraphicsRequirementsKHR);
 }
 
@@ -135,12 +146,12 @@ int64_t NowMs() {
         .count();
 }
 
-bool LoadExtensionPointers(XrInstance instance) {
+bool LoadFaceExtensionPointers(XrInstance instance) {
     auto load = [&](const char* name, auto& pfn) -> bool {
         const XrResult r = xrGetInstanceProcAddr(instance, name,
                                                  reinterpret_cast<PFN_xrVoidFunction*>(&pfn));
         if (XR_FAILED(r) || pfn == nullptr) {
-            ALOGW("Missing OpenXR entry point: %s", name);
+            ALOGW("Missing OpenXR face entry point: %s", name);
             return false;
         }
         return true;
@@ -148,6 +159,21 @@ bool LoadExtensionPointers(XrInstance instance) {
     return load("xrCreateFaceTrackerANDROID", xrCreateFaceTrackerANDROID) &&
            load("xrDestroyFaceTrackerANDROID", xrDestroyFaceTrackerANDROID) &&
            load("xrGetFaceStateANDROID", xrGetFaceStateANDROID);
+}
+
+bool LoadBodyExtensionPointers(XrInstance instance) {
+    auto load = [&](const char* name, auto& pfn) -> bool {
+        const XrResult r = xrGetInstanceProcAddr(instance, name,
+                                                 reinterpret_cast<PFN_xrVoidFunction*>(&pfn));
+        if (XR_FAILED(r) || pfn == nullptr) {
+            ALOGW("Missing OpenXR body entry point: %s", name);
+            return false;
+        }
+        return true;
+    };
+    return load("xrCreateBodyTrackerANDROIDSYS", xrCreateBodyTrackerANDROIDSYS) &&
+           load("xrDestroyBodyTrackerANDROIDSYS", xrDestroyBodyTrackerANDROIDSYS) &&
+           load("xrLocateBodyJointsANDROIDSYS", xrLocateBodyJointsANDROIDSYS);
 }
 
 bool InitLoader(JNIEnv* env) {
@@ -195,9 +221,13 @@ const char* ResultName(XrResult result) {
 }
 
 bool CreateInstanceWithApiVersion(XrVersion apiVersion, XrInstance* outInstance) {
-    const char* extensions[] = {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
-                                XR_ANDROID_FACE_TRACKING_EXTENSION_NAME,
-                                XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
+    const char* extensionsWithBody[] = {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
+                                        XR_ANDROID_FACE_TRACKING_EXTENSION_NAME,
+                                        XR_ANDROIDSYS_BODY_TRACKING_EXTENSION_NAME,
+                                        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
+    const char* extensionsFaceOnly[] = {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
+                                        XR_ANDROID_FACE_TRACKING_EXTENSION_NAME,
+                                        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
 
     XrInstanceCreateInfoAndroidKHR androidInfo{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
     androidInfo.applicationVM = g_vm;
@@ -205,8 +235,6 @@ bool CreateInstanceWithApiVersion(XrVersion apiVersion, XrInstance* outInstance)
 
     XrInstanceCreateInfo ici{XR_TYPE_INSTANCE_CREATE_INFO};
     ici.next = reinterpret_cast<XrBaseInStructure*>(&androidInfo);
-    ici.enabledExtensionCount = 3;
-    ici.enabledExtensionNames = extensions;
     std::strncpy(ici.applicationInfo.applicationName, "OpenNexus3dStudio",
                  XR_MAX_APPLICATION_NAME_SIZE - 1);
     ici.applicationInfo.applicationVersion = 1;
@@ -215,11 +243,23 @@ bool CreateInstanceWithApiVersion(XrVersion apiVersion, XrInstance* outInstance)
     ici.applicationInfo.apiVersion = apiVersion;
 
     LogApiVersion(apiVersion);
-    const XrResult r = xrCreateInstance(&ici, outInstance);
+    ici.enabledExtensionCount = 4;
+    ici.enabledExtensionNames = extensionsWithBody;
+    XrResult r = xrCreateInstance(&ici, outInstance);
+    if (XR_SUCCEEDED(r)) {
+        ALOGI("xrCreateInstance ok (face + body + android create + opengl es)");
+        return true;
+    }
+    ALOGW("xrCreateInstance with body failed: %d (%s) — retrying face-only", static_cast<int>(r),
+          ResultName(r));
+    ici.enabledExtensionCount = 3;
+    ici.enabledExtensionNames = extensionsFaceOnly;
+    r = xrCreateInstance(&ici, outInstance);
     if (XR_FAILED(r)) {
-        ALOGE("xrCreateInstance failed: %d (%s)", static_cast<int>(r), ResultName(r));
+        ALOGE("xrCreateInstance (face-only) failed: %d (%s)", static_cast<int>(r), ResultName(r));
         return false;
     }
+    ALOGI("xrCreateInstance ok (face + android create + opengl es; body extension absent)");
     return true;
 }
 
@@ -277,6 +317,44 @@ bool CreateSessionForSystem(XrSystemId systemId) {
     return false;
 }
 
+bool TryCreateBodyTracker() {
+    if (!LoadBodyExtensionPointers(g_instance)) {
+        ALOGW("Body tracking procs unavailable — face-only mode");
+        return false;
+    }
+    XrBodyTrackerCreateInfoANDROIDSYS createInfo{XR_TYPE_BODY_TRACKER_CREATE_INFO_ANDROIDSYS};
+    createInfo.jointSet = XR_BODY_JOINT_SET_UPPER_BODY_ANDROIDSYS;
+    const XrResult bt =
+        xrCreateBodyTrackerANDROIDSYS(g_session, &createInfo, &g_body_tracker);
+    if (XR_FAILED(bt)) {
+        ALOGW("xrCreateBodyTrackerANDROIDSYS failed: %d — check android.permission.BODY_TRACKING",
+              static_cast<int>(bt));
+        g_body_tracker = XR_NULL_HANDLE;
+        return false;
+    }
+    ALOGI("OpenXR body tracker ready (XR_ANDROIDSYS_body_tracking, upper body, %d joints)",
+          kBodyUpperJointCount);
+    return true;
+}
+
+bool TryCreateLocalSpace() {
+    if (!xrCreateReferenceSpace) {
+        ALOGW("xrCreateReferenceSpace missing — body locate disabled");
+        return false;
+    }
+    XrReferenceSpaceCreateInfo spaceCi{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    spaceCi.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+    spaceCi.poseInReferenceSpace.orientation.w = 1.f;
+    const XrResult sr = xrCreateReferenceSpace(g_session, &spaceCi, &g_local_space);
+    if (XR_FAILED(sr)) {
+        ALOGW("xrCreateReferenceSpace LOCAL failed: %d", static_cast<int>(sr));
+        g_local_space = XR_NULL_HANDLE;
+        return false;
+    }
+    ALOGI("OpenXR LOCAL reference space created for body locate");
+    return true;
+}
+
 bool CreateInstanceAndSession() {
     // Runtime reports max OpenXR 1.0 (log: "Max supported version is 1.0"); try 1.0.x only.
     static const XrVersion kApiVersionCandidates[] = {
@@ -303,7 +381,7 @@ bool CreateInstanceAndSession() {
         return false;
     }
 
-    if (!LoadExtensionPointers(g_instance)) {
+    if (!LoadFaceExtensionPointers(g_instance)) {
         return false;
     }
 
@@ -323,22 +401,39 @@ bool CreateInstanceAndSession() {
         ALOGW("xrBeginSession failed: %d (continuing for face-only)", static_cast<int>(r));
     }
 
+    TryCreateLocalSpace();
+
     XrFaceTrackerCreateInfoANDROID createInfo{XR_TYPE_FACE_TRACKER_CREATE_INFO_ANDROID};
     const XrResult ft = xrCreateFaceTrackerANDROID(g_session, &createInfo, &g_face_tracker);
     if (XR_FAILED(ft)) {
         ALOGE("xrCreateFaceTrackerANDROID failed: %d", static_cast<int>(ft));
         return false;
     }
-
     ALOGI("OpenXR face tracker ready");
+
+    // Body is best-effort: face continues if body create / permission fails.
+    if (!TryCreateBodyTracker()) {
+        ALOGW("Body tracker not active — face tracking continues without body");
+    }
+
     return true;
 }
 
 void DestroyAll() {
     ShutdownEgl();
+    if (g_body_tracker != XR_NULL_HANDLE && xrDestroyBodyTrackerANDROIDSYS) {
+        xrDestroyBodyTrackerANDROIDSYS(g_body_tracker);
+        g_body_tracker = XR_NULL_HANDLE;
+        ALOGI("OpenXR body tracker destroyed");
+    }
     if (g_face_tracker != XR_NULL_HANDLE && xrDestroyFaceTrackerANDROID) {
         xrDestroyFaceTrackerANDROID(g_face_tracker);
         g_face_tracker = XR_NULL_HANDLE;
+    }
+    if (g_local_space != XR_NULL_HANDLE && xrDestroySpace) {
+        xrDestroySpace(g_local_space);
+        g_local_space = XR_NULL_HANDLE;
+        ALOGI("OpenXR LOCAL space destroyed");
     }
     if (g_session != XR_NULL_HANDLE) {
         if (xrEndSession) xrEndSession(g_session);
@@ -352,9 +447,20 @@ void DestroyAll() {
     xrCreateFaceTrackerANDROID = nullptr;
     xrDestroyFaceTrackerANDROID = nullptr;
     xrGetFaceStateANDROID = nullptr;
+    xrCreateBodyTrackerANDROIDSYS = nullptr;
+    xrDestroyBodyTrackerANDROIDSYS = nullptr;
+    xrLocateBodyJointsANDROIDSYS = nullptr;
+    xrCreateReferenceSpace = nullptr;
+    xrDestroySpace = nullptr;
 }
 
-void PostToJava(const float* params, int count, int64_t timestampMs) {
+/**
+ * Post face (+ optional body) to Kotlin.
+ * Body layout: for each joint, 7 floats = pos.xyz + ori.xyzw.
+ * Invalid joints are packed as all zeros (including ori.w == 0).
+ */
+void PostToJava(const float* params, int count, int64_t timestampMs, const float* bodyJoints,
+                int bodyJointCount) {
     if (!g_vm || !g_callback_global || !g_on_face_method) return;
     JNIEnv* env = nullptr;
     bool attached = false;
@@ -362,23 +468,82 @@ void PostToJava(const float* params, int count, int64_t timestampMs) {
         if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
         attached = true;
     }
-  jfloatArray arr = env->NewFloatArray(count);
+    jfloatArray arr = env->NewFloatArray(count);
     if (!arr) {
         if (attached) g_vm->DetachCurrentThread();
         return;
     }
     env->SetFloatArrayRegion(arr, 0, count, params);
-    env->CallVoidMethod(g_callback_global, g_on_face_method, arr, timestampMs);
+
+    jfloatArray bodyArr = nullptr;
+    const int bodyFloats =
+        bodyJoints && bodyJointCount > 0
+            ? bodyJointCount * kFloatsPerBodyJoint
+            : 0;
+    if (bodyFloats > 0) {
+        bodyArr = env->NewFloatArray(bodyFloats);
+        if (bodyArr) {
+            env->SetFloatArrayRegion(bodyArr, 0, bodyFloats, bodyJoints);
+        }
+    }
+
+    env->CallVoidMethod(g_callback_global, g_on_face_method, arr, static_cast<jlong>(timestampMs),
+                        bodyArr, static_cast<jint>(bodyJointCount));
     env->DeleteLocalRef(arr);
+    if (bodyArr) env->DeleteLocalRef(bodyArr);
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
     }
     if (attached) g_vm->DetachCurrentThread();
 }
 
+int LocateAndPackBody(float* outBody, int outCapacityJoints) {
+    if (g_body_tracker == XR_NULL_HANDLE || !xrLocateBodyJointsANDROIDSYS ||
+        g_local_space == XR_NULL_HANDLE || outBody == nullptr || outCapacityJoints <= 0) {
+        return 0;
+    }
+    const int jointCap =
+        outCapacityJoints < kBodyUpperJointCount ? outCapacityJoints : kBodyUpperJointCount;
+    XrSpaceLocationData joints[kBodyUpperJointCount]{};
+    XrBodyJointsLocateInfoANDROIDSYS locateInfo{XR_TYPE_BODY_JOINTS_LOCATE_INFO_ANDROIDSYS};
+    locateInfo.time = 0;  // runtime may treat 0 as "now"
+    locateInfo.space = g_local_space;
+    XrBodyJointLocationsANDROIDSYS locations{XR_TYPE_BODY_JOINT_LOCATIONS_ANDROIDSYS};
+    locations.jointCount = static_cast<uint32_t>(jointCap);
+    locations.joints = joints;
+
+    const XrResult lr = xrLocateBodyJointsANDROIDSYS(g_body_tracker, &locateInfo, &locations);
+    if (XR_FAILED(lr)) {
+        ALOGW("xrLocateBodyJointsANDROIDSYS failed: %d", static_cast<int>(lr));
+        return 0;
+    }
+    const int n = static_cast<int>(locations.jointCount);
+    const int count = n < jointCap ? n : jointCap;
+    for (int i = 0; i < count; ++i) {
+        float* dst = outBody + i * kFloatsPerBodyJoint;
+        const XrSpaceLocationData& d = joints[i];
+        const bool valid = (d.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0;
+        if (!valid) {
+            // Invalid sentinel: all zeros (ori.w == 0).
+            for (int k = 0; k < kFloatsPerBodyJoint; ++k) dst[k] = 0.f;
+            continue;
+        }
+        dst[0] = d.pose.position.x;
+        dst[1] = d.pose.position.y;
+        dst[2] = d.pose.position.z;
+        dst[3] = d.pose.orientation.x;
+        dst[4] = d.pose.orientation.y;
+        dst[5] = d.pose.orientation.z;
+        dst[6] = d.pose.orientation.w;
+    }
+    return count;
+}
+
 void FaceLoop() {
-    ALOGI("OpenXR face worker started");
+    ALOGI("OpenXR face worker started (body=%s)",
+          g_body_tracker != XR_NULL_HANDLE ? "on" : "off");
     std::vector<float> params(static_cast<size_t>(kFaceParamCount));
+    std::vector<float> bodyFloats(static_cast<size_t>(kBodyFloatCountMax));
     XrFaceStateANDROID faceState{XR_TYPE_FACE_STATE_ANDROID};
     faceState.parametersCapacityInput = kFaceParamCount;
     faceState.parametersCountOutput = 0;
@@ -394,7 +559,13 @@ void FaceLoop() {
         const int64_t now = NowMs();
         if (XR_SUCCEEDED(gr) && faceState.isValid == XR_TRUE) {
             g_last_post_ms.store(now);
-            PostToJava(params.data(), kFaceParamCount, now);
+            const int jointCount =
+                LocateAndPackBody(bodyFloats.data(), kBodyUpperJointCount);
+            if (jointCount > 0) {
+                PostToJava(params.data(), kFaceParamCount, now, bodyFloats.data(), jointCount);
+            } else {
+                PostToJava(params.data(), kFaceParamCount, now, nullptr, 0);
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1000 / kTargetHz));
     }
@@ -447,10 +618,11 @@ bool Start(JNIEnv* env, jobject callback) {
     }
     g_callback_global = env->NewGlobalRef(callback);
     jclass cbClass = env->GetObjectClass(callback);
-    g_on_face_method = env->GetMethodID(cbClass, "onOpenXrFaceParameters", "([FJ)V");
+    // face float[], timestamp long, body float[] (nullable), jointCount int
+    g_on_face_method = env->GetMethodID(cbClass, "onOpenXrFaceParameters", "([FJ[FI)V");
     env->DeleteLocalRef(cbClass);
     if (!g_on_face_method) {
-        ALOGE("onOpenXrFaceParameters method missing");
+        ALOGE("onOpenXrFaceParameters([FJ[FI)V method missing");
         return false;
     }
 

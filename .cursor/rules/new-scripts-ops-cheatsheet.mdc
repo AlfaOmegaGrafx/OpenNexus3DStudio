@@ -20,7 +20,7 @@ Whenever you **add, rename, or materially change** a script, npm script, Tailsca
    ```bash
    bash scripts/sync-cheatsheet-to-desktop.sh
    ```
-   Targets: `<DGX_DESKTOP_NOTES>\DGX Terminal Commands.{md,txt}` (+ `XR_VOICE_COMMANDS.md` when present).
+   Targets: `C:\Users\alfao\Desktop\DGX\DGX Terminal Commands.{md,txt}` (+ `XR_VOICE_COMMANDS.md` when present).
 4. **Use `--include-src`** when DGX edited `src/`; **`--include-agent-context`** when memory-bank / `.brain` changed.
 
 ## Never

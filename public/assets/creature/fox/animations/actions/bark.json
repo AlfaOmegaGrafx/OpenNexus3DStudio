@@ -1,0 +1,8 @@
+{
+  "name": "Bark",
+  "group": "actions",
+  "groupLabel": "Actions",
+  "bundle": "../fox-animations.glb",
+  "source": "Mesh2Motion (CC0)",
+  "templateId": "fox"
+}

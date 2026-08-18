@@ -14,13 +14,34 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * OpenXR `XR_ANDROID_face_tracking` (headless session) → HTTP relay + optional WebView.
+ * OpenXR `XR_ANDROID_face_tracking` + optional `XR_ANDROIDSYS_body_tracking`
+ * (headless session) → HTTP relay + optional WebView.
  * Runs parallel to [XrFaceTrackingEngine] (Jetpack); [FaceTrackingCoordinator] merges freshness.
  */
 object OpenXrFaceEngine {
 
     private const val TAG = "ON-OpenXrFace"
     private const val PARAM_COUNT = 68
+    private const val BODY_JOINT_COUNT = 14
+    private const val FLOATS_PER_BODY_JOINT = 7  // pos.xyz + ori.xyzw
+
+    /** ANDROIDSYS upper-body → VRM-style humanoid names (ribs→chest, chest→upperChest). */
+    private val BODY_JOINT_NAMES = arrayOf(
+        "hips",
+        "spine",
+        "chest",
+        "upperChest",
+        "neck",
+        "head",
+        "leftShoulder",
+        "rightShoulder",
+        "leftUpperArm",
+        "rightUpperArm",
+        "leftLowerArm",
+        "rightLowerArm",
+        "leftHand",
+        "rightHand",
+    )
 
     private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lastPostMs = AtomicLong(0L)
@@ -176,26 +197,89 @@ object OpenXrFaceEngine {
         }
     }
 
-    internal fun deliverFaceParameters(params: FloatArray, timestampMs: Long) {
+    internal fun deliverFaceParameters(
+        params: FloatArray,
+        timestampMs: Long,
+        bodyJoints: FloatArray?,
+        jointCount: Int,
+    ) {
         if (!running || params.size < PARAM_COUNT) return
         val now = if (timestampMs > 0) timestampMs else System.currentTimeMillis()
         if (!loggedFirstPush) {
             loggedFirstPush = true
-            Log.i(TAG, "First OpenXR face push (${params.size} parameters → relay)")
+            Log.i(
+                TAG,
+                "First OpenXR face push (${params.size} parameters" +
+                    ", bodyJoints=${jointCount.coerceAtLeast(0)} → relay)",
+            )
         }
         val payload = JSONObject()
         payload.put("source", "openxr")
         payload.put("openxrParameters", JSONArray(params.copyOf(PARAM_COUNT)))
         payload.put("t", now)
+        payload.put("body", buildBodyJson(bodyJoints, jointCount))
         FaceHttpRelay.post(payload)
         lastPostMs.set(now)
         XrFaceTrackingEngine.pushRelayPayloadFromOpenXr(payload)
     }
 
+    private fun buildBodyJson(bodyJoints: FloatArray?, jointCount: Int): JSONObject {
+        val body = JSONObject()
+        val floats = bodyJoints
+        val n = when {
+            floats == null || jointCount <= 0 -> 0
+            else -> minOf(jointCount, BODY_JOINT_COUNT, floats.size / FLOATS_PER_BODY_JOINT)
+        }
+        if (n <= 0 || floats == null) {
+            body.put("valid", false)
+            body.put("jointCount", 0)
+            body.put("joints", JSONArray())
+            return body
+        }
+        val joints = JSONArray()
+        var anyValid = false
+        for (i in 0 until n) {
+            val base = i * FLOATS_PER_BODY_JOINT
+            val posX = floats[base]
+            val posY = floats[base + 1]
+            val posZ = floats[base + 2]
+            val oriX = floats[base + 3]
+            val oriY = floats[base + 4]
+            val oriZ = floats[base + 5]
+            val oriW = floats[base + 6]
+            // Native packs invalid joints as all zeros (including ori.w == 0).
+            val valid = oriW != 0f || posX != 0f || posY != 0f || posZ != 0f ||
+                oriX != 0f || oriY != 0f || oriZ != 0f
+            if (valid) anyValid = true
+            val joint = JSONObject()
+            joint.put("name", BODY_JOINT_NAMES.getOrElse(i) { "joint$i" })
+            joint.put("pos", JSONArray().put(posX.toDouble()).put(posY.toDouble()).put(posZ.toDouble()))
+            joint.put(
+                "ori",
+                JSONArray()
+                    .put(oriX.toDouble())
+                    .put(oriY.toDouble())
+                    .put(oriZ.toDouble())
+                    .put(oriW.toDouble()),
+            )
+            joint.put("valid", valid)
+            joints.put(joint)
+        }
+        body.put("valid", anyValid)
+        body.put("jointCount", n)
+        body.put("joints", joints)
+        return body
+    }
+
     private class JniFaceCallback {
         @Suppress("unused")
-        fun onOpenXrFaceParameters(params: FloatArray, timestampMs: Long) {
-            deliverFaceParameters(params, timestampMs)
+        fun onOpenXrFaceParameters(
+            params: FloatArray,
+            timestampMs: Long,
+            bodyJoints: FloatArray?,
+            jointCount: Int,
+        ) {
+            deliverFaceParameters(params, timestampMs, bodyJoints, jointCount)
         }
     }
 

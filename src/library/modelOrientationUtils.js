@@ -42,6 +42,7 @@ export function shouldPreserveExportedOrientation(options = {}, model, asset) {
 
   const rigInfo = options.autoRigMeta?.rig_info;
   if (rigInfo?.rig_mode === 'template') return true;
+  if (rigInfo?.rig_mode === 'template_wrap') return true;
   if (rigInfo?.rig_type === 'humanoid_template') return true;
   if (rigInfo?.generation_method === 'humanoid_vrm_template') return true;
   if (rigInfo?.rig_mode === 'creature_template') return true;

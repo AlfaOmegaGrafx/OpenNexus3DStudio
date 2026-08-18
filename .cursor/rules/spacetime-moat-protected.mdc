@@ -11,18 +11,20 @@ Read `memory-bank/spacetime-moat-strategy.md` before monetization, x402, passpor
 
 | Open (GitHub) | Proprietary (never push) |
 |---------------|---------------------------|
-| Client `src/` (rebrand required for forks; exclude unreleased creature/companion moat) | `MONETIZATION_ROADMAP.md`, `Pitch Deck/` |
-| Public overview `docs/SPACETIME_MOAT_OVERVIEW.md` | `memory-bank/` (full strategy) |
+| Client `src/` (rebrand required for forks; public companion stubs only) | `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `Pitch Deck/`, `src/moat/` |
+| Public overview `docs/SPACETIME_MOAT_OVERVIEW.md` | `memory-bank/` (OpenNexus **and** 3DAIGC-API — full strategy / ops) |
+| Public stubs `docs/FUTURE_RD.md`, `3DAIGC-API/docs/MESH_WRAP_ROADMAP.md` | Full `FUTURE_RD.md` / `3DAIGC-API/MESH_WRAP_ROADMAP.md` (repo-root, gitignored) |
 | Mock `/verify` UI + API **draft** docs | Live passport serial DB, NFC SUN signing keys |
 | `.env.example` placeholders | `.env`, Thirdweb/x402 facilitator secrets |
-| Shipped public docs (`docs/progress.md` = **public-safe only**) | Unreleased speech / interactive-motion / creature-pet strategy, SKUs, timed waves (see local roadmap) |
+| Shipped public docs (`docs/progress.md` = **public-safe only**) | Unreleased speech / interactive-motion / creature-companion strategy, SKUs, timed waves; parked R&D (e.g. age-aware body) |
+| — | `backups/` (UI chrome good-state snapshots — local restore only) |
 
-**Moat layers:** (1) trademark/official drops, (2) OpenNexus+3DAIGC-API integration+SLA, (3) hosted x402/API/registry, (4) wallet+phygital asset graph, (5) ecosystem mindshare, (6) §11 personalization + companion handoff, (7) unreleased speech, motion, and creature companion tracks (named only in gitignored roadmap / memory-bank).
+**Moat layers:** (1) trademark/official drops, (2) OpenNexus+3DAIGC-API integration+SLA, (3) hosted x402/API/registry, (4) wallet+phygital asset graph, (5) ecosystem mindshare, (6) §11 personalization + companion handoff, (7) unreleased speech, interactive motion, and creature companion tracks.
 
 ## Agent rules
 
-1. **Never** `git add` / commit / push: `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `memory-bank/`, `.env`, facilitator keys, passport production data, unreleased creature moat assets/modules.
-2. **Never** paste roadmap pricing, ARR, or unreleased speech/motion/creature strategy (vendor model names, timed waves, SKUs) into tracked files — use `docs/SPACETIME_MOAT_OVERVIEW.md` for public-safe wording; keep `docs/progress.md` free of that detail until launch. Run `npm run verify:moat-docs` before push.
+1. **Never** `git add` / commit / push: `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md` (API root), `Pitch Deck/`, `memory-bank/` (either repo), `backups/`, `src/moat/`, companion/speech proxy scripts, `.env`, facilitator keys, passport production data, unreleased creature moat assets/modules.
+2. **Never** paste roadmap pricing, ARR, unreleased speech/motion/creature strategy, or parked R&D verdicts into tracked files — use `docs/SPACETIME_MOAT_OVERVIEW.md` for public-safe wording; keep `docs/progress.md` free of those names until launch. Tracked stubs may **point** at moat paths only. Do **not** name unreleased vendor speech/motion projects in tracked rules or docs.
 3. **DGX sync:** push moat docs via `sync-to-dgx.ps1` / `sync-changes-to-pc.sh` (scp), not git.
 4. Implement billing/registry as **hosted services** with env secrets; client stays OSS.
 5. Forks must remove Space-Time branding (README Legal & Trademark).

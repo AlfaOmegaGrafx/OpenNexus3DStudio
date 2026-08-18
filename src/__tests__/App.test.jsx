@@ -46,6 +46,10 @@ vi.mock('../components/TaskManager', () => ({
   default: () => <div data-testid="task-manager">TaskManager Component</div>
 }));
 
+vi.mock('../components/CreatureAnimationPanel', () => ({
+  default: () => <div data-testid="creature-animation-panel">CreatureAnimationPanel</div>
+}));
+
 vi.mock('../components/FileUpload', () => ({
   default: () => <div data-testid="file-upload">FileUpload Component</div>
 }));

@@ -1,0 +1,137 @@
+.zero-shot-panel {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.zero-shot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.zero-shot-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.zero-shot-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.zero-shot-badge.ok {
+  background: rgba(80, 200, 120, 0.15);
+  color: #7dcea0;
+}
+
+.zero-shot-badge.warn {
+  background: rgba(255, 180, 80, 0.15);
+  color: #f5b041;
+}
+
+.zero-shot-desc {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 0.5rem;
+  line-height: 1.35;
+}
+
+.zero-shot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.72rem;
+}
+
+.zero-shot-field input[type='text'] {
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+}
+
+.zero-shot-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.zero-shot-btn {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+}
+
+.zero-shot-btn.primary {
+  border-color: rgba(100, 180, 255, 0.4);
+  background: rgba(60, 120, 200, 0.2);
+}
+
+.zero-shot-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zero-shot-meta {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0.25rem 0;
+}
+
+.zero-shot-error {
+  font-size: 0.72rem;
+  color: #f1948a;
+  margin: 0.25rem 0;
+}
+
+.zero-shot-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  font-size: 0.72rem;
+}
+
+.zero-shot-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.zero-shot-conf {
+  color: rgba(255, 255, 255, 0.45);
+  margin-left: auto;
+}
+
+.zero-shot-link {
+  background: none;
+  border: none;
+  color: #85c1e9;
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 0;
+}
+
+.zero-shot-footnote {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 0.35rem;
+}
+
+.zero-shot-footnote code {
+  font-size: 0.65rem;
+}

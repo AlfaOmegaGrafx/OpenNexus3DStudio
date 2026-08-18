@@ -5,21 +5,50 @@
  *
  * Verified DGX Spark paths (Jun 2026):
  * - Image → 3D: TRELLIS.2 (TRELLIS v1 fails xformers on GB200-class GPUs)
- * - Auto rig (full): SkinTokens → GLB
- * - Auto rig (template VRM): UniRig only (SkinTokens rejects template mode)
+ * - Auto rig (full ML): SkinTokens (recommended) or UniRig full (same model id, rig_mode=full)
+ * - Auto rig (template VRM): UniRig adapter in template mode (Blender fits template.vrm — not a separate model)
  * - Avatar from image: TRELLIS.2 mesh → UniRig template.vrm
  * - World props / mesh paint: TRELLIS.2
+ *
+ * Note: `unirig_auto_rig` is one API model with modes. UI “UniRig template VRM” sets
+ * rig_mode=template (no neural UniRig). True UniRig ML needs rig_mode=full|skeleton|skin.
  */
 import {
   AUTO_RIG_MODES,
   TEMPLATE_RIG_MODEL_ID,
   APPEARANCE_COMPONENT_RIG_MODEL_ID,
+  ARC2AVATAR_MODEL_ID,
+  ARC2AVATAR_FEATURE,
+  ARC2AVATAR_TASK_TYPE,
+  ARC2AVATAR_API_READY,
+  BODY_CLOTH_STUDIO_TASK_TYPE,
+  BODY_CLOTH_STUDIO_TEMPLATE_ID,
 } from './avatarPipelineCatalog.js';
 import { CREATURE_TEMPLATE_RIG_MODEL_ID } from './creaturePipelineCatalog.js';
 import { inferAppearanceSlot, isAppearanceClothingName } from './appearanceClothing.js';
 
+/**
+ * Planned models — documented for pipeline placement; excluded from live pickers
+ * until GET /api/v1/system/models lists them (see ARC2AVATAR_API_READY).
+ * @type {{ value: string, label: string, feature: string, planned?: boolean }[]}
+ */
+/** @deprecated Prefer ALL_MODELS entry — kept for tests that assert planned shelf. */
+export const PLANNED_MODELS = [
+  {
+    value: ARC2AVATAR_MODEL_ID,
+    label: 'Arc2Avatar Head (FLAME 3DGS)',
+    feature: ARC2AVATAR_FEATURE,
+    planned: !ARC2AVATAR_API_READY,
+  },
+];
+
 /** @type {{ value: string, label: string, feature: string }[]} */
 export const ALL_MODELS = [
+  {
+    value: ARC2AVATAR_MODEL_ID,
+    label: 'Arc2Avatar Head (FLAME 3DGS — SDS train)',
+    feature: ARC2AVATAR_FEATURE,
+  },
   { value: 'trellis_text_to_textured_mesh', label: 'TRELLIS Text to Textured Mesh', feature: 'text_to_textured_mesh' },
   { value: 'trellis_text_mesh_painting', label: 'TRELLIS Text Mesh Painting', feature: 'text_mesh_painting' },
   { value: 'hunyuan3dv21_image_to_raw_mesh', label: 'Hunyuan3D v2.1 Image to Raw Mesh (recommended)', feature: 'image_to_raw_mesh' },
@@ -46,7 +75,7 @@ export const ALL_MODELS = [
   },
   { value: 'p3sam_mesh_segmentation', label: 'P3-SAM Mesh Segmentation', feature: 'mesh_segmentation' },
   { value: 'skintokens_auto_rig', label: 'SkinTokens Auto Rig (recommended — full rig + GLB)', feature: 'auto_rig' },
-  { value: 'unirig_auto_rig', label: 'UniRig Auto Rig (template VRM / FBX skeleton)', feature: 'auto_rig' },
+  { value: 'unirig_auto_rig', label: 'UniRig (one backend: template.vrm fit OR full ML — pick mode)', feature: 'auto_rig' },
   {
     value: 'appearance_component_auto_rig',
     label: 'Appearance Clothing Fit (VRM slot — Joggers, Shirt, Boots…)',
@@ -57,7 +86,9 @@ export const ALL_MODELS = [
     label: 'Creature Template Rig (Mesh2Motion fox / quadruped → GLB)',
     feature: 'auto_rig',
   },
-  { value: 'instant_meshes_retopology', label: 'Instant Meshes Retopology', feature: 'mesh_retopology' },
+  { value: 'trimesh_decimate', label: 'Mesh Decimate (recommended — keep shape + try keep UVs)', feature: 'mesh_retopology' },
+  { value: 'autoremesher_retopology', label: 'AutoRemesher Retopology (organic remesh; textures lost)', feature: 'mesh_retopology' },
+  { value: 'instant_meshes_retopology', label: 'Instant Meshes (hard-surface only — holes on characters)', feature: 'mesh_retopology' },
   { value: 'xatlas_uv_unwrapping', label: 'xatlas UV Unwrapping', feature: 'uv_unwrapping' },
   { value: 'voxhammer_text_mesh_editing', label: 'VoxHammer Text Mesh Editing', feature: 'text_mesh_editing' },
   { value: 'voxhammer_image_mesh_editing', label: 'VoxHammer Image Mesh Editing', feature: 'image_mesh_editing' },
@@ -65,6 +96,11 @@ export const ALL_MODELS = [
     value: 'krea2_turbo_text_to_image',
     label: 'Krea 2 Turbo Text-to-Image (local, recommended)',
     feature: 'text_to_image',
+  },
+  {
+    value: 'mage_flow_edit_turbo',
+    label: 'Mage-Flow-Edit-Turbo (instruction image edit)',
+    feature: 'image_edit',
   },
   { value: 'kimodo_text_to_motion', label: 'Kimodo Text-to-Motion (SOMA → VRM)', feature: 'text_to_motion' },
 ];
@@ -87,7 +123,7 @@ export const PREFERRED_PIPELINES = {
   },
   avatarFromImage: {
     label: 'Avatar from photo (template VRM)',
-    steps: ['TRELLIS.2 image→3D', 'UniRig template.vrm fit → GLB'],
+    steps: ['TRELLIS.2 image→3D', 'UniRig template.vrm fit → VRM'],
     taskType: 'avatar-from-image',
     meshModel: 'trellis2_image_to_textured_mesh',
     rigModel: TEMPLATE_RIG_MODEL_ID,
@@ -113,6 +149,71 @@ export const PREFERRED_PIPELINES = {
     imageModel: 'krea2_turbo_text_to_image',
     meshModel: 'trellis2_image_to_textured_mesh',
   },
+  /**
+   * Humanoid wrap track (Body+Cloth / template_wrap): body + clothing, with head engine
+   * choice GNM+MeshMonk | Arc2Avatar | Both (see prompt option head_track).
+   */
+  composableAvatarBody: {
+    label: 'Composable avatar body + clothing (head track)',
+    steps: [
+      'Head track: GNM+MeshMonk and/or Arc2Avatar (selfie)',
+      'Krea 2 neck-open body (not the selfie)',
+      'TRELLIS.2 → UniRig template_wrap',
+      'Krea garments → appearance_component slots',
+      'Optional: attach Arc2Avatar splat to Head bone',
+    ],
+    taskTypes: [
+      'text-to-image',
+      'image-to-3d',
+      'auto-rigging',
+      BODY_CLOTH_STUDIO_TASK_TYPE,
+      ARC2AVATAR_TASK_TYPE,
+    ],
+    imageModel: 'krea2_turbo_text_to_image',
+    meshModel: 'trellis2_image_to_textured_mesh',
+    rigModel: TEMPLATE_RIG_MODEL_ID,
+    rigMode: AUTO_RIG_MODES.TEMPLATE_WRAP,
+    headTrackOptions: ['meshmonk', 'arc2avatar', 'both', 'none'],
+  },
+  /**
+   * Task Manager discovery → Studio Body+Cloth (full head track UI).
+   * Not a duplicate API pipeline — opens Studio with the composable template.
+   */
+  bodyClothStudio: {
+    label: 'Head track · Body+Cloth (Studio)',
+    steps: [
+      'Open Studio Body+Cloth',
+      'Face selfie + Image options Head track (GNM+MeshMonk / Arc2Avatar / Both)',
+      'Run pipeline in Studio',
+    ],
+    taskType: BODY_CLOTH_STUDIO_TASK_TYPE,
+    sameTrackAs: 'composableAvatarBody',
+    opensStudio: true,
+    studioTemplateId: BODY_CLOTH_STUDIO_TEMPLATE_ID,
+    headTrackOptions: ['meshmonk', 'arc2avatar', 'both', 'none'],
+    complements: ['avatar-from-image', ARC2AVATAR_TASK_TYPE],
+    doesNotReplace: ['image-to-3d', 'auto-rigging', 'mesh-retopology'],
+  },
+  /**
+   * Same humanoid wrap track — Arc2Avatar engine only (Task Manager shortcut).
+   * Prefer Studio Body+Cloth + Head track chips for the full path.
+   */
+  arc2AvatarHead: {
+    label: 'Head track · Arc2Avatar (same as Body+Cloth)',
+    steps: [
+      'Selfie / face photo',
+      'Arc2Avatar SDS → FLAME-aligned head 3DGS (.ply)',
+      'Compose on template_wrap body (Head bone)',
+    ],
+    taskType: ARC2AVATAR_TASK_TYPE,
+    headModel: ARC2AVATAR_MODEL_ID,
+    feature: ARC2AVATAR_FEATURE,
+    planned: !ARC2AVATAR_API_READY,
+    sameTrackAs: 'composableAvatarBody',
+    headTrack: 'arc2avatar',
+    complements: ['composableAvatarBody', 'avatar-from-image', BODY_CLOTH_STUDIO_TASK_TYPE],
+    doesNotReplace: ['image-to-3d', 'auto-rigging', 'mesh-retopology'],
+  },
 };
 
 /** Map UI task types (task sidebar) to API feature keys from /api/v1/system/models */
@@ -132,9 +233,11 @@ export const TASK_TYPE_TO_FEATURE = {
   'image-to-world': 'image_to_world',
   'environment-scan': 'environment_scan',
   'text-to-image': 'text_to_image',
+  'image-edit': 'image_edit',
   'text-to-motion': 'text_to_motion',
   'avatar-from-image': null,
   'avatar-from-photo': null,
+  [ARC2AVATAR_TASK_TYPE]: ARC2AVATAR_FEATURE,
 };
 
 function sortModelsRecommendedFirst(models, preferredId) {
@@ -176,9 +279,9 @@ export function getModelLabel(modelId) {
 
 /** Default rig job output_format per backend (3DAIGC-API contract). */
 export function getDefaultAutoRigOutputFormat(modelPreference, rigMode) {
-  if (rigMode === AUTO_RIG_MODES.TEMPLATE) return 'glb';
-  if (rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) return 'glb';
-  if (rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT) return 'glb';
+  if (rigMode === AUTO_RIG_MODES.TEMPLATE) return 'vrm';
+  if (rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) return 'vrm';
+  if (rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT) return 'vrm';
   if (rigMode === AUTO_RIG_MODES.CREATURE_TEMPLATE) return 'glb';
   if (modelPreference === 'skintokens_auto_rig') return 'glb';
   if (modelPreference === CREATURE_TEMPLATE_RIG_MODEL_ID) return 'glb';
@@ -197,12 +300,14 @@ const DEFAULT_MODEL_BY_FEATURE = {
   environment_scan: 'lingbot_map_environment_scan',
   mesh_segmentation: 'p3sam_mesh_segmentation',
   auto_rig: 'skintokens_auto_rig',
-  mesh_retopology: 'instant_meshes_retopology',
+  mesh_retopology: 'trimesh_decimate',
   uv_unwrapping: 'xatlas_uv_unwrapping',
   text_mesh_editing: 'voxhammer_text_mesh_editing',
   image_mesh_editing: 'voxhammer_image_mesh_editing',
   text_to_image: 'krea2_turbo_text_to_image',
+  image_edit: 'mage_flow_edit_turbo',
   text_to_motion: 'kimodo_text_to_motion',
+  arc2avatar_head: ARC2AVATAR_MODEL_ID,
 };
 
 /** Default model id for a task type or API feature key. */
@@ -295,13 +400,11 @@ export function autoRigSelectionForPipelineKind(kind, hints = {}) {
 export function recommendedRigPipelinesForTask(task) {
   const name = `${task?.options?.object_name || ''} ${task?.name || ''}`;
   const kind = inferAutoRigPipelineKind({ objectName: name });
-  if (kind === 'appearance') return ['appearance'];
-  if (kind === 'creature') return ['creature'];
-  if (kind === 'template') return ['template'];
-  if (/\b(human|person|avatar|mannequin)\b/i.test(name)) {
-    return ['skintokens', 'template'];
-  }
-  return ['skintokens'];
+  if (kind === 'appearance') return ['appearance', 'skintokens', 'template'];
+  if (kind === 'creature') return ['creature', 'skintokens', 'template'];
+  if (kind === 'template') return ['template', 'skintokens'];
+  // Characters / props: SkinTokens + UniRig template always available.
+  return ['skintokens', 'template'];
 }
 
 /**

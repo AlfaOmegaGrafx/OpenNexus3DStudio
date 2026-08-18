@@ -5,6 +5,11 @@
 import * as THREE from 'three';
 import { applyExpressionWeightRecordToVRMS } from './xrExpressionTrackingDriver.js';
 import {
+  applyExpressionWeightRecordToCreature,
+  shouldUseCreatureFaceRetarget,
+  resetCreatureFaceRetarget,
+} from './creatureFaceRetarget.js';
+import {
   inferMediaPipeFaceWeightRecord,
   resetWebcamFaceNeutralBaseline,
 } from './webcamFaceWeightInference.js';
@@ -104,6 +109,8 @@ function pose3dFrom2d(pose2D) {
 export class WebcamAvatarDriver {
   constructor(options) {
     this.getVRMs = options.getVRMs || (() => []);
+    /** @type {() => import('three').Object3D[]} SkinTokens / creature roots when no VRM morphs */
+    this.getFaceRoots = options.getFaceRoots || (() => []);
     this.getRenderer = options.getRenderer || (() => null);
     this.onStateChange = options.onStateChange || null;
     this.onError = options.onError || null;
@@ -404,15 +411,28 @@ export class WebcamAvatarDriver {
       if (faceRig) {
         this._bodyRig.head = faceRig.head ?? null;
         const weightRecord = inferMediaPipeFaceWeightRecord(faceLmForExpr, faceRig, imageSize);
-        const vrms = this.getVRMs();
+        const vrms = this.getVRMs().filter((v) => v?.expressionManager);
         if (weightRecord && Object.keys(weightRecord).length && vrms.length) {
           applyExpressionWeightRecordToVRMS(vrms, weightRecord, {
             lerpFactor: FACE_EXPR_LERP,
             skipNeutralPreprocess: true,
           });
-        } else if (!vrms.length && !this._warnedNoVrm) {
-          this._warnedNoVrm = true;
-          console.warn('[WebcamAvatarDriver] No VRM loaded — load a VRM model first.');
+        } else if (weightRecord && Object.keys(weightRecord).length) {
+          const roots = (this.getFaceRoots?.() || []).filter((r) =>
+            shouldUseCreatureFaceRetarget(r),
+          );
+          if (roots.length) {
+            for (const root of roots) {
+              applyExpressionWeightRecordToCreature(root, weightRecord, {
+                lerpFactor: FACE_EXPR_LERP,
+              });
+            }
+          } else if (!this._warnedNoVrm) {
+            this._warnedNoVrm = true;
+            console.warn(
+              '[WebcamAvatarDriver] No VRM expressions or creature face bones — load a VRM or SkinTokens/creature GLB.',
+            );
+          }
         }
       }
     }
@@ -599,6 +619,9 @@ export class WebcamAvatarDriver {
         }
       }
       this._vrmBodyState.delete(vrm);
+    }
+    for (const root of this.getFaceRoots?.() || []) {
+      resetCreatureFaceRetarget(root);
     }
     this._smoothHead = { x: 0, y: 0, z: 0 };
   }

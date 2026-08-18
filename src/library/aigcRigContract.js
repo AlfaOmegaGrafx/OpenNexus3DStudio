@@ -11,6 +11,7 @@ import {
   getBoneWorldBounds,
   getMeshLayoutBounds,
   getSkinnedDisplayWorldBounds,
+  isSkinTokensRigExport,
   modelHasSkinnedMesh,
 } from './rigBoneUtils.js';
 
@@ -98,13 +99,22 @@ export function validateAigcRigContract(root, options = {}) {
 
   const spine =
     findBoneByName(root, 'Spine2', 'Spine1', 'Spine') ||
-    findBoneByName(root, 'mixamorig:Spine2', 'mixamorig:Spine1', 'mixamorig:Spine');
+    findBoneByName(root, 'mixamorig:Spine2', 'mixamorig:Spine1', 'mixamorig:Spine') ||
+    (isSkinTokensRigExport(root, { rig_info: options.rigInfo })
+      ? findBoneByName(root, 'bone_3', 'bone_2', 'bone_1')
+      : null);
   const left =
     findBoneByName(root, 'LeftShoulder', 'LeftArm', 'mixamorig:LeftShoulder') ||
-    findBoneByName(root, 'mixamorig:LeftArm');
+    findBoneByName(root, 'mixamorig:LeftArm') ||
+    (isSkinTokensRigExport(root, { rig_info: options.rigInfo })
+      ? findBoneByName(root, 'bone_25', 'bone_26')
+      : null);
   const right =
     findBoneByName(root, 'RightShoulder', 'RightArm', 'mixamorig:RightShoulder') ||
-    findBoneByName(root, 'mixamorig:RightArm');
+    findBoneByName(root, 'mixamorig:RightArm') ||
+    (isSkinTokensRigExport(root, { rig_info: options.rigInfo })
+      ? findBoneByName(root, 'bone_6', 'bone_7')
+      : null);
 
   if (hips && spine && left && right) {
     const hipsW = hips.getWorldPosition(new THREE.Vector3());

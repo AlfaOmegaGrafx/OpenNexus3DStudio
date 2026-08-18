@@ -1,0 +1,27 @@
+{
+  "templateId": "fox",
+  "source": "Mesh2Motion (CC0)",
+  "bundle": "/assets/creature/fox/animations/fox-animations.glb",
+  "groups": [
+    {
+      "id": "locomotion",
+      "label": "Locomotion",
+      "clips": ["Walk", "Run", "Sneak", "Jump", "Fall"]
+    },
+    {
+      "id": "idle",
+      "label": "Idle & Rest",
+      "clips": ["Idle", "Idle Alert", "Sit", "Rest Pose"]
+    },
+    {
+      "id": "actions",
+      "label": "Actions",
+      "clips": ["Bark", "Bite", "Howl", "Fetch"]
+    },
+    {
+      "id": "combat",
+      "label": "Combat",
+      "clips": ["Death"]
+    }
+  ]
+}

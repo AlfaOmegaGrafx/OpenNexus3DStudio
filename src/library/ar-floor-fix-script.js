@@ -11,7 +11,7 @@
  * Usage:
  * 1. Open chrome://inspect/#devices on your PC
  * 2. Find your Galaxy XR device (OpenNexus3DStudio: SPACE-TIME EDITION)
- * 3. Click "inspect" next to https://<SURFACE_LAN_IP>:3000/
+ * 3. Click "inspect" next to https://10.0.0.32:3000/
  * 4. Open the Console tab
  * 5. Paste this entire script and press Enter
  * 6. Run: fixARFloorAnchoring()

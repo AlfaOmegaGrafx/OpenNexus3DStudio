@@ -1,12 +1,14 @@
-# Android XR — OpenXR face bridge
+# Android XR — OpenXR face + body bridge
 
-Native **WebView** shell for **OpenNexus3DStudio** plus (TODO) **OpenXR `XR_ANDROID_face_tracking`** → `evaluateJavascript("window.__openNexus3dStudioNativeFace.push(...)")` (stable inject global; see [`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)).
+Native **WebView** shell for **OpenNexus3DStudio** plus **OpenXR `XR_ANDROID_face_tracking`** and optional **`XR_ANDROIDSYS_body_tracking`** (Galaxy XR upper body) → HTTP relay / `window.__openNexus3dStudioNativeFace` (see [`nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)).
 
 The web side is implemented in:
 
-- [`src/library/nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js)
+- [`src/library/nativeFaceBridge.js`](../../src/library/nativeFaceBridge.js) (`OPENXR_WEB_ENABLED` must be `true` for dense `openxrParameters`)
 - [`src/library/xrExpressionTrackingDriver.js`](../../src/library/xrExpressionTrackingDriver.js) (`applyExpressionWeightRecordToVRMS`)
 - [`docs/docs/OPENXR_FACE_TRACKING_ANDROID_XR.md`](../../docs/docs/OPENXR_FACE_TRACKING_ANDROID_XR.md)
+
+**Sneeze / Space-Time Host:** the same ANDROIDSYS upper-body joint set and humanoid names (`hips`…`rightHand`) are defined in Sneeze [`XrTracking.h`](../../../Sneeze/include/XrTracking.h) / `XrRuntime_Android.cpp`. Prefer shared POD shapes when wiring Space-Time Host `--xr-relay` so APK relay JSON and host ingest stay aligned.
 
 ## Gradle project (this folder)
 
@@ -106,7 +108,7 @@ Requires dependencies in `app/build.gradle.kts` (`androidx.xr.runtime`, `android
 2. Install this APK, grant **face tracking**, load **OpenNexus3DStudio** in the WebView once (Jetpack face starts).
 3. Toolbar **⋮** → **Open in Chrome for WebXR (+ face)** — URL includes **`?nativeFaceRelay=1`**.
 4. **Keep OpenNexus3DStudio visible** after opening Chrome — Jetpack face only runs while the bridge stays active. The APK starts a transparent **`FaceKeeperActivity`** plus PiP (when available) so the Jetpack session host stays resumed while Chrome runs WebXR. On **Galaxy XR Home Space**, still leave the **OpenNexus3DStudio** panel beside Chrome if PiP is unavailable. The foreground notification should say **“Relaying face tracking to Chrome”**.
-5. **Permissions:** grant **Notifications**, **Face tracking**, and **Camera** when prompted (or all at once in App info). Crashes on first launch are often from starting the foreground service before notifications are allowed — fixed in recent builds.
+5. **Permissions:** grant **Notifications**, **Face tracking**, **Body tracking**, and **Camera** when prompted (or all at once in App info). Crashes on first launch are often from starting the foreground service before notifications are allowed — fixed in recent builds.
 5. Enter AR/VR in Chrome; remote log should show **`nativeKeys > 0`** and **`relay=poll/…ms`** while **`xrPresenting=true`**.
 
 **Troubleshooting**
@@ -131,7 +133,7 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
 - `MainActivity`: `MaterialToolbar` + full-screen `WebView`, JS enabled, loads `open_nexus_3d_studio_url` (Gradle `resValue` from `local.properties`).
 - Menu action **Open in browser (WebXR)** for immersive sessions in Chrome.
 - **File import:** `onShowFileChooser` **does not** call `FileChooserParams.createIntent()` (that keeps the site’s `accept`/image MIME and opens **Gallery** on many devices). Instead it builds **`ACTION_OPEN_DOCUMENT`** with **`*/*`**, **`EXTRA_INITIAL_URI`** at internal storage (`primary:`), optional **`EXTRA_SHOW_ADVANCED`**, then **`Intent.createChooser`** so you can pick **My Files / Files** instead of Photos. In the chooser, avoid **Photos** / **Gallery** if you want folder paths.
-- Runtime request for **`android.permission.FACE_TRACKING`** (required before `xrCreateFaceTrackerANDROID` once OpenXR is wired).
+- Runtime request for **`android.permission.FACE_TRACKING`** and **`android.permission.BODY_TRACKING`** (required before `xrCreateFaceTrackerANDROID` / `xrCreateBodyTrackerANDROIDSYS`).
 - **`android.permission.RECORD_AUDIO`** and **`android.permission.CAMERA`** in the manifest + **`WebChromeClient.onPermissionRequest`** so the page can use **`getUserMedia`** (lip sync, webcam) inside the WebView.
 - Background: `FaceBridgeForegroundService` + `FaceTrackingCoordinator` (Jetpack + OpenXR) watchdog → HTTP relay while Chrome WebXR runs.
 - **Chrome handoff (Full Space):** `FaceKeeperActivity` + PiP before Chrome (~450ms delay); `FaceHandoffState` persists across process restarts only if relay posted within **60s** (`recordRelayPostSuccess` on ingest OK). **Cold launcher open** clears handoff and releases keeper (no second black/blank task). **May 2026** Android Studio pass:
@@ -155,11 +157,11 @@ Trade-off: the relay is **dev-only** (Vite plugin). Production would need WebXR 
 |-----------|------|
 | [`FaceTrackingCoordinator.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/FaceTrackingCoordinator.kt) | Starts both backends; watchdog uses freshest `lastPostAgeMs()` |
 | [`XrFaceTrackingEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/XrFaceTrackingEngine.kt) | Jetpack XR (activity-visible) |
-| [`OpenXrFaceEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/OpenXrFaceEngine.kt) + `libon_openxr_face.so` | OpenXR headless `xrGetFaceStateANDROID` → `openxrParameters` JSON |
+| [`OpenXrFaceEngine.kt`](app/src/main/java/com/opennexus3dstudio/xrfacebridge/OpenXrFaceEngine.kt) + `libon_openxr_face.so` | OpenXR headless `xrGetFaceStateANDROID` + optional `xrLocateBodyJointsANDROIDSYS` → `openxrParameters` + `body` JSON |
 
 Native code: [`app/src/main/cpp/`](app/src/main/cpp/) (CMake downloads OpenXR headers from [jetpack-xr-natives](https://github.com/google-ar/jetpack-xr-natives) on first build; cached under `third_party/openxr/`). First build needs network.
 
-**Logcat:** `ON-OpenXrNative` / `ON-OpenXrFace` — look for `OpenXR instance ok at apiVersion 1.0.34`, then `OpenXR session created with GLES binding` / `OpenXR face tracker ready`. Galaxy runtime rejects **1.1.x** (`Max supported version is 1.0`). Requires Khronos loader in APK (`prefab = true` + `openxr_loader_for_android` + `uses-native-library libopenxr.google.so`).
+**Logcat:** `ON-OpenXrNative` / `ON-OpenXrFace` — look for `OpenXR instance ok at apiVersion 1.0.34`, then `OpenXR session created with GLES binding` / `OpenXR face tracker ready` / `OpenXR body tracker ready`. Galaxy runtime rejects **1.1.x** (`Max supported version is 1.0`). Requires Khronos loader in APK (`prefab = true` + `openxr_loader_for_android` + `uses-native-library libopenxr.google.so`). Grant **BODY_TRACKING** for upper-body joints in the relay payload (`body.joints`).
 
 **Phase 1b:** PBuffer EGL for `XrGraphicsBindingOpenGLESAndroidKHR` (`openxr_gfx_egl.cpp`, `openxr_face_engine.cpp`) — session can start **headless** when no window surface exists (e.g. Chrome immersive, `MainActivity` backgrounded). Optional hidden `TextureView` (1×1) still supported when a surface is available. Remote log payload field `source` / diag `faceSrc=jetpack|openxr` when relay is live.
 

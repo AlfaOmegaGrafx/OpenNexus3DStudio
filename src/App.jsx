@@ -7,6 +7,7 @@ import { Core3DProvider } from './context/Core3DContext';
 import Scene3D from './components/Scene3D';
 import TaskManager from './components/TaskManager';
 import XrAiPanel from './components/XrAiPanel';
+import XrMenuBridge from './components/XrMenuBridge';
 import WorldLibrary from './components/WorldLibrary';
 import CombinedImport from './components/CombinedImport';
 import RenderModeSelector from './components/RenderModeSelector';
@@ -15,6 +16,7 @@ import GLBExport from './components/GLBExport';
 import VRMExport from './components/VRMExport';
 import TextureExtractor from './components/TextureExtractor';
 import Core3DPanel from './components/Core3DPanel';
+import CreatureAnimationPanel from './components/CreatureAnimationPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import BlendShapeController from './components/BlendShapeController';
 import TaskProgressBar from './components/TaskProgressBar';
@@ -69,6 +71,10 @@ import {
   showXrAiPanelAtSidebarTop,
   OPEN_XR_AI_PANEL_EVENT,
 } from './library/xrHubConfig';
+import {
+  captureCompanionHandoffFromScene,
+  storeCompanionHandoff,
+} from './library/companionHandoff.js';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -289,6 +295,22 @@ function AppContent() {
     return () => window.removeEventListener('message', onMessage);
   }, [isConnected, adoptJobHandoff, forceConnectionCheck]);
 
+  // xr-ai / companion → world nav goals (label/point from zero-shot vision)
+  useEffect(() => {
+    const onWorldNav = (event) => {
+      const data = event.data;
+      if (data?.type !== 'opennexus3d.worldNav') return;
+      if (data.action === 'set-goal' && data.payload) {
+        import('./library/worldNavContract.js').then(({ saveNavGoal }) => {
+          saveNavGoal(data.payload);
+          window.dispatchEvent(new CustomEvent('opennexus3d:zeroShotNav', { detail: data.payload }));
+        });
+      }
+    };
+    window.addEventListener('message', onWorldNav);
+    return () => window.removeEventListener('message', onWorldNav);
+  }, []);
+
   // Check if running in Electron
   useEffect(() => {
     setIsElectron(!!window.electronAPI);
@@ -422,12 +444,15 @@ function AppContent() {
       const isTemplateRig =
         isAvatarFromImage ||
         autoRigMeta.rig_info?.rig_mode === 'template' ||
+        autoRigMeta.rig_info?.rig_mode === 'template_wrap' ||
         autoRigMeta.rig_info?.rig_type === 'humanoid_template' ||
         autoRigMeta.rig_info?.generation_method === 'humanoid_vrm_template' ||
         taskResult?.inputs?.rig_mode === 'template' ||
+        taskResult?.inputs?.rig_mode === 'template_wrap' ||
         taskResult?.humanoid_template_id != null ||
         taskResult?.inputs?.humanoid_template_id != null ||
-        taskResult?.result?.generation_info?.rig_mode === 'template';
+        taskResult?.result?.generation_info?.rig_mode === 'template' ||
+        taskResult?.result?.generation_info?.rig_mode === 'template_wrap';
       const isCreatureTemplateRig =
         autoRigMeta.rig_info?.rig_mode === 'creature_template' ||
         autoRigMeta.rig_info?.rig_type === 'creature_template' ||
@@ -465,6 +490,9 @@ function AppContent() {
         isAppearanceComponentRig ||
         isAutoRig;
       const shouldExportVrm = task?.options?.export_vrm_after === true;
+      const resolvedFileExtension =
+        fileExtension ||
+        (isTemplateRig || isAppearanceComponentRig ? 'vrm' : undefined);
 
       const runLoad = async () => {
         console.log(`App: Loading model (${source}):`, resolved);
@@ -478,7 +506,7 @@ function AppContent() {
           autoScale: false,
           autoCenter: false,
           layer: 'player',
-          fileExtension: fileExtension || (isAppearanceComponentRig ? 'vrm' : undefined),
+          fileExtension: resolvedFileExtension,
           autoRigMeta: isAutoRig ? autoRigMeta : null,
           attachRigFbxUrl: isAutoRig ? attachRigFbxUrl : null,
           templateRig: isTemplateRig || isCreatureTemplateRig || isAppearanceComponentRig,
@@ -687,12 +715,30 @@ function AppContent() {
       }
     };
 
+    const handleAttachHeadSplat = async (event) => {
+      const url = event?.detail?.url;
+      if (!url || !sceneManager) return;
+      try {
+        const { attachHeadSplatToBody } = await import('./library/sparkSplatManager.js');
+        const absolute = resolveTaskModelUrl(url, apiEndpoint) || url;
+        await attachHeadSplatToBody(sceneManager, absolute, {
+          orientationMode: 'none',
+          hideMeshHead: true,
+        });
+        console.log('App: attached Arc2Avatar head splat to Head bone', absolute);
+      } catch (error) {
+        console.warn('App: attachHeadSplatFromUrl failed:', error?.message || error);
+      }
+    };
+
     window.addEventListener('taskCompleted', handleTaskCompleted);
     window.addEventListener('loadModelFromUrl', handleLoadModelFromUrl);
+    window.addEventListener('attachHeadSplatFromUrl', handleAttachHeadSplat);
 
     return () => {
       window.removeEventListener('taskCompleted', handleTaskCompleted);
       window.removeEventListener('loadModelFromUrl', handleLoadModelFromUrl);
+      window.removeEventListener('attachHeadSplatFromUrl', handleAttachHeadSplat);
     };
   }, [
     loadModel,
@@ -831,17 +877,24 @@ function AppContent() {
     ].includes(taskType);
     let modelData = null;
     
-    // Export current model to GLB if needed
-    if (requiresModel && currentModel && sceneManager) {
-      try {
-        console.log('App: Exporting current model to GLB for', taskType);
-        // Use getGLBBlobData from download-utils
-        const { getGLBBlobData } = await import('./library/download-utils.js');
-        modelData = await getGLBBlobData(currentModel, { forApiUpload: true });
-        console.log('App: Model exported successfully, size:', modelData.size, 'bytes');
-      } catch (error) {
-        console.error('App: Failed to export model:', error);
-        alert(`Failed to export model for ${taskType}: ${error.message}`);
+    // Export current model to GLB if needed (or use sourceMeshFile from Rig panel one-click).
+    if (requiresModel) {
+      if (options?.sourceMeshFile instanceof Blob) {
+        modelData = options.sourceMeshFile;
+      } else if (currentModel && sceneManager) {
+        try {
+          console.log('App: Exporting current model to GLB for', taskType);
+          // Use getGLBBlobData from download-utils
+          const { getGLBBlobData } = await import('./library/download-utils.js');
+          modelData = await getGLBBlobData(currentModel, { forApiUpload: true });
+          console.log('App: Model exported successfully, size:', modelData.size, 'bytes');
+        } catch (error) {
+          console.error('App: Failed to export model:', error);
+          alert(`Failed to export model for ${taskType}: ${error.message}`);
+          return;
+        }
+      } else if (taskType === 'auto-rigging') {
+        alert('⚠️ Load a 3D model in the viewport first, or use Start Auto Rigging on a completed mesh task.');
         return;
       }
     }
@@ -856,7 +909,8 @@ function AppContent() {
           return;
         }
       }
-      const resolvedOptions = { ...options, object_name: objectName };
+      const { sourceMeshFile: _dropSourceMesh, ...optionsWithoutMesh } = options || {};
+      const resolvedOptions = { ...optionsWithoutMesh, object_name: objectName };
 
       const result = await createAndStartTask({
         type: taskType,
@@ -964,6 +1018,20 @@ function AppContent() {
           </a>
           <a className="title-xr-lab-link" href="/xr" title="IWSDK immersive mode (WebXR lab)">
             XR Lab
+          </a>
+          <a
+            className="title-xr-lab-link"
+            href="/companion"
+            title="Voice companion handoff (WebXR + VRM)"
+            onClick={() => {
+              try {
+                storeCompanionHandoff(captureCompanionHandoffFromScene(sceneManager));
+              } catch (error) {
+                console.warn('App: companion handoff capture failed:', error?.message || error);
+              }
+            }}
+          >
+            Companion
           </a>
         </div>
 
@@ -1379,13 +1447,13 @@ function AppContent() {
 
       <TaskProgressBar tasks={tasks} />
 
-      {/* OpenNexus3DStudio avatar sidebar — fixed below header + scene-controls */}
+      {/* Avatar Creator sidebar — below scene-controls (XR/tools row); title must stay readable */}
       <div className={`opennexus-sidebar ${openNexusSidebarCollapsed ? 'collapsed' : ''}`}>
         <button
           type="button"
           className="opennexus-sticky-hamburger"
           onClick={handleRightHamburgerClick}
-          title={openNexusSidebarCollapsed ? 'Expand OpenNexus3DStudio' : 'Collapse OpenNexus3DStudio'}
+          title={openNexusSidebarCollapsed ? 'Expand Avatar Creator' : 'Collapse Avatar Creator'}
         >
           <div className="hamburger-icon">
             <span></span>
@@ -1467,7 +1535,7 @@ function AppContent() {
         {!openNexusSidebarCollapsed && (
           <div className="opennexus-content">
             <div className="opennexus-header">
-              <h3 className="opennexus-title">OpenNexus3DStudio</h3>
+              <h3 className="opennexus-title">Avatar Creator</h3>
             </div>
             <div className="opennexus-panels">
               {currentPanel === 'appearance' && <AppearanceSimple onNavigate={handleOpenNexusNavigation} />}
@@ -1632,7 +1700,7 @@ function AppContent() {
             <>
           {showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
-            <XrAiPanel isApiConnected={isConnected} />
+            <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
           </div>
           )}
           <BlendShapeController 
@@ -1649,6 +1717,7 @@ function AppContent() {
           <GLBExport apiEndpoint={apiEndpoint} />
           <VRMExport />
           <Core3DPanel />
+          <CreatureAnimationPanel />
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
@@ -1663,7 +1732,7 @@ function AppContent() {
           )}
           {showXrAiPanel() && !showXrAiPanelAtSidebarTop() && (
           <div ref={xrAiPanelRef}>
-            <XrAiPanel isApiConnected={isConnected} />
+            <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
           </div>
           )}
           <TaskManager 
@@ -1722,6 +1791,7 @@ function App() {
         <AudioProvider>
           <SoundProvider>
             <SceneProvider>
+              <XrMenuBridge />
               <Core3DProvider>
                 <AppContent />
               </Core3DProvider>

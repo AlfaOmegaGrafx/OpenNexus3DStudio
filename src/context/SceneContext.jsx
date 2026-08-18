@@ -46,6 +46,12 @@ export const SceneProvider = ({ children }) => {
   const [expressionVrmRevision, setExpressionVrmRevision] = useState(0);
   const [managersReady, setManagersReady] = useState(false);
   const [activeWorldId, setActiveWorldId] = useState(null);
+  const [worldEnvVisibility, setWorldEnvVisibility] = useState({
+    hasSplat: false,
+    hasMesh: false,
+    splatVisible: false,
+    meshVisible: false,
+  });
   const [rendererType, setRendererType] = useState('webgl');
 
   const syncAnimationTargets = useCallback(() => {
@@ -123,14 +129,43 @@ export const SceneProvider = ({ children }) => {
       const handleWorldLoaded = (data) => {
         requestAnimationFrame(() => {
           setActiveWorldId(data?.manifest?.id ?? null);
+          setWorldEnvVisibility(
+            sceneManagerRef.current?.getWorldEnvironmentLayerVisibility?.() || {
+              hasSplat: false,
+              hasMesh: false,
+              splatVisible: false,
+              meshVisible: false,
+            },
+          );
         });
       };
       const handleWorldCleared = () => {
-        requestAnimationFrame(() => setActiveWorldId(null));
+        requestAnimationFrame(() => {
+          setActiveWorldId(null);
+          setWorldEnvVisibility({
+            hasSplat: false,
+            hasMesh: false,
+            splatVisible: false,
+            meshVisible: false,
+          });
+        });
+      };
+      const handleWorldEnvVisibility = (data) => {
+        requestAnimationFrame(() => {
+          setWorldEnvVisibility(
+            data || {
+              hasSplat: false,
+              hasMesh: false,
+              splatVisible: false,
+              meshVisible: false,
+            },
+          );
+        });
       };
 
       sceneManagerRef.current.on('worldLoaded', handleWorldLoaded);
       sceneManagerRef.current.on('worldCleared', handleWorldCleared);
+      sceneManagerRef.current.on('worldEnvironmentVisibilityChanged', handleWorldEnvVisibility);
 
       // Cleanup function
       return () => {
@@ -142,6 +177,10 @@ export const SceneProvider = ({ children }) => {
           sceneManagerRef.current.off('boneDeselected', handleBoneDeselected);
           sceneManagerRef.current.off('worldLoaded', handleWorldLoaded);
           sceneManagerRef.current.off('worldCleared', handleWorldCleared);
+          sceneManagerRef.current.off(
+            'worldEnvironmentVisibilityChanged',
+            handleWorldEnvVisibility,
+          );
         }
       };
     }
@@ -419,6 +458,20 @@ export const SceneProvider = ({ children }) => {
   const clearWorld = () => {
     sceneManagerRef.current?.clearWorld();
     setActiveWorldId(null);
+    setWorldEnvVisibility({
+      hasSplat: false,
+      hasMesh: false,
+      splatVisible: false,
+      meshVisible: false,
+    });
+  };
+
+  const setWorldEnvironmentLayerVisible = (layer, visible) => {
+    const sm = sceneManagerRef.current;
+    if (!sm?.setWorldEnvironmentLayerVisible) return;
+    const next = sm.setWorldEnvironmentLayerVisible(layer, visible);
+    setWorldEnvVisibility(next);
+    return next;
   };
 
   // Set render mode
@@ -763,6 +816,7 @@ export const SceneProvider = ({ children }) => {
     isInitialized,
     currentModel,
     activeWorldId,
+    worldEnvVisibility,
     renderMode,
     rendererType,
     isLoading,
@@ -775,6 +829,7 @@ export const SceneProvider = ({ children }) => {
     loadWorldFromTaskResult,
     loadWorldEnvironment,
     clearWorld,
+    setWorldEnvironmentLayerVisible,
     updateRenderMode,
     clearModel,
     exportModel,

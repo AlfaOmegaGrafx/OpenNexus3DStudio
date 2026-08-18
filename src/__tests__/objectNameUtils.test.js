@@ -5,6 +5,7 @@ import {
   buildTaskDisplayName,
   resolveObjectNameFromJob,
   objectNameFromFilename,
+  resolveCarriedObjectName,
   requireObjectNameFromOptions,
 } from '../library/objectNameUtils.js';
 
@@ -40,6 +41,30 @@ describe('objectNameUtils', () => {
 
   it('objectNameFromFilename strips extension', () => {
     expect(objectNameFromFilename('dragon_knight.png')).toBe('dragon knight');
+  });
+
+  it('resolveCarriedObjectName prefers options and skips type+prompt labels', () => {
+    expect(
+      resolveCarriedObjectName({
+        type: 'text-to-image',
+        options: { object_name: 'Eagle Knight' },
+        name: 'Text To Image - Create a warrior…',
+      }),
+    ).toBe('Eagle Knight');
+    expect(
+      resolveCarriedObjectName({
+        type: 'image-to-3d',
+        name: 'Image To 3d - a fox',
+        options: {},
+      }),
+    ).toBeNull();
+    expect(
+      resolveCarriedObjectName({
+        type: 'image-to-3d',
+        name: 'Fox',
+        options: {},
+      }),
+    ).toBe('Fox');
   });
 
   it('requireObjectNameFromOptions throws when missing', () => {

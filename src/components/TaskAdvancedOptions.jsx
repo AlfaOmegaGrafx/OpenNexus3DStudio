@@ -13,10 +13,46 @@ import {
 } from '../library/creaturePipelineCatalog.js';
 import { getDefaultAutoRigOutputFormat } from '../library/aiModelsCatalog.js';
 import {
+  API_MAX_MESH_VERTICES,
+  PIPELINE_MESH_DECIMATION_MAX,
+  PIPELINE_MESH_DECIMATION_TARGET,
+  PIPELINE_MESH_SIMPLIFY_DEFAULT,
+  clampPipelineDecimationTarget,
+} from '../library/aiModelsCatalog.js';
+import {
   OMB_EXPORT_PRESETS,
   OMB_GUIDELINES_URL,
   buildOmbTaskOptions,
 } from '../library/ombExportPresets.js';
+
+/**
+ * @param {number} ratio mesh_simplify keep-ratio (0–1)
+ * @param {number|null|undefined} currentTarget existing decimation_target
+ * @param {number|null|undefined} previousRatio previous mesh_simplify used with currentTarget
+ */
+export function estimateDecimationTarget(ratio, currentTarget, previousRatio) {
+  const r = Math.max(0.01, Math.min(1, Number(ratio) || PIPELINE_MESH_SIMPLIFY_DEFAULT));
+  const prev = Number(previousRatio);
+  const target = Number(currentTarget);
+  let estimated;
+  if (Number.isFinite(target) && target > 0 && Number.isFinite(prev) && prev > 0) {
+    estimated = Math.round((target / prev) * r);
+  } else if (Number.isFinite(target) && target > 0) {
+    estimated = Math.round(target);
+  } else {
+    // Slider maps onto the pipeline face budget (not TRELLIS.2's raw 1M default).
+    estimated = Math.round(PIPELINE_MESH_DECIMATION_TARGET * (r / PIPELINE_MESH_SIMPLIFY_DEFAULT));
+  }
+  return clampPipelineDecimationTarget(estimated);
+}
+
+/**
+ * @param {number} triangles
+ */
+export function formatTriangleCount(triangles) {
+  const n = Math.max(0, Math.round(Number(triangles) || 0));
+  return n.toLocaleString();
+}
 
 /**
  * Common + model-specific 3DAIGC parameters (ported from Open3DStudio AdvancedParameters).
@@ -39,9 +75,18 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
         setSchema(params);
         if (params && onChange) {
           const defaults = buildDefaultModelParameters(params);
+          if (defaults.decimation_target != null) {
+            defaults.decimation_target = clampPipelineDecimationTarget(
+              Math.min(
+                Number(defaults.decimation_target) || PIPELINE_MESH_DECIMATION_TARGET,
+                PIPELINE_MESH_DECIMATION_MAX,
+              ),
+            );
+          }
           onChange({
             ...value,
-            model_parameters: { ...(value?.model_parameters || {}), ...defaults },
+            // Keep pipeline-safe / user values; fill only missing schema keys.
+            model_parameters: { ...defaults, ...(value?.model_parameters || {}) },
           });
         }
       })
@@ -196,6 +241,9 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                       model_parameters: {
                         ...(value?.model_parameters || {}),
                         ...omb.model_parameters,
+                        decimation_target: clampPipelineDecimationTarget(
+                          omb.model_parameters.decimation_target,
+                        ),
                       },
                     });
                   }}
@@ -246,21 +294,50 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
               </div>
 
               <div style={{ marginBottom: '0.4rem' }}>
-                <label style={labelStyle}>
-                  Mesh simplify ({Math.round((value?.mesh_simplify ?? 0.95) * 100)}%)
-                </label>
+                {(() => {
+                  const ratio = value?.mesh_simplify ?? PIPELINE_MESH_SIMPLIFY_DEFAULT;
+                  const targetTris = clampPipelineDecimationTarget(
+                    Number(value?.model_parameters?.decimation_target) > 0
+                      ? Number(value.model_parameters.decimation_target)
+                      : estimateDecimationTarget(ratio, null, null),
+                  );
+                  return (
+                    <label style={labelStyle}>
+                      Mesh simplify — {formatTriangleCount(targetTris)} triangles (
+                      {Math.round(ratio * 100)}%) · max {formatTriangleCount(PIPELINE_MESH_DECIMATION_MAX)}
+                    </label>
+                  );
+                })()}
                 <input
                   type="range"
                   min="0.5"
                   max="1"
                   step="0.01"
-                  value={value?.mesh_simplify ?? 0.95}
-                  onChange={(e) => setField('mesh_simplify', parseFloat(e.target.value))}
+                  value={value?.mesh_simplify ?? PIPELINE_MESH_SIMPLIFY_DEFAULT}
+                  onChange={(e) => {
+                    const nextRatio = parseFloat(e.target.value);
+                    const prevRatio = value?.mesh_simplify ?? PIPELINE_MESH_SIMPLIFY_DEFAULT;
+                    const nextTarget = estimateDecimationTarget(
+                      nextRatio,
+                      value?.model_parameters?.decimation_target,
+                      prevRatio,
+                    );
+                    onChange?.({
+                      ...value,
+                      mesh_simplify: nextRatio,
+                      model_parameters: {
+                        ...(value?.model_parameters || {}),
+                        decimation_target: nextTarget,
+                      },
+                    });
+                  }}
                   style={{ width: '100%' }}
                 />
                 <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
-                  Backend mesh decimation during AI generation (fewer triangles in the output GLB).
-                  Not the same as GLB Export Draco compression — that runs client-side when you export or send to Metaverse Browser.
+                  Default {formatTriangleCount(PIPELINE_MESH_DECIMATION_TARGET)} triangles —
+                  the API upload cap ({formatTriangleCount(API_MAX_MESH_VERTICES)} verts/faces).
+                  Requests are clamped so they never exceed that budget. Not the same as GLB Export
+                  Draco compression.
                 </p>
               </div>
             </>
@@ -269,20 +346,24 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
           {isAutoRig && (
             <>
               <div style={{ marginBottom: '0.4rem' }}>
-                <label style={labelStyle}>Rig mode</label>
+                <label style={labelStyle}>Rig mode (advanced)</label>
                 <select
                   style={inputStyle}
                   value={value?.rig_mode ?? 'skeleton'}
                   onChange={(e) => setRigMode(e.target.value)}
                 >
                   <option value="skeleton">Skeleton — bones only (SkinTokens or UniRig)</option>
-                  <option value="full">Full — SkinTokens rig + skin weights (recommended on DGX)</option>
+                  <option value="full">Full — SkinTokens / UniRig + skin weights</option>
                   <option value="skin">Skin — skin-focused rig pass</option>
                   <option value="template">Template VRM — UniRig fits mesh to template.vrm (GLB)</option>
                   <option value="creature_template">
                     Creature template — Mesh2Motion fox / quadruped skeleton (GLB)
                   </option>
                 </select>
+                <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                  Prefer the main form <strong>Rig pipeline</strong> picker — it syncs model + mode.
+                  Creature / UniRig were previously hard to select because mode lived only here.
+                </p>
               </div>
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE && (
                 <>
@@ -404,9 +485,16 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
               }
 
               if (type === 'number' || type === 'integer') {
+                const isDecimationTarget = key === 'decimation_target';
                 return (
                   <div key={key} style={{ marginBottom: '0.35rem' }}>
-                    <label style={labelStyle}>{label}</label>
+                    <label style={labelStyle}>
+                      {isDecimationTarget
+                        ? `Target triangles (decimation_target)${
+                            Number(current) > 0 ? ` — ${formatTriangleCount(current)}` : ''
+                          }`
+                        : label}
+                    </label>
                     <input
                       type="number"
                       style={inputStyle}
@@ -417,7 +505,11 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                       onChange={(e) =>
                         setModelParam(
                           key,
-                          type === 'integer' ? parseInt(e.target.value, 10) : parseFloat(e.target.value),
+                          type === 'integer'
+                            ? isDecimationTarget
+                              ? clampPipelineDecimationTarget(parseInt(e.target.value, 10))
+                              : parseInt(e.target.value, 10)
+                            : parseFloat(e.target.value),
                         )
                       }
                     />

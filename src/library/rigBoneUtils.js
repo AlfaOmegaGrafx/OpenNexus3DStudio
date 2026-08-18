@@ -220,6 +220,215 @@ export function isTemplateRigExport(root) {
 }
 
 /**
+ * Phase 5 template_wrap / head stitch: multiple skinned meshes (body + morph head)
+ * share one armature. Moving only the primary mesh detaches the head.
+ * @param {import('three').Object3D|null|undefined} root
+ */
+export function isHumanoidTemplateWrapExport(root) {
+  if (!root) return false;
+  const rigInfo = root.userData?.autoRigMeta?.rig_info;
+  if (!rigInfo) return false;
+  if (rigInfo.rig_mode === 'template_wrap') return true;
+  if (rigInfo.wrap_status === 'head_stitch') return true;
+  if (rigInfo.validation?.wrap_status === 'head_stitch') return true;
+  if (rigInfo.generation_method === 'humanoid_vrm_template' && rigInfo.rig_mode === 'template_wrap') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Clothing / accessory fit onto appearance_base — mesh is only a slot fragment
+ * (helmet, pendant, gloves) while the armature is full-body. Full-body feet/hips
+ * repair and skeleton display squash destroy that bind.
+ * @param {import('three').Object3D|null|undefined} root
+ */
+export function isAppearanceComponentRigExport(root) {
+  if (!root) return false;
+  const rigInfo = root.userData?.autoRigMeta?.rig_info;
+  if (!rigInfo) return false;
+  if (rigInfo.rig_mode === 'appearance_component') return true;
+  if (rigInfo.rig_type === 'appearance_component') return true;
+  if (rigInfo.generation_method === 'appearance_component_vrm_fit') return true;
+  return false;
+}
+
+/**
+ * Count skinned meshes (head stitch = body + AvatarHead + …).
+ * @param {import('three').Object3D|null|undefined} root
+ */
+export function countSkinnedMeshes(root) {
+  if (!root) return 0;
+  let n = 0;
+  root.traverse((child) => {
+    if (child.isSkinnedMesh) n += 1;
+  });
+  return n;
+}
+
+/**
+ * SkinTokens TokenRig CLI / skintokens_auto_rig export (bone_0…bone_N).
+ * @param {import('three').Object3D|null|undefined} root
+ * @param {{ rig_info?: object, generation_info?: object }} [options]
+ */
+export function isSkinTokensRigExport(root, options = {}) {
+  const rigInfo = options.rig_info ?? root?.userData?.autoRigMeta?.rig_info;
+  const method = rigInfo?.generation_method ?? rigInfo?.generationMethod ?? '';
+  if (method === 'skintokens_tokenrig_cli') return true;
+  const genModel =
+    options.generation_info?.model ??
+    root?.userData?.autoRigMeta?.generation_info?.model;
+  if (genModel === 'skintokens_auto_rig') return true;
+  if (root?.userData?.skintokensRig) return true;
+  if (!root) return false;
+  // Indexed humanoid topology without metadata
+  return Boolean(findBoneByName(root, 'bone_0') && findBoneByName(root, 'bone_25'));
+}
+
+/**
+ * Tag SkinTokens metadata so load/playback paths skip VRM0 axis hacks.
+ * @param {import('three').Object3D|null|undefined} model
+ * @param {object|null|undefined} autoRigMeta
+ * @returns {boolean}
+ */
+export function applySkinTokensRigMetadata(model, autoRigMeta) {
+  if (!model) return false;
+  if (autoRigMeta) {
+    model.userData.autoRigMeta = autoRigMeta;
+  }
+  if (!isSkinTokensRigExport(model, { rig_info: autoRigMeta?.rig_info, generation_info: autoRigMeta?.generation_info })) {
+    return false;
+  }
+  model.userData.skintokensRig = true;
+  return true;
+}
+
+/**
+ * Yaw SkinTokens root 180° when character forward faces +Z (away from glTF camera).
+ * @param {import('three').Object3D|null|undefined} root
+ * @returns {boolean}
+ */
+export function ensureSkinTokensRootFacesCamera(root) {
+  if (!root || !isSkinTokensRigExport(root)) return false;
+
+  const hips = findBoneByName(root, 'bone_0') || findHipsBone(root);
+  const spine =
+    findBoneByName(root, 'bone_3', 'bone_2', 'bone_1') ||
+    findBoneByName(root, 'Spine2', 'Spine1', 'Spine');
+  const left = findBoneByName(root, 'bone_25', 'bone_26') || findBoneByName(root, 'LeftShoulder', 'LeftArm');
+  const right = findBoneByName(root, 'bone_6', 'bone_7') || findBoneByName(root, 'RightShoulder', 'RightArm');
+  if (!hips || !spine || !left || !right) return false;
+
+  root.updateMatrixWorld(true);
+  const hipsW = hips.getWorldPosition(new THREE.Vector3());
+  const spineW = spine.getWorldPosition(new THREE.Vector3());
+  const leftW = left.getWorldPosition(new THREE.Vector3());
+  const rightW = right.getWorldPosition(new THREE.Vector3());
+
+  const up = spineW.clone().sub(hipsW);
+  if (up.lengthSq() < 1e-8) return false;
+  const rightVec = rightW.clone().sub(leftW);
+  if (rightVec.lengthSq() < 1e-8) return false;
+  const charForward = new THREE.Vector3().crossVectors(rightVec.normalize(), up.normalize());
+  if (charForward.lengthSq() < 1e-8) return false;
+  charForward.normalize();
+
+  const gltfForward = new THREE.Vector3(0, 0, -1);
+  if (charForward.dot(gltfForward) >= 0) return false;
+
+  // Prefer Euler yaw so callers/tests reading rotation.y stay in sync.
+  root.rotation.y += Math.PI;
+  root.updateMatrixWorld(true);
+  rebindSkinnedMeshes(root);
+  delete root.userData.rigSkeletonDisplayFlipY;
+  console.warn('[Rig] SkinTokens root yawed 180° to face glTF -Z');
+  return true;
+}
+
+/** Mesh2Motion creature / fox template rig from DGX auto-rig. */
+export function isCreatureTemplateRigExport(root) {
+  if (!root) return false;
+  const rigInfo = root.userData?.autoRigMeta?.rig_info;
+  if (
+    rigInfo?.rig_mode === 'creature_template' ||
+    rigInfo?.rig_type === 'creature_template' ||
+    rigInfo?.generation_method === 'mesh2motion_creature_template'
+  ) {
+    return true;
+  }
+  // Bone-name fallback when metadata was stripped
+  return Boolean(
+    findBoneByName(root, 'Front_Leg_Foot_L') && findBoneByName(root, 'Back_Leg_Foot_L'),
+  );
+}
+
+/** Mesh2Motion quadruped forward in XZ (nose − hips / front − back paws). */
+export function getQuadrupedFacingForward(root) {
+  const hips = findHipsBone(root);
+  const frontL = findBoneByName(root, 'Front_Leg_Foot_L');
+  const frontR = findBoneByName(root, 'Front_Leg_Foot_R');
+  const backL = findBoneByName(root, 'Back_Leg_Foot_L');
+  const backR = findBoneByName(root, 'Back_Leg_Foot_R');
+
+  const world = new THREE.Vector3();
+  const frontPts = [];
+  const backPts = [];
+  for (const bone of [frontL, frontR]) {
+    if (bone) frontPts.push(bone.getWorldPosition(world.clone()));
+  }
+  for (const bone of [backL, backR]) {
+    if (bone) backPts.push(bone.getWorldPosition(world.clone()));
+  }
+
+  if (frontPts.length && backPts.length) {
+    const front = frontPts
+      .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+      .multiplyScalar(1 / frontPts.length);
+    const back = backPts
+      .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+      .multiplyScalar(1 / backPts.length);
+    const forward = front.clone().sub(back);
+    forward.y = 0;
+    if (forward.lengthSq() > 1e-8) return forward.normalize();
+  }
+
+  const head = findBoneByName(root, 'Head', 'head');
+  if (!hips || !head) return null;
+
+  const hipsW = hips.getWorldPosition(new THREE.Vector3());
+  const headW = head.getWorldPosition(new THREE.Vector3());
+  const forward = headW.clone().sub(hipsW);
+  forward.y = 0;
+  if (forward.lengthSq() < 1e-8) return null;
+  return forward.normalize();
+}
+
+/**
+ * Mesh2Motion clips are authored +Z-forward. Fitted fox GLBs often face glTF -Z;
+ * yaw root 180° so mesh + bones match the animation space (and the default camera).
+ * @returns {boolean}
+ */
+export function ensureCreatureTemplateFacesForward(root) {
+  if (!isCreatureTemplateRigExport(root)) return false;
+  if (root.userData?.creatureFacingCorrected) return false;
+  const forward = getQuadrupedFacingForward(root);
+  if (!forward) return false;
+  // Already Mesh2Motion / camera forward (+Z)
+  if (forward.dot(new THREE.Vector3(0, 0, 1)) >= 0) {
+    root.userData.creatureFacingCorrected = true;
+    return false;
+  }
+  root.rotateY(Math.PI);
+  root.updateMatrixWorld(true);
+  // Yaw rebind is safe (unlike root Y translation rebind); keeps skin bind coherent.
+  rebindSkinnedMeshes(root);
+  delete root.userData.rigSkeletonDisplayFlipY;
+  root.userData.creatureFacingCorrected = true;
+  console.warn('[Rig] Creature template rig yawed 180° to face Mesh2Motion +Z');
+  return true;
+}
+
+/**
  * Bounds for floor anchoring — mesh feet for skinned template rigs (bone joints can sit
  * above the sole); union layout for other AIGC rigged exports.
  * @param {import('three').Object3D|null|undefined} root
@@ -379,11 +588,71 @@ function getMeshFootCenter(meshBox, target = new THREE.Vector3()) {
   return target;
 }
 
+/** Mesh2Motion quadruped contact bones (paws + tips). */
+const CREATURE_PAW_BONE_NAMES = [
+  'Front_Leg_Foot_L',
+  'Front_Leg_Foot_R',
+  'Back_Leg_Foot_L',
+  'Back_Leg_Foot_R',
+  'Front_Leg_Tip_L',
+  'Front_Leg_Tip_R',
+  'Back_Leg_Tip_L',
+  'Back_Leg_Tip_R',
+];
+
+/**
+ * Lowest world Y among creature paw / tip bones (null if not a paw rig).
+ * @param {import('three').Object3D|null|undefined} root
+ * @returns {number|null}
+ */
+export function getCreaturePawWorldMinY(root) {
+  if (!root) return null;
+  let minY = Infinity;
+  const world = new THREE.Vector3();
+  for (const name of CREATURE_PAW_BONE_NAMES) {
+    const bone = findBoneByName(root, name);
+    if (!bone) continue;
+    bone.getWorldPosition(world);
+    if (world.y < minY) minY = world.y;
+  }
+  return Number.isFinite(minY) ? minY : null;
+}
+
+/**
+ * Horizontal center at paw height for Mesh2Motion creature templates.
+ * @param {import('three').Object3D|null|undefined} root
+ * @param {import('three').Vector3} [target]
+ * @returns {import('three').Vector3|null}
+ */
+function getCreaturePawFootCenter(root, target = new THREE.Vector3()) {
+  if (!root || !isCreatureTemplateRigExport(root)) return null;
+  const paws = [];
+  const world = new THREE.Vector3();
+  for (const name of [
+    'Front_Leg_Foot_L',
+    'Front_Leg_Foot_R',
+    'Back_Leg_Foot_L',
+    'Back_Leg_Foot_R',
+  ]) {
+    const bone = findBoneByName(root, name);
+    if (!bone) continue;
+    paws.push(bone.getWorldPosition(world.clone()));
+  }
+  if (!paws.length) return null;
+  const sum = paws.reduce((acc, p) => acc.add(p), new THREE.Vector3());
+  sum.multiplyScalar(1 / paws.length);
+  const tipY = getCreaturePawWorldMinY(root);
+  return target.set(sum.x, tipY != null ? tipY : sum.y, sum.z);
+}
+
 /**
  * @param {import('three').Object3D|null|undefined} root
  * @param {import('three').Vector3} [target]
  */
 function getRigFootCenter(root, target = new THREE.Vector3()) {
+  const creatureFoot = getCreaturePawFootCenter(root, target);
+  if (creatureFoot) return creatureFoot;
+
   const left = findBoneByName(
     root,
     'LeftFoot',
@@ -423,18 +692,36 @@ function getRigFootCenter(root, target = new THREE.Vector3()) {
 export function needsSkinnedMeshRigRepair(root) {
   if (!root || !modelHasSkinnedMesh(root)) return false;
   if (root.userData?.vrm || root.userData?.vrmNormalized) return false;
+  // Creature template exports are already mesh↔bone aligned; humanoid foot repair
+  // mis-reads paw tips as "belly" and sinks the model through the floor.
+  if (isCreatureTemplateRigExport(root)) return false;
 
+  // Slot garments sit at head/chest/hands while bones span the full avatar —
+  // feet-to-feet repair would yank the mesh to the floor (helmet/pendant bug).
+  if (isAppearanceComponentRigExport(root)) return false;
+
+  // Phase 5 head stitch: body + morph head share one skin. Primary-mesh-only
+  // repair leaves the head floating above the body (exactly the Studio bug).
+  if (isHumanoidTemplateWrapExport(root) || countSkinnedMeshes(root) > 1) {
+    return false;
+  }
+
+  const skinTokens = isSkinTokensRigExport(root);
   const contract = root.userData?.aigcRigContract;
-  if (contract?.status === 'pass') return false;
-  if (contract?.status === 'fail') return true;
+
+  // SkinTokens: naming-only contract fails (e.g. missing_hips_bone) must not force repair
+  // when mesh↔skeleton already align — check geometry below instead.
+  if (contract?.status === 'fail' && !skinTokens) return true;
 
   if (root.userData?.autoRigMeta?.rig_info?.validation?.passed === false) {
     return true;
   }
 
-  if (root.userData?.avatarFromImage || isTemplateRigExport(root)) {
+  if (!skinTokens && (root.userData?.avatarFromImage || isTemplateRigExport(root))) {
     return true;
   }
+
+  // Contract "pass" still falls through to feet/node geometry checks below.
 
   const skinned = findPrimarySkinnedMesh(root);
   if (!skinned) return false;
@@ -480,11 +767,25 @@ export function anchorModelFeetToFloor(root) {
   root.updateMatrixWorld(true);
   const box = getViewportFloorAnchorBounds(root, { meshFeetOnly: true });
   if (box.isEmpty() || !isFinite(box.min.y)) return 0;
-  const shift = -box.min.y;
+  // Prefer the lower of skinned mesh soles and creature paw tips so quadrupeds
+  // do not use belly AABB as "feet" and sink through Y=0.
+  let footY = box.min.y;
+  if (isCreatureTemplateRigExport(root)) {
+    const pawY = getCreaturePawWorldMinY(root);
+    if (pawY != null && isFinite(pawY)) {
+      footY = Math.min(footY, pawY);
+    }
+  }
+  const shift = -footY;
   if (Math.abs(shift) < 0.001) return 0;
+  // Translate the shared root only. Do NOT rebind after a root Y lift —
+  // rebind rebakes bind matrices and double-applies the shift to skinned
+  // vertices while bones stay put (mesh floats, skeleton sunk).
   root.position.y += shift;
   root.updateMatrixWorld(true);
-  rebindSkinnedMeshes(root);
+  root.traverse((child) => {
+    if (child.isSkinnedMesh) child.skeleton?.update();
+  });
   return shift;
 }
 
@@ -548,6 +849,15 @@ function isMeshFacingOppositeToRig(meshBox, hipsWorld, rigForward) {
 export function alignSkinnedMeshToRig(root) {
   const skinned = findPrimarySkinnedMesh(root);
   if (!skinned) return false;
+
+  // Never peel a morph head off the body by transforming only geometry_0.
+  if (isHumanoidTemplateWrapExport(root) || countSkinnedMeshes(root) > 1) {
+    return false;
+  }
+  // Partial slot mesh vs full armature — do not feet-align.
+  if (isAppearanceComponentRigExport(root)) {
+    return false;
+  }
 
   root.updateMatrixWorld(true);
   skinned.skeleton?.update();
@@ -821,6 +1131,13 @@ export function updateSkeletonDisplayCorrection(root) {
 
   if (!modelHasSkinnedMesh(root)) return;
   if (root.userData?.vrm || root.userData?.vrmNormalized) return;
+  // Creatures: Mesh2Motion facing is corrected on the root; never viz-only flip.
+  if (isCreatureTemplateRigExport(root)) return;
+  // Head-stitch / multi-mesh: overlay must match real bind (no viz-only yaw).
+  if (isHumanoidTemplateWrapExport(root) || countSkinnedMeshes(root) > 1) return;
+  // Helmet/pendant: hips-at-52%-of-mesh squash compresses the full skeleton
+  // into the accessory AABB (Bones overlay looks "inside" the helmet).
+  if (isAppearanceComponentRigExport(root)) return;
 
   const meshBox = getMeshLayoutBounds(root);
   const hips = findHipsBone(root);
@@ -893,7 +1210,33 @@ export function normalizeRiggedModelTransforms(root, options = {}) {
     options.preserveExportedOrientation === true ||
     Boolean(root.userData?.preserveExportedOrientation);
 
+  // Mesh2Motion creature templates: never translate the skinned mesh node or
+  // rebind after root floor snap — that desyncs mesh from the armature.
+  if (isCreatureTemplateRigExport(root)) {
+    ensureCreatureTemplateFacesForward(root);
+    anchorModelFeetToFloor(root);
+    logRigAlignmentDiagnostics(root, options.label || 'viewport');
+    return;
+  }
+
+  // Appearance slot garments: keep Blender bind; floor by bone soles so a
+  // chest/helmet fragment does not sink to y=0 away from the armature.
+  if (isAppearanceComponentRigExport(root)) {
+    root.updateMatrixWorld(true);
+    const boneBox = getBoneWorldBounds(root);
+    if (!boneBox.isEmpty() && isFinite(boneBox.min.y)) {
+      const shift = -boneBox.min.y;
+      if (Math.abs(shift) > 0.001) {
+        root.position.y += shift;
+        root.updateMatrixWorld(true);
+      }
+    }
+    logRigAlignmentDiagnostics(root, options.label || 'viewport');
+    return;
+  }
+
   if (preserveExport) {
+    ensureCreatureTemplateFacesForward(root);
     if (needsSkinnedMeshRigRepair(root)) {
       alignSkinnedMeshToRig(root);
       rebindSkinnedMeshes(root);

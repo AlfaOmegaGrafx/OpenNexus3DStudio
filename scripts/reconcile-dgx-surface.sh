@@ -10,7 +10,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SURFACE_SSH="${SURFACE_SSH:-Surface-PC-Tailscale}"
-SURFACE_ROOT="${SURFACE_ROOT:-<OPENNEXUS_REPO_ROOT>}"
+SURFACE_ROOT="${SURFACE_ROOT:-C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio}"
 MANIFEST="$ROOT/scripts/protected-paths.manifest"
 
 # shellcheck source=scripts/protected-paths-lib.sh

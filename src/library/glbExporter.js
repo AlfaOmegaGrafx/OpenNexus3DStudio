@@ -11,6 +11,11 @@ import {
   modelHasVrmRoot,
   sanitizeForGltfExport,
 } from './glbExportUtils.js';
+import {
+  addViewportLightsForExport,
+  buildViewportLightingExtras,
+  normalizeViewportLightingState,
+} from './viewportLighting.js';
 
 export class GLBExporter {
   constructor() {
@@ -57,10 +62,16 @@ export class GLBExporter {
       const exportScene = new THREE.Scene();
       exportScene.add(preparedModel);
 
-      // Add metadata
-      if (Object.keys(metadata).length > 0) {
-        exportScene.userData = metadata;
-      }
+      const viewLighting = normalizeViewportLightingState(
+        options.viewLighting || metadata?.opennexusViewportLighting || {},
+      );
+
+      // Embed lighting extras + punctual lights for MSF / Assembler / Metaverse Browser
+      exportScene.userData = {
+        ...metadata,
+        ...buildViewportLightingExtras(viewLighting),
+      };
+      addViewportLightsForExport(THREE, exportScene, viewLighting.lightIntensity);
 
       // Export to GLB with optimized texture settings
       // OPTIMIZED: Apply texture size limiting and optimization options

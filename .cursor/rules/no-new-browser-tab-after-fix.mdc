@@ -1,0 +1,50 @@
+---
+description: HARD STOP — never open a new Studio browser tab; hard-refresh existing only
+alwaysApply: true
+---
+
+# HARD STOP: no new Studio browser tabs (reinforced 2026-08-12, again 2026-08-16)
+
+The user has repeated this many times. Violating it is a regression.
+
+**Default after any Studio/API sync, fix, layout change, or “verify” impulse:** do **nothing** in the browser. Tell them to **hard-refresh the OpenNexus 3D tab they already have open** (main app at `/` on `:3000` — **not** the `/studio` graph page unless they were working there).
+
+## Naming (user terms)
+
+| User says | Route | What it is |
+|-----------|-------|------------|
+| **OpenNexus 3D** | `/` (`https://…:3000/`) | Main 3D viewport + Task Manager — **this is what auto-opens and must not duplicate** |
+| **Studio** | `/studio` | Graph workflow canvas — only when user explicitly uses Task Manager → Open Studio |
+
+## Forbidden (unless the user explicitly asks in this turn)
+
+- `browser_navigate` / browser MCP / Playwright opening Studio (`localhost:3000`, Surface LAN `:3000`, Tailscale Studio URLs)
+- Opening or suggesting a **new** tab, Simple Browser, preview pane, or duplicate Studio window
+- Pasting a Studio URL “so they can open it” (Cursor may auto-open localhost links into a Browser Tab)
+- Suggesting Task Manager → **Open Studio** just to pick up code changes
+- “Quick visual check” / “verify in browser” by opening anything yourself
+- Calling `open_resource` / app-control helpers that surface Glass Browser for Studio
+
+## Required
+
+- Sync to Surface as usual when `src/` changed on DGX
+- One line: **hard-refresh your existing OpenNexus 3D tab** (main `:3000/` app, not a new window)
+- If you need evidence: ask the user what they see, or use remote logs — do **not** open a tab
+
+## Cursor / Surface — chat links vs OpenNexus 3D auto-open (Cursor 3.16+)
+
+After the Cursor Glass update, **`settings.json` `cursor.openWebLinksInBrowser` is a dead key** (not in `workbench.desktop.main.js`). Writing it and calling chat links “fixed” is a lie.
+
+Live keys in `%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb`:
+
+- `cursor/glassOpenWebLinksInBrowser` = **true** — chat http(s) links open (Glass **Browser Tab**, not Chrome; this build’s picker is only Off / Browser Tab)
+- `cursor/autoOpenLocalhostUrls` = **false** — do not auto-open OpenNexus 3D (`:3000`)
+- `lastBrowserConnectionMode` = **editor** (Browser Tab). **none** = Off, clicks do nothing
+
+Do **not** set Browser Mode to Off to fight auto-open — that kills GitHub clicks too. Use `autoOpenLocalhostUrls=false` instead.
+
+Vite: do not spawn a browser on `npm run dev` unless `VITE_DEV_OPEN=1`.
+
+## Only exception
+
+User **explicitly** asks you to open, navigate, screenshot, or verify in a browser **in this turn**. Different non-Studio URLs they requested are fine.

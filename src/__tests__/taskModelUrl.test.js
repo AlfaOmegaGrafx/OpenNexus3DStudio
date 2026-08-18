@@ -18,10 +18,34 @@ import {
   isTextToImageTaskResult,
   isTextToMotionTaskResult,
   collapseDevDgxProxyPrefix,
+  toApiRelativeAssetPath,
   DEV_DGX_PROXY_PREFIX,
+  extractServerMeshPathFromJob,
+  isServerFilesystemArtifactPath,
 } from '../library/taskModelUrl.js';
 
 describe('taskModelUrl', () => {
+  it('extractServerMeshPathFromJob prefers filesystem output over download URLs', () => {
+    expect(isServerFilesystemArtifactPath('/outputs/garment.glb')).toBe(true);
+    expect(isServerFilesystemArtifactPath('outputs/meshes/a.glb')).toBe(true);
+    expect(isServerFilesystemArtifactPath('/api/v1/system/jobs/abc/download')).toBe(false);
+    expect(
+      extractServerMeshPathFromJob({
+        job_id: 'mesh-1',
+        status: 'completed',
+        result: {
+          output_mesh_path: '/outputs/garment.glb',
+          mesh_url: '/api/v1/system/jobs/mesh-1/download',
+        },
+      }),
+    ).toBe('/outputs/garment.glb');
+    expect(
+      extractServerMeshPathFromJob({
+        result: { mesh_url: '/api/v1/system/jobs/mesh-1/download' },
+      }),
+    ).toBeNull();
+  });
+
   it('collapses doubled __dev_dgx_proxy prefixes', () => {
     const id = 'e7b79dee-be07-478b-a386-2686e5e4b9cc';
     const doubled = `${DEV_DGX_PROXY_PREFIX}${DEV_DGX_PROXY_PREFIX}/api/v1/system/jobs/${id}/download`;
@@ -71,16 +95,22 @@ describe('taskModelUrl', () => {
     );
   });
 
-  it('getTaskResultImageUrl prefers job download over filesystem output_image_path', () => {
+  it('getTaskResultImageUrl prefers relative job download over absolute mesh_url/modelUrl', () => {
     const imageResult = {
       job_id: 'img-job-1',
       feature: 'text_to_image',
       output_image_path: 'outputs/images/krea2_turbo_text_to_image_image_123.png',
-      modelUrl: 'http://<DGX_LAN_IP>:7842/api/v1/system/jobs/img-job-1/download',
+      modelUrl: 'http://10.0.0.158:7842/api/v1/system/jobs/img-job-1/download',
+      mesh_url: 'http://127.0.0.1:7842/api/v1/system/jobs/img-job-1/download',
     };
     expect(getTaskResultImageUrl(imageResult)).toBe(
-      'http://<DGX_LAN_IP>:7842/api/v1/system/jobs/img-job-1/download',
+      '/api/v1/system/jobs/img-job-1/download',
     );
+    expect(
+      toApiRelativeAssetPath(
+        'http://127.0.0.1:7842/api/v1/system/jobs/abc/download',
+      ),
+    ).toBe('/api/v1/system/jobs/abc/download');
   });
 
   it('getTaskResultImageUrl falls back to job download when only job_id is present', () => {
@@ -141,6 +171,22 @@ describe('taskModelUrl', () => {
       { preferMesh: true },
     );
     expect(ext).toBe('glb');
+  });
+
+  it('getTaskResultFileExtension returns vrm for clothing / wrap format', () => {
+    expect(
+      getTaskResultFileExtension({
+        format: 'vrm',
+        output_mesh_path: '/outputs/rigged/body.vrm',
+        mesh_url: '/api/v1/system/jobs/abc/download',
+      }),
+    ).toBe('vrm');
+    expect(
+      getTaskResultFileExtension({
+        output_vrm_path: '/outputs/rigged/garment.vrm',
+        mesh_url: '/api/v1/system/jobs/abc/download',
+      }),
+    ).toBe('vrm');
   });
 
   it('extracts mesh_url and nested result paths', () => {
@@ -302,13 +348,13 @@ describe('taskModelUrl', () => {
 
   it('maybeProxyApiAssetUrl rewrites cross-origin API paths in dev', () => {
     const original = globalThis.window;
-    globalThis.window = { location: { origin: 'https://<SURFACE_LAN_IP>:3000' } };
+    globalThis.window = { location: { origin: 'https://10.0.0.32:3000' } };
     try {
       const out = maybeProxyApiAssetUrl(
         'http://dgx-spark.local:7842/api/v1/system/jobs/x/download',
       );
       expect(out).toBe(
-        'https://<SURFACE_LAN_IP>:3000/__dev_dgx_proxy/api/v1/system/jobs/x/download',
+        'https://10.0.0.32:3000/__dev_dgx_proxy/api/v1/system/jobs/x/download',
       );
     } finally {
       globalThis.window = original;

@@ -63,7 +63,7 @@ Guidelines: [OMB spatial fabric model guidelines](https://omb.wiki/en/spatial-fa
 | Entry point | Publishes | Works when |
 |-------------|-----------|------------|
 | **Task Manager → Publish RP1** | Completed **mesh job** GLB → MSF object library | Any finished text/image-to-3D job with on-disk GLB |
-| **World Library → RP1** | **Mesh props** listed in `world.manifest.json` | World has `props[]` with `mesh_url` (TRELLIS props). **Splat-only** worlds (`prop_count` 0) cannot RP1-publish — environment splats are not MSF props |
+| **World Library → RP1** | **Env mesh GLB and/or mesh props** in `world.manifest.json` | Publishes `environment.mesh_url` (from `POST /bake-env-mesh` on env-scan worlds with cameras) **plus** `props[]` TRELLIS GLBs. **Splat-only** worlds (no env mesh, `prop_count` 0) cannot RP1-publish — environment `.ply` splats are not MSF props. Image-to-world RP1 = props only until multi-view I2W. |
 
 Log markers: `[SpatialFabric] publish complete` (mesh job) vs `[SpatialFabric] world publish complete` (world props).
 

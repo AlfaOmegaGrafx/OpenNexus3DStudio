@@ -7,8 +7,8 @@ alwaysApply: true
 
 Before any git commit or push:
 
-1. **Never stage:** `.env`, `*.pem`, `certs/`, `MONETIZATION_ROADMAP.md`, `Pitch Deck/`, `memory-bank/`, `uploads/`, `.mcp.json`, `.codex/`, `.iwsdk/`, SSH configs with keys — see `.cursor/rules/spacetime-moat-protected.mdc` for moat policy
-2. **Use templates only:** `.env.example` with empty placeholders — no real API keys in tracked files
+1. **Never stage:** `.env`, `*.pem`, `certs/`, `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md`, `Pitch Deck/`, `memory-bank/`, `backups/`, `uploads/`, `.mcp.json`, `.codex/`, `.iwsdk/`, SSH configs with keys — see `.cursor/rules/spacetime-moat-protected.mdc` for moat policy
+2. **Use templates only:** `.env.example` with empty placeholders — no real API keys in tracked files. In **`.jsx`/`.tsx` markup**, escape scrub tokens (`&lt;SURFACE_LAN_IP&gt;` or `{'<…>'}`) — raw `<SURFACE_LAN_IP>` breaks Vite (see `jsx-scrub-placeholders.mdc`, `npm run verify:jsx-placeholders`)
 3. **Scripts that write MCP config** (`update-playwright-mcp.*`) must read tokens from **environment variables**, never string literals
 4. **Pre-commit hook:** run `sh scripts/install-secret-guard-hook.sh` after clone if hooks are missing
 5. **Scan before push:** `bash scripts/scan-repo-secrets.sh .` (PC) or on DGX after sync

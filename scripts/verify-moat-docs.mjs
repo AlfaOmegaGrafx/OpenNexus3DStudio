@@ -1,7 +1,7 @@
 /**
  * Fail when tracked public docs leak moat pricing / unreleased strategy names.
  * Exact SKU maps and vendor speech/motion tracks belong in gitignored
- * MONETIZATION_ROADMAP.md / memory-bank only.
+ * MONETIZATION_ROADMAP.md / FUTURE_RD.md / memory-bank only.
  *
  * Usage: node scripts/verify-moat-docs.mjs
  */
@@ -18,12 +18,12 @@ const FORBIDDEN = [
   {
     id: 'vendor-speech-moat',
     re: /personaplex|nvidia\/personaplex/i,
-    hint: 'Unreleased speech backend — name only in gitignored roadmap',
+    hint: 'Unreleased speech backend — name only in gitignored moat (roadmap / FUTURE_RD / memory-bank)',
   },
   {
     id: 'vendor-motion-moat',
     re: /\bardy\b|nv-tlabs\/ardy|labs\/sil\/projects\/ardy/i,
-    hint: 'Unreleased interactive motion track — name only in gitignored roadmap',
+    hint: 'Unreleased interactive motion track — name only in gitignored moat (roadmap / memory-bank)',
   },
   {
     id: 'arr-targets',
@@ -58,7 +58,8 @@ function main() {
   const errors = [];
 
   for (const rel of listedFiles()) {
-    // Public overview may mention the word ARR when saying it is NOT here
+    // Public overview / moat *policy* rule may mention ARR when saying it is NOT in git;
+    // vendor speech/motion *names* must still not appear even in that rule (use generic wording).
     const allowArrMention =
       rel.replace(/\\/g, '/') === 'docs/SPACETIME_MOAT_OVERVIEW.md' ||
       rel.replace(/\\/g, '/').endsWith('spacetime-moat-protected.mdc');
@@ -85,6 +86,19 @@ function main() {
         }
       });
     }
+  }
+
+  const forbiddenTracked = execSync('git ls-files -z', { cwd: repoRoot, encoding: 'buffer' })
+    .toString('utf8')
+    .split('\0')
+    .filter(Boolean)
+    .filter((rel) =>
+      /^(src\/moat\/|scripts\/companion-chat-proxy|scripts\/companion-surface-proxy|scripts\/start-companion)/.test(
+        rel.replace(/\\/g, '/'),
+      ),
+    );
+  for (const rel of forbiddenTracked) {
+    errors.push(`  • ${rel}  [tracked-overlay] Live companion overlay must stay gitignored`);
   }
 
   if (errors.length) {

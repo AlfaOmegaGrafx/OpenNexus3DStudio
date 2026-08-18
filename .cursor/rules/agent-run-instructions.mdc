@@ -21,6 +21,8 @@ alwaysApply: true
 - End with “run this command”, “if you want…”, or optional next-step menus
 - Hand the user a script block when you have shell access on DGX or Surface
 - `git push` / `git pull` / `fetch` / merge `upstream` unless user explicitly asks
+- Open a **new** Studio browser tab after sync/fix (browser MCP, Simple Browser, pasted URL, Task Manager → Open Studio). Tell the user to **hard-refresh the existing tab only**. See `no-new-browser-tab-after-fix.mdc`.
+- Guess UI chrome layout after a regression — run `bash scripts/restore-ui-chrome.sh` from `backups/ui-chrome-good-state/` instead (see `SCENE_CONTROLS_UI_BACKUP.md`).
 
 ## Only ask the user when truly blocked
 
@@ -36,7 +38,7 @@ When blocked: state **what you tried**, **what blocked you**, **exactly what onl
 | Cursor on | Local root | Reach other |
 |-----------|------------|-------------|
 | **DGX** | `/home/sifr/OpenNexus3DStudio`, `/home/sifr/3DAIGC-API` | `ssh Surface-PC-Tailscale` |
-| **Surface** | `<OPENNEXUS_REPO_ROOT>` | `ssh DGX-Local` |
+| **Surface** | `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` | `ssh DGX-Local` |
 
 After edits: **auto-run scp sync** (not git). Say “copied to Surface/DGX” — never “git push” for machine sync.
 
@@ -74,6 +76,6 @@ When user says **remember this**: follow `.cursor/rules/remember-this-retention.
 
 DGX has GitHub SSH; Surface `origin` is HTTPS. Over Tailscale SSH use:
 
-`ssh Surface-PC-Tailscale "cd /d <OPENNEXUS_REPO_ROOT> && git pull https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio.git main"`
+`ssh Surface-PC-Tailscale "cd /d C:\\Users\\alfao\\Documents\\GitHub\\OpenNexus3DStudio && git pull https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio.git main"`
 
 Do not assume Surface has a GitHub SSH key (`git fetch origin` may fail with `Permission denied`).

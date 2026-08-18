@@ -1,0 +1,103 @@
+.creature-animation-panel {
+  margin: 0.25rem 0;
+}
+
+.creature-anim-badge {
+  margin-left: auto;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: #9ad0ff;
+  border: 1px solid rgba(154, 208, 255, 0.35);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+}
+
+.creature-anim-content {
+  padding: 0.5rem 0.65rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+.creature-anim-hint {
+  margin: 0.25rem 0;
+  color: #a8a8a8;
+  line-height: 1.35;
+}
+
+.creature-anim-error {
+  margin: 0.25rem 0;
+  color: #f0a0a0;
+}
+
+.creature-anim-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.creature-anim-source {
+  color: #9a9a9a;
+  font-size: 0.7rem;
+}
+
+.creature-anim-stop {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.creature-anim-stop:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.creature-anim-group {
+  margin-bottom: 0.65rem;
+}
+
+.creature-anim-group-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c8c8c8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.creature-anim-clip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+}
+
+.creature-anim-clip {
+  background: #2c2c2c;
+  color: #e8e8e8;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 0.35rem 0.4rem;
+  cursor: pointer;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.creature-anim-clip:hover:not(:disabled) {
+  border-color: #6a9fc8;
+  background: #333;
+}
+
+.creature-anim-clip.active {
+  border-color: #7eb8e8;
+  background: #1e3a4a;
+  color: #fff;
+}
+
+.creature-anim-clip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

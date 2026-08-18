@@ -86,6 +86,7 @@ export function parseWorldPackage(value) {
           : typeof env.collision_mesh_url === 'string'
             ? env.collision_mesh_url
             : null,
+      mesh_url: typeof env.mesh_url === 'string' ? env.mesh_url : null,
     },
     props: props.map((p, index) => normalizeProp(p, index)),
     audio: manifest.audio && typeof manifest.audio === 'object' ? manifest.audio : {},
@@ -224,6 +225,8 @@ export function resolveWorldPackageUrls(manifest, manifestUrl, apiEndpoint = '',
   );
   const colliderRaw = manifest.environment.collider_url || manifest.environment.collision_mesh_url;
   const colliderUrl = colliderRaw ? resolveWorldAssetUrl(assetBaseUrl, colliderRaw) : null;
+  const envMeshRaw = manifest.environment.mesh_url;
+  const envMeshUrl = envMeshRaw ? resolveWorldAssetUrl(assetBaseUrl, envMeshRaw) : null;
   const props = manifest.props.map((prop) => ({
     ...prop,
     mesh_url: resolveWorldAssetUrl(assetBaseUrl, prop.mesh_url),
@@ -235,6 +238,7 @@ export function resolveWorldPackageUrls(manifest, manifestUrl, apiEndpoint = '',
       ...manifest.environment,
       url: environmentUrl,
       collider_url: colliderUrl,
+      mesh_url: envMeshUrl,
       fileExtension:
         manifest.environment.format ||
         inferModelFileExtensionFromSource(environmentUrl) ||

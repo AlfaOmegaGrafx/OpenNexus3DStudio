@@ -1,6 +1,6 @@
 # Scripts & terminal commands cheat sheet
 
-*Last updated: 2026-06-29 — DGX post-reboot scripts (§4a), API stack (§5).*
+*Last updated: 2026-07-30 — BlenderMCP targets §9a; DGX post-reboot (§4a), API stack (§5).*
 
 **How to read:** Every block says **machine**, **folder to open first**, **command**, and **what it does**.
 
@@ -15,6 +15,7 @@
 1. [Repo roots & key paths](#1-repo-roots--key-paths)
 2. [SSH between machines](#2-ssh-between-machines)
 3. [Sync files DGX ↔ Surface](#3-sync-files-dgx--surface)
+3a. [Restore Studio UI chrome good state](#3a-restore-studio-ui-chrome-good-state)
 4. [Frontend dev (Surface)](#4-frontend-dev-surface)
 4a. [DGX after reboot (one command)](#4a-dgx-after-reboot-one-command)
 5. [3DAIGC API — start & restart (DGX)](#5-3daigc-api--start--restart-dgx)
@@ -24,6 +25,7 @@
 7b. [Kimodo text-to-motion (DGX)](#7b-kimodo-text-to-motion-dgx)
 8. [Model smoke tests (DGX)](#8-model-smoke-tests-dgx)
 9. [Avatar pipeline smoke test (DGX)](#9-avatar-pipeline-smoke-test-dgx)
+9a. [BlenderMCP iteration targets (DGX)](#9a-blendermcp-iteration-targets-dgx)
 10. [SessionMem & Memory Bank](#10-sessionmem--memory-bank)
 11. [Graphify (code map)](#11-graphify-code-map)
 12. [Galaxy XR & remote logging (Surface)](#12-galaxy-xr--remote-logging-surface)
@@ -44,21 +46,21 @@
 
 | What | DGX Spark | Surface PC |
 |------|-----------|------------|
-| **OpenNexus3DStudio** (frontend) | `/home/sifr/OpenNexus3DStudio` | `<OPENNEXUS_REPO_ROOT>` |
+| **OpenNexus3DStudio** (frontend) | `/home/sifr/OpenNexus3DStudio` | `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **3DAIGC-API** (backend) | `/home/sifr/3DAIGC-API` | *(API runs on DGX only)* |
 | **MSF Map Service** (RP1 / Scene Assembler) | `/home/sifr/MSF_Map_Svc` | *(DGX only)* |
 | **Sneeze** (OMB engine lib) | `/home/sifr/Sneeze` | *(DGX only — native build)* |
 | RP1 / MSF secrets (gitignored) | `~/.config/rp1-spatial-fabric/rp1.env` | copy template from `rp1.env.example` |
 | Memory Bank | `.../memory-bank/` | `...\memory-bank\` |
 | SessionMem team folder | `.../.sessionmem-team/OpenNexus3DStudio/` | `...\.sessionmem-team\OpenNexus3DStudio\` |
-| SessionMem local DB | `~/.sessionmem/memories.db` | `<SESSIONMEM_HOME>\memories.db` |
+| SessionMem local DB | `~/.sessionmem/memories.db` | `C:\Users\alfao\.sessionmem\memories.db` |
 | MCP config (repo) | `.../.mcp.json` | `...\.mcp.json` |
 | Graphify output | `.../graphify-out/` | `...\graphify-out\` |
 | Remote debug log | — | `...\logs\remote-log.txt` |
 
-**LAN IPs (typical):** Surface `<SURFACE_LAN_IP>` · DGX `<DGX_LAN_IP>` · API URL from Surface: `http://<DGX_LAN_IP>:7842` (or Vite proxy `/__dev_dgx_proxy`).
+**LAN IPs (typical):** Surface `10.0.0.32` · DGX `10.0.0.158` · API URL from Surface: `http://10.0.0.158:7842` (or Vite proxy `/__dev_dgx_proxy`).
 
-**Public fabric (Tailscale):** tailnet **Serve** by default — `https://dgx-spark.<TAILNET_ID>.ts.net/` (tailnet members only). **Funnel** (internet) is opt-in: `bash …/setup-dgx-public-routing.sh funnel`. MSF JSON: `…/fabric/sample.msf` · Scene Assembler: host **root** (not raw `.msf` in browser). **Close public:** `tailscale funnel reset && tailscale serve reset`.
+**Public fabric (Tailscale):** tailnet **Serve** by default — `https://dgx-spark.tail6121eb.ts.net/` (tailnet members only). **Funnel** (internet) is opt-in: `bash …/setup-dgx-public-routing.sh funnel`. MSF JSON: `…/fabric/sample.msf` · Scene Assembler: host **root** (not raw `.msf` in browser). **Close public:** `tailscale funnel reset && tailscale serve reset`.
 
 ---
 
@@ -73,7 +75,7 @@
 | **Away (Tailscale)** | `ssh DGX-Remote` |
 | **Cursor Remote-SSH** | Host `dgx-spark.local` → folder `/home/sifr` |
 
-**SSH alias reference:** `scripts/dgx-device-map.ps1` on Surface (display names vs `DGX-Local` / `DGX-Remote` / LAN `<DGX_LAN_IP>`).
+**SSH alias reference:** `scripts/dgx-device-map.ps1` on Surface (display names vs `DGX-Local` / `DGX-Remote` / LAN `10.0.0.158`).
 
 ### DGX → Surface
 
@@ -108,7 +110,7 @@
 | | |
 |--|--|
 | **Where** | **Surface** — PowerShell |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **After edits (preferred)** | `.\scripts\sync-changes-to-dgx.ps1 -RetryUntilComplete` |
 | **Changes only, one pass** | `.\scripts\sync-changes-to-dgx.ps1` |
 | **Full sync (all src top-level dirs)** | `.\scripts\sync-to-dgx.ps1 -RetryUntilComplete` |
@@ -123,7 +125,7 @@
 | | |
 |--|--|
 | **Where** | **Surface** |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `.\scripts\sync-from-dgx.ps1` |
 | **Away from home** | `.\scripts\sync-from-dgx.ps1 -Remote` |
 
@@ -132,8 +134,28 @@
 | | |
 |--|--|
 | **Where** | **Surface** — PowerShell |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `scp logs\remote-log.txt sifr@DGX-Local:/home/sifr/OpenNexus3DStudio/logs/` |
+
+---
+
+## 3a. Restore Studio UI chrome good state
+
+Frozen snapshot of the user-confirmed good UI (header, scene-controls, rails, Avatar Creator, animation bar chrome files): `backups/ui-chrome-good-state/`.
+
+| | |
+|--|--|
+| **Where** | **DGX** (or Surface with the same repo) |
+| **Folder** | `cd /home/sifr/OpenNexus3DStudio` |
+| **Dry run** | `bash scripts/restore-ui-chrome.sh --dry-run` |
+| **Restore** | `bash scripts/restore-ui-chrome.sh` |
+| **Then (DGX)** | `bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete` |
+| **User** | Hard-refresh **existing** Studio tab only — do not open a new tab |
+| **Surface alt** | `.\scripts\restore-ui-chrome.ps1` |
+| **New good state** | Only after user confirms: `bash scripts/snapshot-ui-chrome.sh` |
+| **Map** | `SCENE_CONTROLS_UI_BACKUP.md` |
+
+*Do not re-snapshot after a bad layout — restore first.*
 
 ---
 
@@ -144,8 +166,9 @@
 | | |
 |--|--|
 | **Where** | **Surface** — PowerShell |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `npm run dev` |
+| **Open** | Prints **LAN** URL only (default). Opt-in auto-open: `$env:VITE_DEV_OPEN='1'`. Override host: `$env:VITE_DEV_OPEN_HOST='10.0.0.32'`. Avoid `localhost` — Cursor often breaks it on Surface. |
 | **Stop** | `Ctrl+C` in that terminal |
 
 Port **3000** runs on Surface, not on DGX.
@@ -161,9 +184,9 @@ Port **3000** runs on Surface, not on DGX.
 
 | URL | Purpose |
 |-----|---------|
-| `https://<SURFACE_LAN_IP>:3000/?nativeFaceRelay=1&remoteLog=1` | Native face relay + remote log |
-| `https://<SURFACE_LAN_IP>:3000/?webcamDebug=1&remoteLog=1` | Webcam debug |
-| `https://<SURFACE_LAN_IP>:3000/?xrDebugInputs=1&remoteLog=1` | XR input debug |
+| `https://10.0.0.32:3000/?nativeFaceRelay=1&remoteLog=1` | Native face relay + remote log |
+| `https://10.0.0.32:3000/?webcamDebug=1&remoteLog=1` | Webcam debug |
+| `https://10.0.0.32:3000/?xrDebugInputs=1&remoteLog=1` | XR input debug |
 
 Append `&v=2` to bust headset cache after deploy.
 
@@ -175,15 +198,15 @@ Append `&v=2` to bust headset cache after deploy.
 | Bone audit — Walking + Kimodo (Playwright) | `npm run test:bone-audit` |
 | Kimodo job for audit | `set MOTION_JOB_ID=JOB_UUID&& npm run test:bone-audit` |
 | Anim regression unit tests | `npm run test:anim-regression` |
-| Manual browser hooks | Open `https://<SURFACE_LAN_IP>:3000/?animSmoke=1` then DevTools → `await __csAnimSmoke.auditBones()` |
+| Manual browser hooks | Open `https://10.0.0.32:3000/?animSmoke=1` then DevTools → `await __csAnimSmoke.auditBones()` |
 
-Optional env: `ANIM_SMOKE_URL=https://<SURFACE_LAN_IP>:3000` (default LAN HTTPS origin).
+Optional env: `ANIM_SMOKE_URL=https://10.0.0.32:3000` (default LAN HTTPS origin).
 
 **From DGX** (SSH to Surface and run in repo):
 
 ```bash
-ssh Surface-PC-Tailscale "cd <OPENNEXUS_REPO_ROOT> && npm run test:anim-smoke"
-ssh Surface-PC-Tailscale "cd <OPENNEXUS_REPO_ROOT> && set MOTION_JOB_ID=90cc20fe-da7d-4175-8601-f40e1819515e&& npm run test:bone-audit"
+ssh Surface-PC-Tailscale "cd C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio && npm run test:anim-smoke"
+ssh Surface-PC-Tailscale "cd C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio && set MOTION_JOB_ID=90cc20fe-da7d-4175-8601-f40e1819515e&& npm run test:bone-audit"
 ```
 
 **Eagle Knight (SkinTokens GLB):** job `79a9f3d5-10e3-4ba0-9b7f-593aa6191455` — `skintokens_tokenrig_cli`, skeleton `bone_0`…`bone_51`. Do **not** apply VRM0 quat axis fix on SkinTokens (causes reversed limbs). VRM canned + Kimodo locked via `npm run test:anim-regression` (`vrmPlaybackLock.test.js`).
@@ -406,7 +429,7 @@ curl -s http://127.0.0.1:7842/api/v1/spatial-fabric/config | python3 -m json.too
 ### From Surface (not on DGX)
 
 ```bash
-curl -s http://<DGX_LAN_IP>:7842/api/v1/system/health | python3 -m json.tool
+curl -s http://10.0.0.158:7842/api/v1/system/health | python3 -m json.tool
 ```
 
 Add `-H "Authorization: Bearer YOUR_API_KEY"` if API key auth is enabled (key in `.env`).
@@ -525,9 +548,17 @@ NVIDIA Kimodo SOMA skeleton → `studio_motion.json` for VRM playback. OpenNexus
 python scripts/verify_model.py adapters.xatlas_adapter XatlasUVUnwrappingAdapter \
   '{"mesh_path": "assets/example_uv/igea.obj", "output_format": "obj"}'
 
-# Retopo (needs Instant Meshes binary)
+# Retopo — Instant Meshes (hard-surface)
 python scripts/verify_model.py adapters.instant_meshes_adapter InstantMeshesRetopologyAdapter \
   '{"mesh_path": "assets/example_retopo/001.obj", "target_vertex_count": 2000}'
+
+# Retopo — AutoRemesher (organic / characters; needs binary)
+python scripts/verify_model.py adapters.autoremesher_adapter AutoRemesherRetopologyAdapter \
+  '{"mesh_path": "assets/example_retopo/001.obj", "target_quad_count": 5000}'
+
+# Decimate — trimesh quadric (no binary; true poly reduce)
+python scripts/verify_model.py adapters.trimesh_decimate_adapter TrimeshDecimateAdapter \
+  '{"mesh_path": "assets/example_retopo/001.obj", "target_face_count": 10000, "output_format": "glb"}'
 
 # Segmentation (heavy GPU)
 python scripts/verify_model.py adapters.p3sam_adapter P3SAMSegmentationAdapter \
@@ -558,12 +589,28 @@ cd /home/sifr/3DAIGC-API
 
 ---
 
+## 9a. BlenderMCP iteration targets (DGX)
+
+Agent/dev tooling only — iterate bpy in live Blender, then harden into `scripts/blender/*.py` for headless API jobs. **Do not ship BlenderMCP** to Studio users.
+
+| Task | Where | Folder | Command |
+|------|-------|--------|---------|
+| List MCP/debug bpy targets | DGX | `cd /home/sifr/3DAIGC-API` | `python3 scripts/list_blender_mcp_targets.py` |
+| JSON (agents) | DGX | same | `python3 scripts/list_blender_mcp_targets.py --json` |
+| Fail if catalog path missing | DGX | same | `python3 scripts/list_blender_mcp_targets.py --check` |
+
+**Map doc:** `/home/sifr/3DAIGC-API/memory-bank/blender-mcp-iteration-map.md` · OpenNexus pointer: `memory-bank/blender-mcp-iteration-map.md`
+
+**Pattern:** BlenderMCP → `scripts/blender/*.py` → `blender --background` in API → Studio task.
+
+---
+
 ## 10. SessionMem & Memory Bank
 
 | Tool | When | Where | Command |
 |------|------|-------|---------|
 | **SessionMem sync** | After coding session | DGX | `cd /home/sifr/OpenNexus3DStudio` → `bash scripts/sync-sessionmem-team.sh` |
-| **SessionMem sync** | After coding session | Surface | `cd <OPENNEXUS_REPO_ROOT>` → `.\scripts\sync-sessionmem-team.ps1` |
+| **SessionMem sync** | After coding session | Surface | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` → `.\scripts\sync-sessionmem-team.ps1` |
 | **Memory Bank** | Start of task | — | Agent reads `memory-bank/*.md` automatically |
 | **Memory Bank** | After big changes | Chat | Say **update memory bank** |
 | **Agent context → Surface** | After DGX agent session | DGX | `bash scripts/sync-to-pc.sh --include-agent-context` |
@@ -579,7 +626,7 @@ One-time SessionMem ID migration (done 2026-06-16): `python3 scripts/migrate-ses
 | | |
 |--|--|
 | **Refresh DGX** (frontend + API) | `cd /home/sifr/OpenNexus3DStudio` → `bash scripts/refresh-graphify-dgx.sh` |
-| **Refresh Surface** (frontend) | `cd <OPENNEXUS_REPO_ROOT>` → `.\scripts\refresh-graphify-surface.ps1` |
+| **Refresh Surface** (frontend) | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` → `.\scripts\refresh-graphify-surface.ps1` |
 | **Query** (either machine, in repo) | `graphify query "how does taskManager connect to API"` |
 
 AST-only, no API keys. Output: `graphify-out/` (gitignored).
@@ -593,7 +640,7 @@ AST-only, no API keys. Output: `graphify-out/` (gitignored).
 | | |
 |--|--|
 | **Where** | **Surface** — PowerShell |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `Get-Content .\logs\remote-log.txt -Wait -Tail 30` |
 
 ### Filter face-relay lines
@@ -607,7 +654,7 @@ Get-Content .\logs\remote-log.txt -Wait -Tail 50 | Select-String "REMOTE_LOG|nat
 | | |
 |--|--|
 | **Where** | **Surface** |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `.\scripts\capture-apk-logcat.ps1` |
 | **Output** | `logs\apk-logcat.txt` |
 
@@ -626,7 +673,7 @@ Get-Content .\logs\remote-log.txt -Wait -Tail 50 | Select-String "REMOTE_LOG|nat
 
 | | |
 |--|--|
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 
 | Task | Command |
 |------|---------|
@@ -676,7 +723,7 @@ python main.py
 | | |
 |--|--|
 | **Where** | **Surface** — PowerShell |
-| **Folder** | `cd <OPENNEXUS_REPO_ROOT>` |
+| **Folder** | `cd C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` |
 | **Command** | `.\scripts\restart-nvidia-sync.ps1` |
 
 ---
@@ -718,7 +765,7 @@ python main.py
 | Where | Folder | Command |
 |-------|--------|---------|
 | DGX | `cd /home/sifr/3DAIGC-API` | `git add … && git commit -m "…" && git push origin main` |
-| Surface | `cd <3DAIGC_REPO_ROOT>` | `git pull` / `git push origin main` *(if using relay)* |
+| Surface | `cd C:\Users\alfao\Documents\GitHub\3DAIGC` | `git pull` / `git push origin main` *(if using relay)* |
 
 ### Windows accessibility
 
@@ -779,8 +826,8 @@ Check XR service: `systemctl --user status xr-ai-3daigc-stack.service` · logs: 
 
 **Scene Assembler login:** open host root (not a raw `.msf` file). Two fields:
 - **Fabric URL** must match the host you opened Scene Assembler on:
-  - Surface / Galaxy XR: `https://<SURFACE_LAN_IP>:8453/fabric/` (with `npm run msf-proxy`)
-  - Tailscale: `https://dgx-spark.<TAILNET_ID>.ts.net/fabric/`
+  - Surface / Galaxy XR: `https://10.0.0.32:8453/fabric/` (with `npm run msf-proxy`)
+  - Tailscale: `https://dgx-spark.tail6121eb.ts.net/fabric/`
   - Scene Assembler auto-fills `window.location.origin + '/fabric/'` — use that value; do **not** mix Tailscale fabric URL with Surface host (or vice versa).
 - **Key:** value of `MSF_EDIT_KEY` in `rp1.env` only — **not** dev.rp1.com password, **not** `MSF_DB_PASSWORD`
 
@@ -834,7 +881,7 @@ Binary: `SpaceTimeHost/install/release/bin/spacetime-host`. Keys: F5 reload, Ctr
 
 | Old command / path | Use instead |
 |--------------------|-------------|
-| `<LEGACY_CHARACTERSTUDIO_ROOT>` | `...\OpenNexus3DStudio` |
+| `C:\Users\alfao\Documents\GitHub\CharacterStudio` | `...\OpenNexus3DStudio` |
 | `cd ~/OpenNexus3DStudio/CharacterStudio` | `cd /home/sifr/OpenNexus3DStudio` |
 | `cd ~/github/3DAIGC-API` | `cd /home/sifr/3DAIGC-API` |
 | `bash start-api-in-container.sh` | `./scripts/run_local_venv.sh` (venv, not Docker API) |
@@ -862,7 +909,7 @@ When an agent gives you a command:
 Agents should **run commands themselves** when possible. This file is the canonical inventory — update it when adding workflow scripts.
 
 **Also on Surface Desktop (keep in sync):**
-- `<DGX_DESKTOP_NOTES>\DGX Terminal Commands.md`
-- `<DGX_DESKTOP_NOTES>\DGX Terminal Commands.txt`
+- `C:\Users\alfao\Desktop\DGX\DGX Terminal Commands.md`
+- `C:\Users\alfao\Desktop\DGX\DGX Terminal Commands.txt`
 
 After editing this cheatsheet on DGX: `bash scripts/sync-changes-to-pc.sh --retry-until-complete` pushes the repo copy **and** runs `sync-cheatsheet-to-desktop.sh` automatically.

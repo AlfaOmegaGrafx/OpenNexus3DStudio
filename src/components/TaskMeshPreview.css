@@ -2,6 +2,38 @@
   margin-top: 0.35rem;
 }
 
+.task-mesh-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.task-mesh-preview-label {
+  font-size: 0.7rem;
+  color: #bbb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-mesh-preview-bone-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  color: #ccc;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.task-mesh-preview-bone-toggle input {
+  margin: 0;
+  accent-color: #ff8c2a;
+}
+
 .task-mesh-preview-canvas {
   width: 100%;
   height: 180px;
@@ -10,6 +42,10 @@
   overflow: hidden;
   background: #2a2a2e;
   position: relative;
+}
+
+.task-mesh-preview.studio-stage-preview-viewer .task-mesh-preview-canvas {
+  height: 216px;
 }
 
 .task-mesh-preview-canvas canvas {

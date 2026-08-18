@@ -3,6 +3,84 @@ import react from '@vitejs/plugin-react-swc'
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
+import net from 'net'
+import { spawn } from 'child_process'
+import { ensureDevCerts } from './scripts/ensure-dev-certs.mjs'
+
+/**
+ * Prefer Surface LAN for browser open / tip — Cursor often binds broken
+ * 127.0.0.1:3000 / ::1:3000 while Vite serves the LAN interface successfully.
+ * Override host: VITE_DEV_OPEN_HOST=10.0.0.32  ·  opt-in browser open: VITE_DEV_OPEN=1
+ * (Default: print LAN URL only — avoids duplicate Studio tabs with Cursor port forward.)
+ */
+function resolvePreferredLanHost() {
+  const fromEnv = (process.env.VITE_DEV_OPEN_HOST || '').trim()
+  if (fromEnv) return fromEnv
+
+  const preferredExact = '10.0.0.32'
+  const ipv4 = []
+  for (const entries of Object.values(os.networkInterfaces() || {})) {
+    for (const entry of entries || []) {
+      if (!entry || entry.internal || entry.family !== 'IPv4') continue
+      ipv4.push(entry.address)
+    }
+  }
+  if (ipv4.includes(preferredExact)) return preferredExact
+  const lan10 = ipv4.find((ip) => ip.startsWith('10.0.0.'))
+  if (lan10) return lan10
+  // Skip Tailscale CGNAT (100.x) for the default browser URL
+  const privateLan = ipv4.find(
+    (ip) =>
+      !ip.startsWith('100.') &&
+      (ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)),
+  )
+  return privateLan || ipv4[0] || null
+}
+
+function openExternalUrl(url) {
+  try {
+    if (process.platform === 'win32') {
+      spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
+      return
+    }
+    if (process.platform === 'darwin') {
+      spawn('open', [url], { stdio: 'ignore', detached: true }).unref()
+      return
+    }
+    spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref()
+  } catch {
+    // ignore — tip still printed
+  }
+}
+
+function preferLanDevUrlPlugin() {
+  return {
+    name: 'prefer-lan-dev-url',
+    configureServer(server) {
+      const httpServer = server.httpServer
+      if (!httpServer) return
+      httpServer.once('listening', () => {
+        const host = resolvePreferredLanHost()
+        if (!host) return
+        const addr = httpServer.address()
+        const port =
+          typeof addr === 'object' && addr && typeof addr.port === 'number'
+            ? addr.port
+            : server.config.server.port || 3000
+        const proto = server.config.server.https ? 'https' : 'http'
+        const url = `${proto}://${host}:${port}/`
+        console.log('')
+        console.log('[vite] Preferred URL (LAN — use this; localhost is often broken on Surface):')
+        console.log(`  ➜  ${url}`)
+        console.log('')
+        if (process.env.VITE_DEV_OPEN !== '1') return
+        // Defer so Vite finishes printing its Local/Network block first.
+        setTimeout(() => openExternalUrl(url), 400)
+      })
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 function remoteLogPlugin() {
@@ -612,7 +690,117 @@ function nativeFaceRelayPlugin() {
   }
 }
 
+function moatOrPublic(publicFile, moatFile) {
+  const moatPath = path.resolve(__dirname, moatFile)
+  const publicPath = path.resolve(__dirname, publicFile)
+  return fs.existsSync(moatPath) ? moatPath : publicPath
+}
+
 const DEV_DGX_PROXY_PREFIX = '/__dev_dgx_proxy'
+
+function getLocalIpv4Addresses() {
+  const ips = new Set()
+  for (const entries of Object.values(os.networkInterfaces() || {})) {
+    for (const entry of entries || []) {
+      if (entry?.family === 'IPv4' && !entry.internal) ips.add(entry.address)
+    }
+  }
+  return ips
+}
+
+/** Surface OpenNexus — auto-spawn LAN companion HTTPS proxy when the local overlay script exists. */
+function isCompanionSurfaceHost() {
+  if (process.env.VITE_COMPANION_AUTO_PROXY === '0') return false
+  if (process.env.VITE_COMPANION_AUTO_PROXY === '1') return true
+  const ips = getLocalIpv4Addresses()
+  const dgxIp = String(process.env.VITE_DGX_LAN_IP || process.env.DGX_LAN_IP || '10.0.0.158').trim()
+  if (dgxIp && ips.has(dgxIp)) return false
+  return ips.has('10.0.0.32')
+}
+
+function isPortListeningOnLan(port) {
+  const hosts = [...getLocalIpv4Addresses()].filter((ip) => ip && ip !== '127.0.0.1')
+  if (hosts.length === 0) return Promise.resolve(false)
+  return Promise.any(
+    hosts.map(
+      (host) =>
+        new Promise((resolve, reject) => {
+          const socket = net.connect({ port, host }, () => {
+            socket.end()
+            resolve(true)
+          })
+          socket.on('error', () => reject(new Error('closed')))
+          socket.setTimeout(400, () => {
+            socket.destroy()
+            reject(new Error('timeout'))
+          })
+        }),
+    ),
+  ).then(
+    () => true,
+    () => false,
+  )
+}
+
+function companionSurfaceProxyPlugin() {
+  /** @type {import('child_process').ChildProcess | null} */
+  let child = null
+
+  function stopChild() {
+    if (!child) return
+    try {
+      child.kill('SIGTERM')
+    } catch {
+      /* ignore */
+    }
+    child = null
+  }
+
+  return {
+    name: 'companion-surface-proxy',
+    async configureServer() {
+      if (!isCompanionSurfaceHost()) return
+
+      const port = Number(process.env.COMPANION_PROXY_PORT || 8464)
+      if (await isPortListeningOnLan(port)) {
+        console.log(`[vite] Companion proxy already listening on LAN :${port}`)
+        return
+      }
+
+      ensureDevCerts()
+
+      const dgx = String(process.env.VITE_DGX_LAN_IP || process.env.DGX_LAN_IP || '10.0.0.158').trim()
+      const chatPort = process.env.COMPANION_CHAT_PORT || process.env.MOECHAT_PORT || '5173'
+      const chatUrl = process.env.COMPANION_CHAT_URL || `http://${dgx}:${chatPort}`
+      const script = path.resolve(__dirname, 'scripts/companion-surface-proxy.mjs')
+      if (!fs.existsSync(script)) {
+        console.log('[vite] Companion proxy script not present (local-only overlay)')
+        return
+      }
+
+      console.log(`[vite] Auto-starting companion HTTPS proxy :${port} → ${chatUrl}`)
+
+      child = spawn(process.execPath, [script], {
+        stdio: 'inherit',
+        env: { ...process.env, COMPANION_CHAT_URL: chatUrl, COMPANION_PROXY_PORT: String(port) },
+      })
+
+      child.on('exit', (code, signal) => {
+        if (code && code !== 0) {
+          console.warn(`[vite] Companion proxy exited (${signal || code})`)
+        }
+        child = null
+      })
+
+      process.on('exit', stopChild)
+      process.on('SIGINT', () => {
+        stopChild()
+        process.exit(0)
+      })
+      process.on('SIGTERM', stopChild)
+    },
+  }
+}
 
 /** Paths that never need HMR — keeps file watchers under OS limits. */
 const DEV_WATCH_IGNORED = [
@@ -649,11 +837,26 @@ export default defineConfig(({ command, mode }) => {
             secure: false,
             timeout: 300000,
             proxyTimeout: 300000,
+            ws: true,
             rewrite: (p) => {
               const stripped = p.startsWith(DEV_DGX_PROXY_PREFIX)
                 ? p.slice(DEV_DGX_PROXY_PREFIX.length)
                 : p
               return stripped || '/'
+            },
+            configure: (proxy) => {
+              // Unhandled http-proxy errors crash Vite (ERR_CONNECTION_REFUSED).
+              proxy.on('error', (err, _req, res) => {
+                console.error('[vite] DGX proxy error:', err?.message || err)
+                if (res && !res.headersSent && typeof res.writeHead === 'function') {
+                  try {
+                    res.writeHead(502, { 'Content-Type': 'text/plain' })
+                    res.end('DGX proxy error')
+                  } catch {
+                    /* socket already closed */
+                  }
+                }
+              })
             },
           },
         }
@@ -671,6 +874,8 @@ export default defineConfig(({ command, mode }) => {
     react(),
     ...(command === 'serve'
       ? [
+          preferLanDevUrlPlugin(),
+          companionSurfaceProxyPlugin(),
           iwsdkDev({
             emulator: { device: 'metaQuest3', activation: 'localhost' },
             ai: {
@@ -694,6 +899,34 @@ export default defineConfig(({ command, mode }) => {
   },
   resolve: {
     alias: [
+      {
+        find: path.resolve(__dirname, 'src/pages/CompanionPage.jsx'),
+        replacement: moatOrPublic(
+          'src/pages/CompanionPage.public.jsx',
+          'src/moat/companion/CompanionPage.jsx',
+        ),
+      },
+      {
+        find: path.resolve(__dirname, 'src/library/companionHandoff.js'),
+        replacement: moatOrPublic(
+          'src/library/companionHandoff.public.js',
+          'src/moat/companion/companionHandoff.js',
+        ),
+      },
+      {
+        find: path.resolve(__dirname, 'src/library/companionConfig.js'),
+        replacement: moatOrPublic(
+          'src/library/companionConfig.public.js',
+          'src/moat/companion/companionConfig.js',
+        ),
+      },
+      {
+        find: path.resolve(__dirname, 'src/library/companionBridge.js'),
+        replacement: moatOrPublic(
+          'src/library/companionBridge.public.js',
+          'src/moat/companion/companionBridge.js',
+        ),
+      },
       { find: /^three\/addons\/(.*)/, replacement: path.resolve(__dirname, 'node_modules/three/examples/jsm/$1') },
       { find: 'three/webgpu', replacement: path.resolve(__dirname, 'node_modules/three/build/three.webgpu.js') },
       { find: 'three/tsl', replacement: path.resolve(__dirname, 'node_modules/three/build/three.tsl.js') },
@@ -705,11 +938,21 @@ export default defineConfig(({ command, mode }) => {
   server: {
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
     host: true, // Allow access from network (e.g. https://YOUR_PC_LAN_IP:3000 for Galaxy XR)
+    // Do not auto-open localhost — preferLanDevUrlPlugin opens the LAN URL instead.
+    open: false,
     proxy: devApiProxy,
     // HTTPS is required for WebXR (AR/VR) — browsers block XR on non-secure origins
     https: (() => {
-      const keyPath = path.resolve(__dirname, 'certs', 'localhost-key.pem')
-      const certPath = path.resolve(__dirname, 'certs', 'localhost.pem')
+      let keyPath = path.resolve(__dirname, 'certs', 'localhost-key.pem')
+      let certPath = path.resolve(__dirname, 'certs', 'localhost.pem')
+
+      if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+        try {
+          ;({ keyPath, certPath } = ensureDevCerts())
+        } catch (err) {
+          console.warn('⚠️  Could not generate dev HTTPS certs:', err?.message || err)
+        }
+      }
 
       if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
         console.log('🔐 Using HTTPS (required for WebXR on Galaxy XR)')
@@ -754,6 +997,7 @@ export default defineConfig(({ command, mode }) => {
       },
     },
   },
+  assetsInclude: ['**/*.wasm'],
   ssr: {
     // Prevent multiple Three.js instances in SSR
     noExternal: ['three'],

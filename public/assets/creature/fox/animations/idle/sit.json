@@ -1,0 +1,8 @@
+{
+  "name": "Sit",
+  "group": "idle",
+  "groupLabel": "Idle & Rest",
+  "bundle": "../fox-animations.glb",
+  "source": "Mesh2Motion (CC0)",
+  "templateId": "fox"
+}

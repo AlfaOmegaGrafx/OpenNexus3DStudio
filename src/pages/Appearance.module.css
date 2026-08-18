@@ -739,8 +739,8 @@
   left: auto;
   top: auto;
   height: auto;
-  flex: 0 1 auto;
-  max-height: min(280px, 42vh);
+  flex: 1 1 auto;
+  max-height: min(480px, 58vh);
   min-height: 0;
   overflow: hidden;
   display: flex;
@@ -750,7 +750,14 @@
   width: 100%;
 }
 
+.appearanceSidebar .menuTitle {
+  margin-top: 0;
+  margin-bottom: 4px;
+  padding: 2px 0 4px;
+}
+
 .appearanceSidebar .traitsContainer {
+  margin-top: 0;
   margin-bottom: 0;
   width: 100%;
   flex: 1;
@@ -843,8 +850,8 @@
 .packSelector {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
   flex-shrink: 0;
 }
 

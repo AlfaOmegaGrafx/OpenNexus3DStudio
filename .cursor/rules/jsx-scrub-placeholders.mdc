@@ -1,0 +1,34 @@
+---
+description: Escape scrubbed LAN/identity placeholders in JSX so Vite/esbuild builds do not treat them as tags
+globs: src/**/*.{jsx,tsx}
+alwaysApply: false
+---
+
+# JSX scrub placeholders
+
+When redacting LAN IPs, hostnames, or paths in **`.jsx` / `.tsx`**, do **not** leave raw angle-bracket placeholders in markup text.
+
+esbuild parses `<SURFACE_LAN_IP>` as a JSX element and **fails the Vercel production build**.
+
+## Do
+
+```jsx
+<code>https://&lt;SURFACE_LAN_IP&gt;:3000/xr</code>
+{/* or */}
+<code>{'https://<SURFACE_LAN_IP>:3000/xr'}</code>
+```
+
+## Do not
+
+```jsx
+<code>https://<SURFACE_LAN_IP>:3000/xr</code>
+```
+
+## OK without escaping
+
+- Normal JS/TS **strings** and **comments** (`'<SURFACE_LAN_IP>'`, `// <DGX_LAN_IP>`)
+- Markdown / `.md` docs (not parsed as JSX)
+
+## Verify
+
+`npm run verify:jsx-placeholders` (also runs from `npm run build` before Vite).

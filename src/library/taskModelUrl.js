@@ -80,6 +80,56 @@ export function isTextToMotionTaskResult(result) {
   return false;
 }
 
+const SERVER_MESH_PATH_KEYS = [
+  'output_mesh_path',
+  'output_mesh_path_glb',
+  'rigged_mesh_path',
+  'mesh_path',
+  'output_path',
+  'file_path',
+];
+
+/**
+ * True for DGX filesystem artifact paths the browser must not fetch
+ * (e.g. `/outputs/model.glb`). Job download URLs and http(s) are excluded.
+ * @param {string} [value]
+ * @returns {boolean}
+ */
+export function isServerFilesystemArtifactPath(value) {
+  if (typeof value !== 'string') return false;
+  const path = value.trim();
+  if (!path) return false;
+  if (/^https?:\/\//i.test(path)) return false;
+  if (path.startsWith('/api/')) return false;
+  if (path.startsWith(DEV_DGX_PROXY_PREFIX)) return false;
+  return (
+    path.startsWith('/') ||
+    path.startsWith('outputs/') ||
+    path.startsWith('uploads/') ||
+    path.includes('/outputs/') ||
+    path.includes('/uploads/') ||
+    /^[A-Za-z]:[\\/]/.test(path)
+  );
+}
+
+/**
+ * Server-side mesh path from a completed job status payload.
+ * Used to chain auto-rig without downloading the GLB through Vite.
+ * @param {object|null|undefined} jobStatus
+ * @returns {string|null}
+ */
+export function extractServerMeshPathFromJob(jobStatus) {
+  if (!jobStatus || typeof jobStatus !== 'object') return null;
+  const bags = [jobStatus.result, jobStatus].filter((o) => o && typeof o === 'object');
+  for (const bag of bags) {
+    for (const key of SERVER_MESH_PATH_KEYS) {
+      const value = bag[key];
+      if (isServerFilesystemArtifactPath(value)) return value.trim();
+    }
+  }
+  return null;
+}
+
 const IMAGE_URL_KEYS = [
   'image_url',
   'output_image_path',
@@ -96,7 +146,12 @@ export function isTextToImageTaskResult(result) {
 
   const feature = result.feature || result.result?.feature || null;
   const taskType = result.type || result.taskType || null;
-  if (feature === 'text_to_image' || taskType === 'text-to-image') {
+  if (
+    feature === 'text_to_image' ||
+    feature === 'image_edit' ||
+    taskType === 'text-to-image' ||
+    taskType === 'image-edit'
+  ) {
     return true;
   }
 
@@ -120,7 +175,12 @@ export function isTextToImageTaskResult(result) {
     const inference =
       result.generation_info?.inference_mode ||
       result.result?.generation_info?.inference_mode;
-    if (inference === 'local_open_weights' || feature === 'text_to_image') {
+    if (
+      inference === 'local_open_weights' ||
+      inference === 'isolated_venv_subprocess' ||
+      feature === 'text_to_image' ||
+      feature === 'image_edit'
+    ) {
       return true;
     }
   }
@@ -140,10 +200,39 @@ export function resolveTextToImageDownloadUrl(task) {
   if (
     jobId &&
     (payload.feature === 'text_to_image' ||
+      payload.feature === 'image_edit' ||
       task?.type === 'text-to-image' ||
+      task?.type === 'image-edit' ||
       isTextToImageTaskResult(payload))
   ) {
     return `/api/v1/system/jobs/${jobId}/download`;
+  }
+  return null;
+}
+
+/**
+ * Strip scheme/host from absolute API asset URLs so the client can re-base via
+ * VITE_API_ENDPOINT / `__dev_dgx_proxy` (avoids mixed-content + 127.0.0.1 from DGX).
+ * @param {string|null|undefined} value
+ * @returns {string|null}
+ */
+export function toApiRelativeAssetPath(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('/api/')) return trimmed;
+  if (trimmed.includes(`${DEV_DGX_PROXY_PREFIX}/api/`)) {
+    const idx = trimmed.indexOf('/api/');
+    return idx >= 0 ? trimmed.slice(idx) : trimmed;
+  }
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.pathname.startsWith('/api/')) {
+      return `${parsed.pathname}${parsed.search || ''}`;
+    }
+  } catch {
+    return null;
   }
   return null;
 }
@@ -156,26 +245,35 @@ export function getTaskResultImageUrl(result) {
   if (!result || typeof result !== 'object') return null;
 
   const nested = result.result && typeof result.result === 'object' ? result.result : null;
+  const isImage =
+    isTextToImageTaskResult(result) ||
+    result?.feature === 'text_to_image' ||
+    nested?.feature === 'text_to_image';
+
+  // Prefer host-agnostic job download for T2I — API often returns absolute mesh_url
+  // with 127.0.0.1 or LAN IP that breaks Surface HTTPS / Vite proxy fetches.
+  if (isImage) {
+    const jobPath =
+      resolveJobDownloadPath(result) ||
+      resolveJobDownloadPath(nested) ||
+      toApiRelativeAssetPath(
+        pickFetchableUrlFromObject(result, ['image_url', 'downloadUrl', 'modelUrl', 'mesh_url']) ||
+          pickFetchableUrlFromObject(nested, ['image_url', 'downloadUrl', 'modelUrl', 'mesh_url']),
+      );
+    if (jobPath) return jobPath;
+  }
 
   const fetchable =
     pickFetchableUrlFromObject(result, IMAGE_URL_KEYS) ||
     pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS) ||
     pickFetchableUrlFromObject(result, ['image_url', 'downloadUrl', 'modelUrl', 'mesh_url']) ||
     pickFetchableUrlFromObject(nested, ['image_url', 'downloadUrl', 'modelUrl', 'mesh_url']);
-  if (fetchable) return fetchable;
-
-  if (isTextToImageTaskResult(result) || result?.feature === 'text_to_image') {
-    return resolveJobDownloadPath(result) || resolveJobDownloadPath(nested);
+  if (fetchable) {
+    return toApiRelativeAssetPath(fetchable) || fetchable;
   }
 
-  const jobId =
-    result?.job_id ||
-    result?.jobId ||
-    nested?.job_id ||
-    nested?.jobId ||
-    null;
-  if (jobId && (result?.feature === 'text_to_image' || nested?.feature === 'text_to_image')) {
-    return `/api/v1/system/jobs/${jobId}/download`;
+  if (isImage) {
+    return resolveJobDownloadPath(result) || resolveJobDownloadPath(nested);
   }
 
   return null;
@@ -442,6 +540,16 @@ export function getTaskResultFileExtension(result, options = {}) {
         return ext;
       }
     }
+    // Clothing / template wrap primary artifact is VRM even when download URL has no suffix.
+    const fmt = String(obj.format || obj.generation_info?.output_format || '').toLowerCase();
+    if (fmt === 'vrm') return 'vrm';
+    const vrmPath = obj.output_vrm_path || obj.download_urls?.vrm;
+    if (typeof vrmPath === 'string' && vrmPath.trim()) {
+      const ext = inferModelFileExtensionFromSource(vrmPath);
+      if (ext) return ext;
+      if (/\.vrm(\?|#|$)/i.test(vrmPath)) return 'vrm';
+      return 'vrm';
+    }
     for (const key of pathKeys) {
       const path = obj[key];
       if (typeof path === 'string' && path.trim()) {
@@ -568,6 +676,8 @@ export function resolveTaskModelUrl(rawUrl, apiEndpoint = '') {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
 
   let trimmed = collapseDevDgxProxyPrefix(rawUrl.trim());
+  const asRelativeApi = toApiRelativeAssetPath(trimmed);
+  if (asRelativeApi) trimmed = asRelativeApi;
 
   if (trimmed.startsWith('/')) {
     const base = (apiEndpoint || '').replace(/\/$/, '');
@@ -679,12 +789,19 @@ export function enrichCompletedJobPayload(jobStatus, jobId = null, taskType = nu
     jobStatus.feature === 'text_to_image' ||
     isTextToImageTaskResult(jobStatus) ||
     (nested && isTextToImageTaskResult(nested));
-  const imageUrl =
-    pickFetchableUrlFromObject(jobStatus, IMAGE_URL_KEYS) ||
-    pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS) ||
-    pickFetchableUrlFromObject(jobStatus, ['mesh_url', 'image_url']) ||
-    pickFetchableUrlFromObject(nested, ['mesh_url', 'image_url']) ||
-    (isImageJob && downloadPath ? downloadPath : null);
+  const imageUrl = isImageJob
+    ? downloadPath ||
+      toApiRelativeAssetPath(
+        pickFetchableUrlFromObject(jobStatus, IMAGE_URL_KEYS) ||
+          pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS) ||
+          pickFetchableUrlFromObject(jobStatus, ['mesh_url', 'image_url']) ||
+          pickFetchableUrlFromObject(nested, ['mesh_url', 'image_url']),
+      )
+    : pickFetchableUrlFromObject(jobStatus, IMAGE_URL_KEYS) ||
+      pickFetchableUrlFromObject(nested, IMAGE_URL_KEYS) ||
+      pickFetchableUrlFromObject(jobStatus, ['mesh_url', 'image_url']) ||
+      pickFetchableUrlFromObject(nested, ['mesh_url', 'image_url']) ||
+      null;
   const motionUrl =
     pickFetchableUrlFromObject(jobStatus, ['motion_url', 'studio_motion_url']) ||
     pickFetchableUrlFromObject(nested, ['motion_url', 'studio_motion_url']) ||

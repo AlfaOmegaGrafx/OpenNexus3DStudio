@@ -36,8 +36,8 @@ cd "$ROOT"
 
 SURFACE_SSH="${SURFACE_SSH:-Surface-PC-Tailscale}"
 SURFACE_HOST="${SURFACE_HOST:-100.94.108.18}"
-SURFACE_USER="${SURFACE_USER:?set SURFACE_USER to your Windows account}"
-SURFACE_ROOT="${SURFACE_ROOT:-<OPENNEXUS_REPO_ROOT>}"
+SURFACE_USER="${SURFACE_USER:-alfao}"
+SURFACE_ROOT="${SURFACE_ROOT:-C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio}"
 REMOTE="${SURFACE_SSH}:${SURFACE_ROOT}"
 
 echo "=== DGX -> Surface (DGX-owned only) ==="

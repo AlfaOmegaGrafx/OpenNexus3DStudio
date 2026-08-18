@@ -36,7 +36,12 @@ cd "$ROOT"
 source "${ROOT}/scripts/sync-changes-lib.sh"
 
 SURFACE_SSH="${SURFACE_SSH:-Surface-PC-Tailscale}"
-SURFACE_ROOT="${SURFACE_ROOT:-<OPENNEXUS_REPO_ROOT>}"
+# Prefer env, then .env on DGX, then known Surface clone path.
+if [[ -z "${SURFACE_ROOT:-}" && -f "${ROOT}/.env" ]]; then
+  # shellcheck disable=SC1091
+  SURFACE_ROOT="$(grep -E '^SURFACE_ROOT=' "${ROOT}/.env" | tail -1 | cut -d= -f2- | tr -d '\r' || true)"
+fi
+SURFACE_ROOT="${SURFACE_ROOT:-C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio}"
 
 SYNC_REPO_ROOT="$ROOT"
 SYNC_SSH_TARGET="$SURFACE_SSH"

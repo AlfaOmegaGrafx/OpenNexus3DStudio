@@ -17,7 +17,7 @@ CHEATSHEET="${ROOT}/docs/scripts-cheatsheet.md"
 XR_VOICE="${HOME}/3DAIGC-API/mcp/docs/XR_VOICE_COMMANDS.md"
 
 SURFACE_SSH="${SURFACE_SSH:-Surface-PC-Tailscale}"
-SURFACE_DESKTOP_DIR="${SURFACE_DESKTOP_DIR:-C:/Users/<SURFACE_USER>/Desktop/DGX}"
+SURFACE_DESKTOP_DIR="${SURFACE_DESKTOP_DIR:-C:/Users/alfao/Desktop/DGX}"
 MD_NAME="DGX Terminal Commands.md"
 TXT_NAME="DGX Terminal Commands.txt"
 XR_NAME="XR_VOICE_COMMANDS.md"

@@ -3,12 +3,15 @@ import * as THREE from '../library/three.js';
 import {
   applyWorldTransform,
   anchorObjectBottomToFloor,
+  applyDefaultWorldEnvironmentVisibility,
   computeXrFloorAlignmentY,
   getObjectFloorBounds,
+  getWorldEnvironmentLayerVisibility,
   isIdentityWorldRotation,
   scaleWorldPropsToHumanProportions,
   scaleWorldToHumanProportions,
   orientWorldPropFeetDown,
+  setWorldEnvironmentLayerVisible,
   shouldSkipXrFloorWrap,
 } from '../library/worldSceneLoader.js';
 
@@ -175,5 +178,31 @@ describe('worldSceneLoader transforms', () => {
     const factor = scaleWorldPropsToHumanProportions(sceneManager);
     expect(factor).toBeGreaterThan(1);
     expect(chair.scale.x).toBeGreaterThan(1);
+  });
+
+  it('defaults to splat visible and mesh hidden when both layers exist', () => {
+    const splat = new THREE.Group();
+    const mesh = new THREE.Group();
+    const sceneManager = {
+      worldEnvironmentSplat: splat,
+      worldEnvironmentMesh: mesh,
+      emit: () => {},
+    };
+    applyDefaultWorldEnvironmentVisibility(sceneManager);
+    expect(splat.visible).toBe(true);
+    expect(mesh.visible).toBe(false);
+
+    setWorldEnvironmentLayerVisible(sceneManager, 'mesh', true, { exclusive: true });
+    expect(mesh.visible).toBe(true);
+    expect(splat.visible).toBe(false);
+
+    setWorldEnvironmentLayerVisible(sceneManager, 'mesh', false, { exclusive: true });
+    expect(mesh.visible).toBe(false);
+    expect(splat.visible).toBe(false);
+
+    const vis = getWorldEnvironmentLayerVisibility(sceneManager);
+    expect(vis.hasSplat).toBe(true);
+    expect(vis.hasMesh).toBe(true);
+    expect(vis.meshVisible).toBe(false);
   });
 });

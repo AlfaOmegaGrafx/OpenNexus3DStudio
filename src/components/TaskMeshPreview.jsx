@@ -4,22 +4,49 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { get3daigcAuthHeaders } from '../library/taskManager.js';
 import { resolveTaskModelUrl } from '../library/taskModelUrl.js';
+import {
+  getBoneDisplayWorldPosition,
+  getPrimarySkeletonBones,
+  getSkeletonJointSphereRadius,
+} from '../library/rigBoneUtils.js';
+import './TaskMeshPreview.css';
 
 /**
- * Sidebar preview for completed mesh / auto-rig jobs.
- * Auto-loads a compact orbit GLB viewer when the mesh URL is available
- * (completion / DGX sync) — does not wait for the main viewport.
+ * Compact OrbitControls GLB preview for Task Manager / Studio.
+ *
+ * @param {object} props
+ * @param {string|null} [props.meshUrl]
+ * @param {string} [props.apiEndpoint]
+ * @param {boolean} [props.autoLoad3d]
+ * @param {boolean} [props.showBones] Controlled bone overlay visibility
+ * @param {boolean} [props.boneToggle] Show Bones checkbox
+ * @param {boolean} [props.defaultShowBones]
+ * @param {string} [props.className]
+ * @param {string} [props.label]
  */
 export default function TaskMeshPreview({
   meshUrl,
   apiEndpoint,
-  /** When true (default), start 3D as soon as the row is on-screen. */
   autoLoad3d = true,
+  showBones,
+  boneToggle = false,
+  defaultShowBones = false,
+  className = '',
+  label = '',
 }) {
   const hostRef = useRef(null);
   const [inView, setInView] = useState(false);
   const [meshStatus, setMeshStatus] = useState('idle');
   const [meshError, setMeshError] = useState(null);
+  const [bonesOn, setBonesOn] = useState(
+    typeof showBones === 'boolean' ? showBones : defaultShowBones,
+  );
+
+  useEffect(() => {
+    if (typeof showBones === 'boolean') {
+      setBonesOn(showBones);
+    }
+  }, [showBones]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -42,9 +69,29 @@ export default function TaskMeshPreview({
   }, []);
 
   const shouldLoad = Boolean(autoLoad3d && meshUrl && inView);
+  const effectiveBones = boneToggle ? bonesOn : Boolean(showBones);
 
   return (
-    <div ref={hostRef} className="task-mesh-preview" onClick={(e) => e.stopPropagation()}>
+    <div
+      ref={hostRef}
+      className={`task-mesh-preview ${className}`.trim()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {(label || boneToggle) && (
+        <div className="task-mesh-preview-toolbar">
+          {label ? <span className="task-mesh-preview-label">{label}</span> : <span />}
+          {boneToggle ? (
+            <label className="task-mesh-preview-bone-toggle">
+              <input
+                type="checkbox"
+                checked={bonesOn}
+                onChange={(e) => setBonesOn(e.target.checked)}
+              />
+              Bones
+            </label>
+          ) : null}
+        </div>
+      )}
       {!meshUrl ? (
         <div className="task-mesh-preview-hint">Preview unavailable</div>
       ) : !shouldLoad ? (
@@ -54,6 +101,7 @@ export default function TaskMeshPreview({
           <TaskMeshOrbitCanvas
             meshUrl={meshUrl}
             apiEndpoint={apiEndpoint}
+            showBones={effectiveBones}
             onStatus={setMeshStatus}
             onError={setMeshError}
           />
@@ -107,12 +155,110 @@ function brightenMaterials(root) {
   });
 }
 
-function TaskMeshOrbitCanvas({ meshUrl, apiEndpoint, onStatus, onError }) {
+function setMeshOpacity(root, opacity) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (!obj.isMesh || !obj.material) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      if (mat.userData.__previewBaseOpacity == null) {
+        mat.userData.__previewBaseOpacity = mat.opacity ?? 1;
+        mat.userData.__previewBaseTransparent = Boolean(mat.transparent);
+      }
+      const base = mat.userData.__previewBaseOpacity;
+      mat.transparent = opacity < 0.999 || mat.userData.__previewBaseTransparent;
+      mat.opacity = base * opacity;
+      mat.depthWrite = opacity > 0.85;
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+/**
+ * Build orange joint spheres + bone lines (lightweight SkeletonHelper-style overlay).
+ * @param {THREE.Object3D} modelRoot
+ * @returns {THREE.Group|null}
+ */
+export function buildBoneOverlay(modelRoot) {
+  const bones = getPrimarySkeletonBones(modelRoot);
+  if (!bones.length) return null;
+
+  const group = new THREE.Group();
+  group.name = 'TaskMeshBoneOverlay';
+
+  const radius = Math.max(getSkeletonJointSphereRadius() * 1.4, 0.008);
+  const sphereGeo = new THREE.SphereGeometry(radius, 8, 8);
+  const jointMat = new THREE.MeshBasicMaterial({
+    color: 0xff8c2a,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const lineMat = new THREE.LineBasicMaterial({
+    color: 0xffc078,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.9,
+  });
+
+  const boneSet = new Set(bones);
+  const positions = new Map();
+  const tmp = new THREE.Vector3();
+
+  for (const bone of bones) {
+    getBoneDisplayWorldPosition(bone, modelRoot, tmp);
+    const local = modelRoot.worldToLocal(tmp.clone());
+    positions.set(bone, local);
+
+    const joint = new THREE.Mesh(sphereGeo, jointMat);
+    joint.position.copy(local);
+    joint.renderOrder = 10;
+    group.add(joint);
+  }
+
+  const linePositions = [];
+  for (const bone of bones) {
+    const parent = bone.parent;
+    if (!parent?.isBone || !boneSet.has(parent)) continue;
+    const a = positions.get(parent);
+    const b = positions.get(bone);
+    if (!a || !b) continue;
+    linePositions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+  if (linePositions.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+    const lines = new THREE.LineSegments(geo, lineMat);
+    lines.renderOrder = 9;
+    group.add(lines);
+  }
+
+  return group;
+}
+
+function TaskMeshOrbitCanvas({ meshUrl, apiEndpoint, showBones, onStatus, onError }) {
   const mountRef = useRef(null);
   const onStatusRef = useRef(onStatus);
   const onErrorRef = useRef(onError);
+  const showBonesRef = useRef(showBones);
+  const rootRef = useRef(null);
+  const boneOverlayRef = useRef(null);
   onStatusRef.current = onStatus;
   onErrorRef.current = onError;
+  showBonesRef.current = showBones;
+
+  const applyBonesVisibility = (root, overlay, visible) => {
+    if (overlay) overlay.visible = Boolean(visible);
+    setMeshOpacity(root, visible ? 0.35 : 1);
+  };
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const overlay = boneOverlayRef.current;
+    if (!root) return;
+    applyBonesVisibility(root, overlay, showBones);
+  }, [showBones]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -123,6 +269,7 @@ function TaskMeshOrbitCanvas({ meshUrl, apiEndpoint, onStatus, onError }) {
     let renderer = null;
     let controls = null;
     let root = null;
+    let boneOverlay = null;
     let resizeObserver = null;
 
     const scene = new THREE.Scene();
@@ -206,8 +353,23 @@ function TaskMeshOrbitCanvas({ meshUrl, apiEndpoint, onStatus, onError }) {
         if (cancelled) return;
         root = gltf.scene;
         root.name = 'task-mesh-preview';
+        root.updateMatrixWorld(true);
+        root.traverse((child) => {
+          if (child.isSkinnedMesh && child.skeleton) {
+            child.skeleton.update();
+          }
+        });
         brightenMaterials(root);
         scene.add(root);
+        rootRef.current = root;
+
+        boneOverlay = buildBoneOverlay(root);
+        if (boneOverlay) {
+          root.add(boneOverlay);
+          boneOverlayRef.current = boneOverlay;
+        }
+        applyBonesVisibility(root, boneOverlay, showBonesRef.current);
+
         setSize();
         if (!frameObject(camera, controls, root)) {
           throw new Error('Mesh has no visible geometry');
@@ -225,6 +387,8 @@ function TaskMeshOrbitCanvas({ meshUrl, apiEndpoint, onStatus, onError }) {
       cancelAnimationFrame(animationId);
       resizeObserver?.disconnect();
       controls?.dispose();
+      rootRef.current = null;
+      boneOverlayRef.current = null;
       if (root) {
         scene.remove(root);
         root.traverse((obj) => {

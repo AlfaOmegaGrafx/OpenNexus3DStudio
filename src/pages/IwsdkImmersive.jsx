@@ -127,6 +127,8 @@ export default function IwsdkImmersive() {
     <div className="iwsdk-immersive-page">
       <div className="iwsdk-immersive-toolbar">
         <Link to="/">← OpenNexus3DStudio</Link>
+        <Link to="/studio">Studio</Link>
+        <Link to="/companion">Companion</Link>
         <button type="button" onClick={launchVR} disabled={!ready}>
           Enter VR
         </button>

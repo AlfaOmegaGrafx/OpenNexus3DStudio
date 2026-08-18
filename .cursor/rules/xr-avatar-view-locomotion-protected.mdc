@@ -12,14 +12,13 @@ alwaysApply: false
 
 | Area | Rule |
 |------|------|
-| XR spawn | First-frame `alignXrLocomotionRigToViewport` from current desktop view + live headset pose |
-| XR exit | Desktop OrbitControls ← last XR view (`captureXrViewAsDesktop`) |
+| XR spawn | First-frame `alignXrLocomotionRigToViewport` from `preXRCamera*` + live headset pose |
 | Left X | Toggle view **always** (menu open or closed) |
 | Stick click | Toggle Move **always** (menu open or closed) |
 | Embody align | Rig **XZ + yaw only** — never Y |
 | Disembody | Avatar at exit spot, face headset; viewer **1 m behind**; Move → **Viewpoint** |
 | Yaw math | Parent-local; θ = `atan2(fx, fz)` (yaw 0 faces +Z in this tree) |
-| Menu | 25% opacity bg; right tabs; uniform column; Close at bottom; View/Move/Measure paired |
+| Menu | Opaque; View/Move/Measure paired with status; grip-local forward+down on left controller |
 
 ## Forbidden without explicit user request
 
@@ -27,7 +26,7 @@ alwaysApply: false
 - Rig Y shifts on embody
 - Leave Move: Avatar after switching to third person
 - Require menu open for X or stick-click Move
-- Float menu ~0.5 m ahead of the grip (bottom edge must sit on the controller)
+- Float menu ~0.5 m ahead with no down offset
 
 ## Verify
 

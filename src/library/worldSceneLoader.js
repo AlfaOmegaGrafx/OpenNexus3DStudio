@@ -70,6 +70,20 @@ export function clearWorld(sceneManager) {
     });
     sceneManager.worldColliderMesh = null;
   }
+  if (sceneManager.worldEnvironmentMesh) {
+    sceneManager.worldRoot.remove(sceneManager.worldEnvironmentMesh);
+    sceneManager.worldEnvironmentMesh.traverse?.((child) => {
+      if (child.isMesh) {
+        child.geometry?.dispose?.();
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose?.());
+        } else {
+          child.material?.dispose?.();
+        }
+      }
+    });
+    sceneManager.worldEnvironmentMesh = null;
+  }
   const propMeshes = sceneManager.worldPropMeshes || [];
   for (const mesh of propMeshes) {
     sceneManager.propsRoot.remove(mesh);
@@ -87,6 +101,8 @@ export function clearWorld(sceneManager) {
   sceneManager.worldPropMeshes = [];
   sceneManager.activeWorldId = null;
   sceneManager.activeWorldManifest = null;
+  sceneManager.worldEnvSplatVisible = true;
+  sceneManager.worldEnvMeshVisible = false;
   sceneManager.emit?.('worldCleared', {});
 }
 
@@ -522,6 +538,135 @@ export async function loadWorldColliderMesh(sceneManager, glbUrl, options = {}) 
 }
 
 /**
+ * Visible baked environment mesh (environment.mesh_url / environment_mesh.glb) for
+ * bake preview and OMB inspection. Loaded alongside the Spark splat when present.
+ * @param {import('./sceneManager.js').SceneManager} sceneManager
+ * @param {string} glbUrl
+ * @param {object} [options]
+ */
+export async function loadWorldEnvironmentMesh(sceneManager, glbUrl, options = {}) {
+  ensureSceneRoots(sceneManager);
+  if (sceneManager.worldEnvironmentMesh) {
+    sceneManager.worldRoot.remove(sceneManager.worldEnvironmentMesh);
+    sceneManager.worldEnvironmentMesh.traverse?.((child) => {
+      if (child.isMesh) {
+        child.geometry?.dispose?.();
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose?.());
+        } else {
+          child.material?.dispose?.();
+        }
+      }
+    });
+    sceneManager.worldEnvironmentMesh = null;
+  }
+  const gltf = await sceneManager.loadGLTF(glbUrl);
+  const root = gltf.scene || gltf;
+  root.name = 'WorldEnvironmentMesh';
+  root.userData.isWorldEnvironmentMesh = true;
+  applyWorldTransform(root, options.transform);
+  anchorObjectBottomToFloor(root);
+  root.traverse((child) => {
+    if (!child.isMesh) return;
+    child.visible = true;
+    child.userData.isWorldEnvironmentMesh = true;
+    child.castShadow = true;
+    child.receiveShadow = true;
+    // Photo-quality bakes export COLOR_0 vertex colors (no atlas).
+    // Thin crust walls need double-side so inner faces aren't culled to black shards.
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      if (child.geometry?.attributes?.color) {
+        mat.vertexColors = true;
+      }
+      mat.side = THREE.DoubleSide;
+      mat.flatShading = false;
+      mat.needsUpdate = true;
+    }
+  });
+  sceneManager.worldRoot.add(root);
+  sceneManager.worldEnvironmentMesh = root;
+  sceneManager.emit?.('worldEnvironmentMeshLoaded', { url: glbUrl });
+  console.log('[World] Environment mesh loaded:', glbUrl);
+  return root;
+}
+
+/**
+ * @param {import('./sceneManager.js').SceneManager} sceneManager
+ * @param {'splat'|'mesh'} layer
+ * @param {boolean} visible
+ * @param {{ exclusive?: boolean }} [options] When exclusive and showing, hide the other layer.
+ */
+export function setWorldEnvironmentLayerVisible(sceneManager, layer, visible, options = {}) {
+  if (!sceneManager) return getWorldEnvironmentLayerVisibility(sceneManager);
+  const exclusive = options.exclusive !== false && visible;
+
+  if (layer === 'splat') {
+    if (sceneManager.worldEnvironmentSplat) {
+      sceneManager.worldEnvironmentSplat.visible = Boolean(visible);
+    }
+    sceneManager.worldEnvSplatVisible = Boolean(visible);
+    if (exclusive && sceneManager.worldEnvironmentMesh) {
+      sceneManager.worldEnvironmentMesh.visible = false;
+      sceneManager.worldEnvMeshVisible = false;
+    }
+  } else if (layer === 'mesh') {
+    if (sceneManager.worldEnvironmentMesh) {
+      sceneManager.worldEnvironmentMesh.visible = Boolean(visible);
+    }
+    sceneManager.worldEnvMeshVisible = Boolean(visible);
+    if (exclusive && sceneManager.worldEnvironmentSplat) {
+      sceneManager.worldEnvironmentSplat.visible = false;
+      sceneManager.worldEnvSplatVisible = false;
+    }
+  }
+
+  const state = getWorldEnvironmentLayerVisibility(sceneManager);
+  sceneManager.emit?.('worldEnvironmentVisibilityChanged', state);
+  return state;
+}
+
+/**
+ * @param {import('./sceneManager.js').SceneManager|null|undefined} sceneManager
+ */
+export function getWorldEnvironmentLayerVisibility(sceneManager) {
+  const hasSplat = Boolean(sceneManager?.worldEnvironmentSplat);
+  const hasMesh = Boolean(sceneManager?.worldEnvironmentMesh);
+  return {
+    hasSplat,
+    hasMesh,
+    splatVisible: hasSplat ? Boolean(sceneManager.worldEnvironmentSplat.visible) : false,
+    meshVisible: hasMesh ? Boolean(sceneManager.worldEnvironmentMesh.visible) : false,
+  };
+}
+
+/**
+ * Default: show 3DGS when present; hide baked GLB so they never both start visible.
+ * Mesh-only packages (no splat URL loaded) keep the GLB visible.
+ * @param {import('./sceneManager.js').SceneManager} sceneManager
+ */
+export function applyDefaultWorldEnvironmentVisibility(sceneManager) {
+  const hasSplat = Boolean(sceneManager?.worldEnvironmentSplat);
+  const hasMesh = Boolean(sceneManager?.worldEnvironmentMesh);
+  if (hasSplat && hasMesh) {
+    sceneManager.worldEnvironmentSplat.visible = true;
+    sceneManager.worldEnvironmentMesh.visible = false;
+    sceneManager.worldEnvSplatVisible = true;
+    sceneManager.worldEnvMeshVisible = false;
+  } else if (hasSplat) {
+    sceneManager.worldEnvironmentSplat.visible = true;
+    sceneManager.worldEnvSplatVisible = true;
+  } else if (hasMesh) {
+    sceneManager.worldEnvironmentMesh.visible = true;
+    sceneManager.worldEnvMeshVisible = true;
+  }
+  const state = getWorldEnvironmentLayerVisibility(sceneManager);
+  sceneManager.emit?.('worldEnvironmentVisibilityChanged', state);
+  return state;
+}
+
+/**
  * @param {import('./sceneManager.js').SceneManager} sceneManager
  * @param {string} url
  * @param {object} [options]
@@ -773,6 +918,19 @@ export async function loadWorldPackage(sceneManager, manifest, manifestUrl, opti
       console.warn('[World] Collider mesh failed:', err?.message || err);
     }
   }
+
+  const envMeshUrl = resolved.environment?.mesh_url || null;
+  if (envMeshUrl && envMeshUrl !== colliderUrl) {
+    try {
+      await loadWorldEnvironmentMesh(sceneManager, envMeshUrl, {
+        transform: resolved.environment.transform,
+      });
+    } catch (err) {
+      console.warn('[World] Environment mesh failed:', err?.message || err);
+    }
+  }
+
+  applyDefaultWorldEnvironmentVisibility(sceneManager);
 
   if (
     options.loadToken != null &&

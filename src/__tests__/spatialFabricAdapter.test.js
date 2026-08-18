@@ -19,8 +19,8 @@ import {
 describe('spatialFabricAdapter', () => {
   it('deriveSceneAssemblerRootFromMsfUrl strips fabric file path', () => {
     expect(
-      deriveSceneAssemblerRootFromMsfUrl('https://dgx-spark.<TAILNET_ID>.ts.net/fabric/sample.msf'),
-    ).toBe('https://dgx-spark.<TAILNET_ID>.ts.net');
+      deriveSceneAssemblerRootFromMsfUrl('https://dgx-spark.tail6121eb.ts.net/fabric/sample.msf'),
+    ).toBe('https://dgx-spark.tail6121eb.ts.net');
   });
 
   it('buildSceneAssemblerOpenUrl never returns raw .msf', () => {
@@ -44,24 +44,24 @@ describe('spatialFabricAdapter', () => {
 
   it('buildSceneAssemblerOpenUrl prefers browser env over API Tailscale URL', () => {
     const url = buildSceneAssemblerOpenUrl(
-      { msfPublicUrl: 'https://<SURFACE_LAN_IP>:8453' },
-      { sceneAssemblerUrl: 'https://dgx-spark.<TAILNET_ID>.ts.net/' },
+      { msfPublicUrl: 'https://10.0.0.32:8453' },
+      { sceneAssemblerUrl: 'https://dgx-spark.tail6121eb.ts.net/' },
     );
-    expect(url).toBe('https://<SURFACE_LAN_IP>:8453');
+    expect(url).toBe('https://10.0.0.32:8453');
   });
 
   it('openSpatialFabricInBrowser uses preopened tab after async publish', () => {
     const replace = vi.fn();
     const tab = { closed: false, location: { replace, href: 'about:blank' }, focus: vi.fn() };
-    openSpatialFabricInBrowser('https://<SURFACE_LAN_IP>:8453', tab);
-    expect(replace).toHaveBeenCalledWith('https://<SURFACE_LAN_IP>:8453');
+    openSpatialFabricInBrowser('https://10.0.0.32:8453', tab);
+    expect(replace).toHaveBeenCalledWith('https://10.0.0.32:8453');
   });
 
   it('preopenSpatialFabricTab opens Scene Assembler URL on click', () => {
     const open = vi.fn(() => ({ closed: false }));
     vi.stubGlobal('window', { open });
-    preopenSpatialFabricTab('https://<SURFACE_LAN_IP>:8453');
-    expect(open).toHaveBeenCalledWith('https://<SURFACE_LAN_IP>:8453', '_blank');
+    preopenSpatialFabricTab('https://10.0.0.32:8453');
+    expect(open).toHaveBeenCalledWith('https://10.0.0.32:8453', '_blank');
   });
 
   it('openSpatialFabricInBrowser does not hijack current tab when preopened tab exists', () => {
@@ -80,13 +80,13 @@ describe('spatialFabricAdapter', () => {
       },
     });
     const tab = { closed: false, location: tabLocation, focus: vi.fn() };
-    expect(() => openSpatialFabricInBrowser('https://<SURFACE_LAN_IP>:8453', tab)).toThrow(/did not open automatically/);
+    expect(() => openSpatialFabricInBrowser('https://10.0.0.32:8453', tab)).toThrow(/did not open automatically/);
     expect(assign).not.toHaveBeenCalled();
   });
 
   it('getSyncSceneAssemblerUrl reads VITE_MSF_PUBLIC_URL', () => {
-    vi.stubEnv('VITE_MSF_PUBLIC_URL', 'https://<SURFACE_LAN_IP>:8453');
-    expect(getSyncSceneAssemblerUrl()).toBe('https://<SURFACE_LAN_IP>:8453');
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', 'https://10.0.0.32:8453');
+    expect(getSyncSceneAssemblerUrl()).toBe('https://10.0.0.32:8453');
   });
 
   it('normalizeOmbTier maps API snake_case', () => {

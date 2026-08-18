@@ -33,9 +33,15 @@ describe('xrHubConfig', () => {
 
   it('returns dev default Surface :8443 proxy when unset in DEV', () => {
     vi.stubEnv('VITE_XR_HUB_URL', '');
+    vi.stubGlobal('window', { location: { hostname: '10.0.0.32', search: '' }, localStorage: { getItem: () => null } });
     if (!import.meta.env.DEV) return;
-    expect(getXrHubEmbedUrl()).toBe('https://<SURFACE_LAN_IP>:8443/');
+    expect(getXrHubEmbedUrl()).toBe('https://10.0.0.32:8443/');
     expect(showXrAiPanel()).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('buildXrHubEmbedUrl returns empty for invalid hub base', () => {
+    expect(buildXrHubEmbedUrl('https://<SURFACE_LAN_IP>:8443/')).toBe('');
   });
 
   it('shows panel on Vercel public demo without hub URL', () => {

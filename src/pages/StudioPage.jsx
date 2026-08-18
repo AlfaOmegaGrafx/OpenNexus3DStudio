@@ -1,68 +1,61 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { TaskProvider, useTask } from '../context/TaskContext';
 import {
+  APPEARANCE_SLOTS,
+  DEFAULT_STUDIO_CLOTHING_TEXT,
+  garmentCutNeedsUserChoice,
+  garmentCutSelectOptions,
+  parseClothingAccessoryLines,
+  randomizeStudioClothingText,
+  resolveGarmentCut,
+} from '../library/appearanceClothing.js';
+import {
   createStudioProject,
+  applyStudioTemplate,
+  createStudioWorkspace,
+  clearClothingGarmentResult,
   DEFAULT_STUDIO_TEMPLATE_ID,
+  findClothingAccessoryIndex,
+  getActiveWorkspace,
+  getClothingText,
+  getHeadJobId,
   getPromptText,
+  getEditPrompt,
   getStudioTemplate,
   getTextToImagePromptOptions,
-  loadProjectFromStorage,
-  saveProjectToStorage,
+  hydrateStudioProjectFromTasks,
+  healStudioWorkspaceChain,
+  loadWorkspaceStore,
+  reconcileStudioChainArtifacts,
+  saveWorkspaceStore,
+  setClothingAccessoryCut,
+  setClothingAccessorySlot,
+  setClothingText,
+  setFaceSelfieMeta,
+  setHeadJobId,
+  setHeadSplatUrl,
   setPromptText,
+  setEditPrompt,
   setTextToImagePromptOptions,
   STUDIO_TEMPLATES,
   updateNode,
+  updateWorkspaceProject,
 } from '../library/studioGraph.js';
 import { previewTextToImagePrompt } from '../library/textToImagePromptOptions.js';
+import { sampleFaceSkinSwatch } from '../library/sampleFaceSkinSwatch.js';
+import {
+  BODY_CLOTH_STUDIO_TEMPLATE_ID,
+  normalizeHeadTrack,
+} from '../library/avatarPipelineCatalog.js';
 import { runStudioPipeline } from '../library/studioGraphExecutor.js';
-import { resolveTaskModelUrl } from '../library/taskModelUrl.js';
-import { get3daigcAuthHeaders } from '../library/taskManager.js';
+import { resolveTextToImageDownloadUrl } from '../library/taskModelUrl.js';
 import TextToImagePromptOptions from '../components/TextToImagePromptOptions.jsx';
 import StudioGraphView from '../components/studio/StudioGraphView.jsx';
 import StudioKanbanView from '../components/studio/StudioKanbanView.jsx';
+import StudioAuthenticatedThumb from '../components/studio/StudioAuthenticatedThumb.jsx';
+import StudioStagePreviews from '../components/studio/StudioStagePreviews.jsx';
 import './StudioPage.css';
-
-function StudioAuthenticatedThumb({ imageUrl, apiEndpoint, label }) {
-  const [src, setSrc] = useState(null);
-
-  useEffect(() => {
-    let revoked = false;
-    let objectUrl = null;
-    if (!imageUrl) {
-      setSrc(null);
-      return undefined;
-    }
-    const absolute = resolveTaskModelUrl(imageUrl, apiEndpoint) || imageUrl;
-    (async () => {
-      try {
-        const response = await fetch(absolute, { headers: get3daigcAuthHeaders() });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        if (revoked) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      } catch {
-        if (!revoked) setSrc(null);
-      }
-    })();
-    return () => {
-      revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [imageUrl, apiEndpoint]);
-
-  return (
-    <figure className="studio-view-thumb">
-      {src ? (
-        <img src={src} alt={label || 'view'} />
-      ) : (
-        <div className="studio-image-preview-loading">…</div>
-      )}
-      {label ? <figcaption>{label}</figcaption> : null}
-    </figure>
-  );
-}
 
 function StudioImagePreview({ imageUrl, views, apiEndpoint }) {
   const list =
@@ -100,32 +93,296 @@ function StudioPageInner() {
     getAllTasks,
     isConnected,
     getApiEndpoint,
+    syncTasksFromApi,
+    taskManager,
   } = useTask();
   const [viewMode, setViewMode] = useState('graph');
-  const [project, setProject] = useState(() => {
-    return loadProjectFromStorage() || createStudioProject(DEFAULT_STUDIO_TEMPLATE_ID);
-  });
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState(null);
-  const [statusLine, setStatusLine] = useState('');
-  const projectRef = useRef(project);
+  const [store, setStore] = useState(() => loadWorkspaceStore());
+  const [faceSelfieFile, setFaceSelfieFile] = useState(null);
+  /** @type {[{ hex: string, phrase: string }|null, function]} */
+  const [faceSkinSwatch, setFaceSkinSwatch] = useState(null);
+  const [runningById, setRunningById] = useState({});
+  const [statusById, setStatusById] = useState({});
+  const [errorById, setErrorById] = useState({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const storeRef = useRef(store);
+  const activeIdRef = useRef(store.activeId);
+  const deepLinkTemplateAppliedRef = useRef(false);
+
+  const activeWorkspace = getActiveWorkspace(store) || store.workspaces[0];
+  const activeId = activeWorkspace?.id;
+  const project = activeWorkspace?.project;
+  const running = Boolean(runningById[activeId]);
+  const statusLine = statusById[activeId] || '';
+  const error = errorById[activeId] || null;
 
   useEffect(() => {
-    projectRef.current = project;
-  }, [project]);
+    storeRef.current = store;
+    activeIdRef.current = store.activeId;
+  }, [store]);
 
   useEffect(() => {
-    saveProjectToStorage(project);
-  }, [project]);
+    saveWorkspaceStore(store);
+  }, [store]);
+
+  const setProject = useCallback((projectOrUpdater) => {
+    const wsId = activeIdRef.current;
+    setStore((prev) => {
+      const next = updateWorkspaceProject(prev, wsId, projectOrUpdater);
+      storeRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setStatusLine = useCallback((msg) => {
+    const wsId = activeIdRef.current;
+    setStatusById((prev) => ({ ...prev, [wsId]: typeof msg === 'function' ? msg(prev[wsId]) : msg }));
+  }, []);
+
+  const setError = useCallback((err) => {
+    const wsId = activeIdRef.current;
+    setErrorById((prev) => ({ ...prev, [wsId]: err }));
+  }, []);
+
+  const patchWorkspaceProject = useCallback((wsId, projectOrUpdater) => {
+    setStore((prev) => {
+      const next = updateWorkspaceProject(prev, wsId, projectOrUpdater);
+      storeRef.current = next;
+      return next;
+    });
+  }, []);
+
+  // Task Manager "Head track · Body+Cloth (Studio)" → /studio?template=&head_track=
+  useEffect(() => {
+    if (deepLinkTemplateAppliedRef.current) return;
+    const requested = String(searchParams.get('template') || '').trim();
+    if (!requested) return;
+    const tpl = getStudioTemplate(requested);
+    if (!tpl || tpl.id !== requested) return;
+    deepLinkTemplateAppliedRef.current = true;
+    const headTrack = normalizeHeadTrack(searchParams.get('head_track'));
+    const promptOpts = {
+      ...getTextToImagePromptOptions(project),
+      head_track: headTrack,
+    };
+    if (project?.templateId !== tpl.id) {
+      setProject((prev) =>
+        setTextToImagePromptOptions(
+          applyStudioTemplate(prev, tpl.id, {
+            promptOptions: { head_track: headTrack },
+          }),
+          promptOpts,
+        ),
+      );
+    } else {
+      setProject((prev) => setTextToImagePromptOptions(prev, promptOpts));
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('template');
+    next.delete('head_track');
+    setSearchParams(next, { replace: true });
+    const trackLabel =
+      headTrack === 'arc2avatar'
+        ? '3DGSavatar'
+        : headTrack === 'both'
+          ? 'Both (Likeness + 3DGSavatar)'
+          : headTrack === 'none'
+            ? 'None (keep mesh head)'
+            : 'Ethnicity + Likeness';
+    setStatusLine(
+      tpl.id === BODY_CLOTH_STUDIO_TEMPLATE_ID
+        ? headTrack === 'none'
+          ? 'Body+Cloth — head track: None (voxel / generated mesh head). No selfie needed.'
+          : `Body+Cloth — head track: ${trackLabel}. Upload Face selfie when needed.`
+        : `Template: ${tpl.shortLabel || tpl.label}`,
+    );
+  }, [searchParams, project, setProject, setSearchParams, setStatusLine]);
+
+  // Heal every workspace chain: recover interrupted nodes and fill empty
+  // stages from this tab's Task Manager jobs. Never drop produced cards.
+  useEffect(() => {
+    let cancelled = false;
+    let attempt = 0;
+    let timer = null;
+
+    const fingerprint = (proj) =>
+      JSON.stringify(
+        (proj?.nodes || []).map((n) => [
+          n.id,
+          n.status,
+          n.data?.imageUrl || null,
+          n.data?.meshUrl || null,
+          n.data?.jobId || null,
+          n.data?.inputMeshJobId || null,
+          n.data?.statusMessage || null,
+          n.data?.startedAt || null,
+          n.data?.completedAt || null,
+          Array.isArray(n.data?.results)
+            ? n.data.results.map((r) => [
+                r?.objectName || null,
+                r?.appearance_slot || null,
+                r?.jobId || null,
+                r?.traitUrl || null,
+                r?.meshUrl || null,
+                r?.startedAt || null,
+                r?.completedAt || null,
+              ])
+            : [],
+        ]),
+      );
+
+    const healAll = async () => {
+      attempt += 1;
+      try {
+        if (isConnected && typeof syncTasksFromApi === 'function') {
+          await syncTasksFromApi();
+        }
+      } catch {
+        /* optional */
+      }
+      if (cancelled) return;
+
+      const taskList = (typeof getAllTasks === 'function' ? getAllTasks() : null) || [];
+      const workspaces = storeRef.current.workspaces || [];
+      for (const ws of workspaces) {
+        if (runningById[ws.id]) continue; // don't fight an in-flight pipeline
+        let wrapCleared = false;
+        let imageReady = false;
+        let rigReady = false;
+        let changed = false;
+        patchWorkspaceProject(ws.id, (proj) => {
+          const next = healStudioWorkspaceChain(proj, taskList, {
+            workspaceId: ws.id,
+            resolveImageUrl: resolveTextToImageDownloadUrl,
+          });
+          if (fingerprint(proj) === fingerprint(next)) return proj;
+          changed = true;
+          const img = next.nodes.find((n) => n.kind === 'text_to_image');
+          imageReady = img?.status === 'completed' && Boolean(img?.data?.imageUrl);
+          const rig = next.nodes.find((n) => n.kind === 'auto_rigging');
+          wrapCleared =
+            Boolean(rig?.data?.statusMessage) &&
+            /stale wrap|unrelated|previous mesh|other workspace|wrong rig mode/i.test(
+              String(rig.data.statusMessage),
+            );
+          rigReady = rig?.status === 'completed' && Boolean(rig?.data?.meshUrl);
+          return next;
+        });
+        if (!changed || ws.id !== activeIdRef.current) continue;
+        if (wrapCleared) {
+          setStatusById((prev) => ({
+            ...prev,
+            [ws.id]: 'Cleared stale wrap — run Auto-rig on this workspace mesh',
+          }));
+        } else if (rigReady) {
+          setStatusById((prev) => ({
+            ...prev,
+            [ws.id]: 'Auto-rig ready — bound completed Task Manager job to this chain',
+          }));
+          setErrorById((prev) => ({ ...prev, [ws.id]: null }));
+        } else if (imageReady) {
+          setStatusById((prev) => ({
+            ...prev,
+            [ws.id]: prev[ws.id] || 'Image ready — review preview, then Generate mesh',
+          }));
+          setErrorById((prev) => ({ ...prev, [ws.id]: null }));
+        }
+      }
+
+      if (!cancelled && attempt < 6) {
+        timer = setTimeout(() => {
+          void healAll();
+        }, attempt < 3 ? 1500 : 3000);
+      }
+    };
+
+    void healAll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    isConnected,
+    activeId,
+    runningById,
+    syncTasksFromApi,
+    getAllTasks,
+    patchWorkspaceProject,
+  ]);
+
+  // Recover hung generate-image on whichever workspace is marked running.
+  useEffect(() => {
+    const runningIds = Object.entries(runningById)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    if (!runningIds.length) return undefined;
+
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          if (typeof syncTasksFromApi === 'function') await syncTasksFromApi();
+        } catch {
+          /* optional */
+        }
+        const taskList = (typeof getAllTasks === 'function' ? getAllTasks() : null) || [];
+        for (const wsId of runningIds) {
+          const ws = storeRef.current.workspaces.find((w) => w.id === wsId);
+          if (!ws?.project) continue;
+          const imageNode = ws.project.nodes.find((n) => n.kind === 'text_to_image');
+          if (!imageNode || imageNode.status !== 'running') continue;
+          // Reconcile only while running — full rebind waits for idle heal.
+          const reconciled = reconcileStudioChainArtifacts(ws.project, taskList);
+          const hydrated = hydrateStudioProjectFromTasks(reconciled, taskList, {
+            resolveImageUrl: resolveTextToImageDownloadUrl,
+          });
+          const img = hydrated.nodes.find((n) => n.kind === 'text_to_image');
+          if (img?.status === 'completed' && img?.data?.imageUrl) {
+            patchWorkspaceProject(wsId, hydrated);
+            const meshNode = hydrated.nodes.find((n) => n.kind === 'image_to_3d');
+            const meshStillPending =
+              meshNode &&
+              meshNode.status !== 'completed' &&
+              meshNode.status !== 'failed';
+            setStatusById((prev) => ({
+              ...prev,
+              [wsId]: meshStillPending
+                ? 'Image ready — mesh step next (or click Generate mesh if stalled)'
+                : 'Image ready — review preview, then Generate mesh',
+            }));
+            setErrorById((prev) => ({ ...prev, [wsId]: null }));
+          }
+        }
+      })();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [runningById, getAllTasks, syncTasksFromApi, patchWorkspaceProject]);
+
+  const clothingText = project ? getClothingText(project) : '';
+  const clothingAccessories = useMemo(() => {
+    if (!project) return [];
+    const fromNode = project.nodes.find((n) => n.kind === 'appearance_clothing')?.data
+      ?.accessories;
+    if (Array.isArray(fromNode) && fromNode.length) return fromNode;
+    return parseClothingAccessoryLines(clothingText);
+  }, [project, clothingText]);
+
+  const prompt = project ? getPromptText(project) : '';
+  const editPrompt = project ? getEditPrompt(project) : '';
+  const promptOptions = project ? getTextToImagePromptOptions(project) : {};
+  const composedPreview = useMemo(
+    () => (project ? previewTextToImagePrompt(prompt, promptOptions) : ''),
+    [project, prompt, promptOptions],
+  );
+
+  if (!project) {
+    return <div className="studio-page">No workspace</div>;
+  }
 
   const template = getStudioTemplate(project.templateId);
   const isMultiview = project.templateId === 'krea_trellis_multiview';
-  const prompt = getPromptText(project);
-  const promptOptions = getTextToImagePromptOptions(project);
-  const composedPreview = useMemo(
-    () => previewTextToImagePrompt(prompt, promptOptions),
-    [prompt, promptOptions],
-  );
+  const isComposableBody = project.templateId === 'krea_composable_avatar_body';
+  const isMageEdit = Boolean(template?.includeImageEdit);
+  const headJobId = getHeadJobId(project);
   const imageNode = project.nodes.find((n) => n.kind === 'text_to_image');
   const meshNode = project.nodes.find((n) => n.kind === 'image_to_3d');
   const rigNode = project.nodes.find((n) => n.kind === 'auto_rigging');
@@ -137,9 +394,69 @@ function StudioPageInner() {
   const apiEndpoint = getApiEndpoint?.() || '/__dev_dgx_proxy';
   const imageReady = Boolean(imageUrl) && imageNode?.status === 'completed';
   const meshReady = Boolean(meshNode?.data?.meshUrl) && meshNode?.status === 'completed';
+  const runningNode = project.nodes.find((n) => n.status === 'running');
 
   const handlePromptChange = (event) => {
     setProject((prev) => setPromptText(prev, event.target.value));
+  };
+
+  const handleEditPromptChange = (event) => {
+    setProject((prev) => setEditPrompt(prev, event.target.value));
+  };
+
+  const handleClothingChange = (event) => {
+    setProject((prev) => setClothingText(prev, event.target.value));
+  };
+
+  const handleRandomizeClothing = () => {
+    const next = randomizeStudioClothingText({
+      stylePrompt: getPromptText(project),
+      slots: ['Chest', 'Legs', 'Shoes', 'Waist', 'Neck', 'Hands', 'Head'],
+    });
+    setProject((prev) => setClothingText(prev, next));
+  };
+
+  const handleHeadJobChange = (event) => {
+    setProject((prev) => setHeadJobId(prev, event.target.value));
+  };
+
+  const handleFaceSelfieChange = (event) => {
+    const file = event.target.files?.[0] || null;
+    setFaceSelfieFile(file);
+    setFaceSkinSwatch(null);
+    setProject((prev) => setFaceSelfieMeta(prev, file));
+    if (!file) return;
+    sampleFaceSkinSwatch(file)
+      .then((swatch) => {
+        setFaceSkinSwatch({ hex: swatch.hex, phrase: swatch.phrase });
+      })
+      .catch((err) => {
+        console.warn('Face skin swatch failed', err);
+        setFaceSkinSwatch(null);
+      });
+  };
+
+  useEffect(() => {
+    const onHeadReady = (event) => {
+      const url = event?.detail?.url;
+      const jobId = event?.detail?.jobId;
+      if (!url) return;
+      setProject((prev) => {
+        let next = setHeadSplatUrl(prev, url);
+        if (jobId) next = setHeadJobId(next, jobId);
+        return next;
+      });
+    };
+    window.addEventListener('studioHeadSplatReady', onHeadReady);
+    return () => window.removeEventListener('studioHeadSplatReady', onHeadReady);
+  }, []);
+
+  const handleSlotOverride = (index, slot) => {
+    setProject((prev) => setClothingAccessorySlot(prev, index, slot));
+  };
+
+  const handleCutOverride = (index, cut) => {
+    setProject((prev) => setClothingAccessoryCut(prev, index, cut));
   };
 
   const handlePromptOptionsChange = (nextOptions) => {
@@ -162,77 +479,138 @@ function StudioPageInner() {
     if (running || templateId === project.templateId) return;
     setError(null);
     setStatusLine('');
-    setProject(
-      createStudioProject(templateId, {
-        prompt: getPromptText(project),
-        projectName: getStudioTemplate(templateId).defaultName,
-      }),
-    );
+    setProject((prev) => applyStudioTemplate(prev, templateId));
   };
 
   const handleReset = () => {
     setError(null);
     setStatusLine('');
+    const tid = project.templateId || DEFAULT_STUDIO_TEMPLATE_ID;
     setProject(
-      createStudioProject(project.templateId || DEFAULT_STUDIO_TEMPLATE_ID, {
+      createStudioProject(tid, {
         prompt: '',
+        headJobId: '',
         projectName: template.defaultName,
       }),
     );
   };
 
+  const handleSelectWorkspace = (wsId) => {
+    if (wsId === activeId) return;
+    setStore((prev) => ({ ...prev, activeId: wsId }));
+  };
+
+  const handleAddWorkspace = () => {
+    const ws = createStudioWorkspace(null, {
+      name: `Job ${store.workspaces.length + 1}`,
+    });
+    setStore((prev) => ({
+      activeId: ws.id,
+      workspaces: [...prev.workspaces, ws],
+    }));
+    setStatusById((prev) => ({ ...prev, [ws.id]: '' }));
+    setErrorById((prev) => ({ ...prev, [ws.id]: null }));
+  };
+
+  const handleCloseWorkspace = (wsId, event) => {
+    event?.stopPropagation?.();
+    if (store.workspaces.length <= 1) return;
+    if (runningById[wsId]) return; // don't close while that job runs
+    setStore((prev) => {
+      const workspaces = prev.workspaces.filter((w) => w.id !== wsId);
+      const activeIdNext =
+        prev.activeId === wsId ? workspaces[workspaces.length - 1].id : prev.activeId;
+      return { activeId: activeIdNext, workspaces };
+    });
+  };
+
   const runPipeline = useCallback(
     async (mode) => {
-      setError(null);
-      setRunning(true);
-      const meshLabel = isMultiview ? 'TRELLIS multiview' : 'TRELLIS.2';
+      const wsId = activeIdRef.current;
+      const currentProject =
+        storeRef.current.workspaces.find((w) => w.id === wsId)?.project || project;
+      const tpl = getStudioTemplate(currentProject.templateId);
+      const multi = currentProject.templateId === 'krea_trellis_multiview';
+      const composable = currentProject.templateId === 'krea_composable_avatar_body';
+
+      setErrorById((prev) => ({ ...prev, [wsId]: null }));
+      setRunningById((prev) => ({ ...prev, [wsId]: true }));
+      const meshLabel = multi ? 'TRELLIS multiview' : 'TRELLIS.2';
       const label =
         mode === 'image'
-          ? isMultiview
+          ? multi
             ? 'Running Krea 6-view turnaround…'
-            : 'Running Krea text-to-image…'
+            : composable
+              ? 'Running Krea neck-open body…'
+              : 'Running Krea text-to-image…'
           : mode === 'mesh'
             ? `Running ${meshLabel} image-to-3D…`
             : mode === 'rig'
-              ? 'Running SkinTokens auto-rigging…'
-              : `Running ${template.label} pipeline (image → mesh → rig)…`;
-      setStatusLine(label);
+              ? composable
+                ? 'Running template_wrap + clothing…'
+                : 'Running SkinTokens auto-rigging…'
+              : `Running ${tpl.label} pipeline (image → mesh → rig)…`;
+      setStatusById((prev) => ({ ...prev, [wsId]: label }));
+
       try {
         const endpoint = getApiEndpoint?.() || '/__dev_dgx_proxy';
         const deps = {
           createAndStartTask,
           getTask,
           listTasks: getAllTasks,
+          taskManager,
           apiEndpoint: endpoint,
           onProjectChange: (next) => {
-            projectRef.current = next;
-            setProject(next);
+            patchWorkspaceProject(wsId, next);
           },
-          onStatus: setStatusLine,
+          onStatus: (msg) => {
+            setStatusById((prev) => ({ ...prev, [wsId]: msg }));
+            patchWorkspaceProject(wsId, (proj) => {
+              const node = proj.nodes.find((n) => n.status === 'running');
+              if (!node) return proj;
+              return updateNode(proj, node.id, { data: { statusMessage: msg } });
+            });
+          },
         };
 
-        let next = projectRef.current;
+        const pipelineOpts = {
+          faceSelfieFile: composable ? faceSelfieFile : null,
+          skinToneSwatch: composable ? faceSkinSwatch : null,
+        };
+
+        let next = currentProject;
         if (mode === 'mesh') {
           next = await runStudioPipeline(next, deps, {
             skipKinds: ['text_to_image'],
             until: 'image_to_3d',
+            skipArc2AvatarHead: true,
           });
+          setStatusById((prev) => ({
+            ...prev,
+            [wsId]: 'Mesh ready — review, then Auto-rig mesh (or Run full pipeline)',
+          }));
         } else if (mode === 'rig') {
           next = await runStudioPipeline(next, deps, {
             skipKinds: ['text_to_image', 'image_to_3d'],
+            skipArc2AvatarHead: true,
+            faceSelfieFile: composable ? faceSelfieFile : null,
           });
+          setStatusById((prev) => ({
+            ...prev,
+            [wsId]: composable ? 'Body wrap + clothing complete' : 'Auto-rig complete',
+          }));
         } else if (mode === 'image') {
-          next = await runStudioPipeline(next, deps, { until: 'text_to_image' });
-          projectRef.current = next;
-          setProject(next);
-          setStatusLine(`Image ready — starting ${meshLabel}…`);
           next = await runStudioPipeline(next, deps, {
-            skipKinds: ['text_to_image'],
-            until: 'image_to_3d',
+            until: 'text_to_image',
+            skipArc2AvatarHead: true,
+            ...pipelineOpts,
           });
+          setStatusById((prev) => ({
+            ...prev,
+            [wsId]: 'Image ready — review preview, then Generate mesh',
+          }));
         } else {
-          // full: image → mesh → auto-rig
-          next = await runStudioPipeline(next, deps, {});
+          next = await runStudioPipeline(next, deps, pipelineOpts);
           const meshNodeAfter = next.nodes.find((n) => n.kind === 'image_to_3d');
           const imageNodeAfter = next.nodes.find((n) => n.kind === 'text_to_image');
           if (
@@ -240,20 +618,33 @@ function StudioPageInner() {
             imageNodeAfter?.data?.imageUrl &&
             meshNodeAfter?.status !== 'completed'
           ) {
-            setStatusLine(`Image ready — starting ${meshLabel}…`);
-            next = await runStudioPipeline(next, deps, { skipKinds: ['text_to_image'] });
+            setStatusById((prev) => ({
+              ...prev,
+              [wsId]: `Image ready — starting ${meshLabel}…`,
+            }));
+            next = await runStudioPipeline(next, deps, {
+              skipKinds: ['text_to_image'],
+              skipArc2AvatarHead: true,
+            });
           }
+          setStatusById((prev) => ({
+            ...prev,
+            [wsId]: composable
+              ? 'Body+Cloth complete — open in viewport; Arc2Avatar head attaches when SDS finishes'
+              : 'Pipeline complete',
+          }));
         }
 
-        projectRef.current = next;
-        setProject(next);
-        setStatusLine('Pipeline complete');
+        patchWorkspaceProject(wsId, next);
+        if (mode === 'full') {
+          setStatusById((prev) => ({ ...prev, [wsId]: 'Pipeline complete' }));
+        }
       } catch (err) {
         console.error('Studio pipeline failed', err);
-        setError(err?.message || String(err));
-        setStatusLine('Pipeline failed');
+        setErrorById((prev) => ({ ...prev, [wsId]: err?.message || String(err) }));
+        setStatusById((prev) => ({ ...prev, [wsId]: 'Pipeline failed' }));
       } finally {
-        setRunning(false);
+        setRunningById((prev) => ({ ...prev, [wsId]: false }));
       }
     },
     [
@@ -261,8 +652,72 @@ function StudioPageInner() {
       getTask,
       getAllTasks,
       getApiEndpoint,
-      isMultiview,
-      template.label,
+      taskManager,
+      faceSelfieFile,
+      faceSkinSwatch,
+      project,
+      patchWorkspaceProject,
+    ],
+  );
+
+  const rerunClothingGarment = useCallback(
+    async (accessoryIndex) => {
+      const index = Number(accessoryIndex);
+      if (!Number.isFinite(index) || index < 0) return;
+      const wsId = activeIdRef.current;
+      const currentProject =
+        storeRef.current.workspaces.find((w) => w.id === wsId)?.project || project;
+      const clothingNode = currentProject.nodes.find((n) => n.kind === 'appearance_clothing');
+      const acc = clothingNode?.data?.accessories?.[index];
+      if (!acc) return;
+
+      setErrorById((prev) => ({ ...prev, [wsId]: null }));
+      setRunningById((prev) => ({ ...prev, [wsId]: true }));
+      setStatusById((prev) => ({
+        ...prev,
+        [wsId]: `Re-running clothing: ${acc.label}…`,
+      }));
+
+      try {
+        const endpoint = getApiEndpoint?.() || '/__dev_dgx_proxy';
+        let next = clearClothingGarmentResult(currentProject, index);
+        patchWorkspaceProject(wsId, next);
+        next = await runStudioPipeline(
+          next,
+          {
+            createAndStartTask,
+            getTask,
+            listTasks: getAllTasks,
+            apiEndpoint: endpoint,
+            onProjectChange: (proj) => patchWorkspaceProject(wsId, proj),
+            onStatus: (msg) => setStatusById((prev) => ({ ...prev, [wsId]: msg })),
+          },
+          {
+            skipKinds: ['text_to_image', 'image_to_3d', 'auto_rigging'],
+            clothingIndexes: [index],
+            forceClothingIndexes: [index],
+          },
+        );
+        patchWorkspaceProject(wsId, next);
+        setStatusById((prev) => ({
+          ...prev,
+          [wsId]: `Re-run complete: ${acc.label}`,
+        }));
+      } catch (err) {
+        console.error('Clothing re-run failed', err);
+        setErrorById((prev) => ({ ...prev, [wsId]: err?.message || String(err) }));
+        setStatusById((prev) => ({ ...prev, [wsId]: 'Clothing re-run failed' }));
+      } finally {
+        setRunningById((prev) => ({ ...prev, [wsId]: false }));
+      }
+    },
+    [
+      createAndStartTask,
+      getTask,
+      getAllTasks,
+      getApiEndpoint,
+      project,
+      patchWorkspaceProject,
     ],
   );
 
@@ -278,6 +733,10 @@ function StudioPageInner() {
             Prompt · Canvas · Asset — local DGX via 3DAIGC-API
           </span>
         </div>
+        <nav className="studio-page-nav" aria-label="Labs">
+          <Link to="/xr">XR Lab</Link>
+          <Link to="/companion">Companion</Link>
+        </nav>
         <div className="studio-page-actions">
           <span
             className={`studio-api-pill ${isConnected ? 'ok' : 'down'}`}
@@ -334,7 +793,9 @@ function StudioPageInner() {
             disabled={running || !isConnected || !meshReady}
             title={
               meshReady
-                ? 'Auto-rig the completed mesh (SkinTokens)'
+                ? isComposableBody
+                  ? 'UniRig template_wrap body, then Appearance clothing fan-out'
+                  : 'Auto-rig the completed mesh (SkinTokens)'
                 : 'Generate a mesh first'
             }
           >
@@ -351,6 +812,48 @@ function StudioPageInner() {
         </div>
       </header>
 
+      <nav className="studio-workspace-tabs" aria-label="Studio workspaces">
+        {store.workspaces.map((ws) => {
+          const isActive = ws.id === activeId;
+          const isWsRunning = Boolean(runningById[ws.id]);
+          return (
+            <button
+              key={ws.id}
+              type="button"
+              className={`studio-workspace-tab ${isActive ? 'active' : ''} ${isWsRunning ? 'is-running' : ''}`}
+              onClick={() => handleSelectWorkspace(ws.id)}
+              title={ws.name}
+            >
+              {isWsRunning ? <span className="studio-running-dot" aria-hidden /> : null}
+              <span className="studio-workspace-tab-name">{ws.name || 'Workspace'}</span>
+              {isWsRunning ? <span className="studio-workspace-tab-badge">Running</span> : null}
+              {store.workspaces.length > 1 && !isWsRunning ? (
+                <span
+                  className="studio-workspace-tab-close"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close ${ws.name}`}
+                  onClick={(e) => handleCloseWorkspace(ws.id, e)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') handleCloseWorkspace(ws.id, e);
+                  }}
+                >
+                  ×
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className="studio-workspace-tab studio-workspace-tab-add"
+          onClick={handleAddWorkspace}
+          title="New workspace / job"
+        >
+          +
+        </button>
+      </nav>
+
       <section className="studio-page-controls">
         <label className="studio-field">
           <span>Project name</span>
@@ -361,40 +864,197 @@ function StudioPageInner() {
             disabled={running}
           />
         </label>
-        <label className="studio-field studio-field-wide">
-          <span>Subject prompt</span>
-          <textarea
-            rows={2}
-            value={prompt}
-            onChange={handlePromptChange}
-            placeholder="dragon knight character, humanoid…"
-            disabled={running}
-          />
-        </label>
-        <div className="studio-template-picker" role="group" aria-label="Pipeline template">
-          {STUDIO_TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`studio-template-chip ${project.templateId === t.id ? 'active' : ''}`}
-              title={t.description}
+        <div className="studio-prompt-stack">
+          <label className="studio-field studio-field-wide">
+            <span>Subject prompt</span>
+            <textarea
+              rows={2}
+              value={prompt}
+              onChange={handlePromptChange}
+              placeholder={
+                isComposableBody
+                  ? 'athletic streetwear body, casual techwear…'
+                  : 'dragon knight character, humanoid…'
+              }
               disabled={running}
-              onClick={() => handleSelectTemplate(t.id)}
-            >
-              {t.shortLabel}
-            </button>
-          ))}
+            />
+          </label>
+          <div className="studio-template-picker" role="group" aria-label="Pipeline template">
+            {STUDIO_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`studio-template-chip ${project.templateId === t.id ? 'active' : ''}`}
+                title={t.description}
+                disabled={running}
+                onClick={() => handleSelectTemplate(t.id)}
+              >
+                {t.shortLabel}
+              </button>
+            ))}
+          </div>
         </div>
+        {isMageEdit ? (
+          <label className="studio-field studio-field-wide">
+            <span>Edit instruction (Mage-Flow-Edit)</span>
+            <textarea
+              rows={2}
+              value={editPrompt}
+              onChange={handleEditPromptChange}
+              placeholder="e.g. remove background, T-pose, clean studio lighting…"
+              disabled={running}
+            />
+          </label>
+        ) : null}
+        {isComposableBody ? (
+          <>
+            <div className="studio-field studio-field-wide studio-clothing-field">
+              <div className="studio-clothing-field-header">
+                <span>Clothing / accessories</span>
+                <button
+                  type="button"
+                  className="studio-btn ghost studio-clothing-randomize"
+                  onClick={handleRandomizeClothing}
+                  disabled={running}
+                  title="AI customize: randomize outfit from style pools detected in the subject prompt (fantasy, medieval, cyberpunk, …)"
+                >
+                  AI customize · randomize
+                </button>
+              </div>
+              <textarea
+                rows={5}
+                value={clothingText}
+                onChange={handleClothingChange}
+                placeholder={DEFAULT_STUDIO_CLOTHING_TEXT}
+                disabled={running}
+              />
+            </div>
+            <label className="studio-field studio-field-wide">
+              <span>Face selfie (one photo → head + body tone)</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFaceSelfieChange}
+                disabled={running}
+              />
+              <span className="studio-field-hint">
+                One close-up selfie for Likeness, optional Arc2Avatar on the Head bone,
+                and body skin tone for the neck-open Krea mannequin. Choose engines in Image options →
+                Head track. The body image is a bare mannequin — outfit lines below become Appearance slots.
+              </span>
+              {faceSelfieFile ? (
+                <span className="studio-field-hint">Selfie: {faceSelfieFile.name}</span>
+              ) : null}
+              {faceSkinSwatch?.hex ? (
+                <span className="studio-skin-swatch" title={faceSkinSwatch.phrase}>
+                  <span
+                    className="studio-skin-swatch-chip"
+                    style={{ backgroundColor: faceSkinSwatch.hex }}
+                    aria-hidden
+                  />
+                  <span className="studio-field-hint">
+                    Body skin tone from selfie: {faceSkinSwatch.hex}
+                  </span>
+                </span>
+              ) : null}
+            </label>
+            <label className="studio-field">
+              <span>Head job id (optional override)</span>
+              <input
+                type="text"
+                value={headJobId}
+                onChange={handleHeadJobChange}
+                placeholder="Existing Arc2Avatar / head job id"
+                disabled={running}
+              />
+            </label>
+          </>
+        ) : null}
       </section>
 
-      <section className="studio-page-krea-options">
+      {isComposableBody && clothingAccessories.length > 0 ? (
+        <section className="studio-clothing-slots" aria-label="Inferred Appearance slots">
+          <span className="studio-clothing-slots-label">Slots</span>
+          <div className="studio-slot-chips">
+            {clothingAccessories.map((acc, index) => {
+              const cutInfo = resolveGarmentCut(acc);
+              const showCut = garmentCutNeedsUserChoice(acc);
+              const cutOpts = garmentCutSelectOptions(cutInfo.kind || acc.cut_kind);
+              return (
+                <label key={`${acc.object_name}_${index}`} className="studio-slot-chip">
+                  <span className="studio-slot-chip-label">
+                    {acc.label}
+                    {acc.accessory_segment ? (
+                      <span className="studio-slot-segment" title="Accessory segment (same-slot layering)">
+                        {' '}
+                        · {acc.accessory_segment}
+                      </span>
+                    ) : null}
+                  </span>
+                  <select
+                    value={acc.appearance_slot}
+                    disabled={running}
+                    onChange={(e) => handleSlotOverride(index, e.target.value)}
+                    aria-label={`Slot for ${acc.label}`}
+                  >
+                    {APPEARANCE_SLOTS.map((slot) => (
+                      <option key={slot} value={slot}>
+                        {slot}
+                      </option>
+                    ))}
+                  </select>
+                  {showCut && cutOpts.length > 0 ? (
+                    <select
+                      className="studio-slot-cut"
+                      value={acc.cut || cutInfo.cut || 'long'}
+                      disabled={running}
+                      onChange={(e) => handleCutOverride(index, e.target.value)}
+                      aria-label={
+                        cutInfo.kind === 'sleeve_length'
+                          ? `Sleeve length for ${acc.label}`
+                          : `Length for ${acc.label}`
+                      }
+                      title={
+                        cutInfo.kind === 'sleeve_length'
+                          ? 'Short or long sleeve (not both)'
+                          : 'Shorts or long legs (not both)'
+                      }
+                    >
+                      {cutOpts.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </label>
+              );
+            })}
+          </div>
+          {project.data?.avatarSessionId ? (
+            <p className="studio-session-id">
+              Session: <code>{project.data.avatarSessionId}</code>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className={`studio-page-krea-options ${running ? 'is-locked' : ''}`}>
         <TextToImagePromptOptions
           value={promptOptions}
-          onChange={handlePromptOptionsChange}
+          onChange={running ? undefined : handlePromptOptionsChange}
           basePrompt={prompt}
         />
         <p className="studio-mesh-hint">
-          {isMultiview ? (
+          {isComposableBody ? (
+            <>
+              <strong>Body+Cloth head track:</strong> Image options → Head track chooses{' '}
+              <em>Ethnicity + Likeness</em>, <em>3DGSavatar</em>, <em>Both</em>, or <em>None</em>{' '}
+              (keep generated mesh head — e.g. voxel) on the same{' '}
+              <code>template_wrap</code> path. Body from text prompt; selfie only for Arc2Avatar.
+              Clothing → Appearance slots.
+            </>
+          ) : isMultiview ? (
             <>
               <strong>Multiview pipeline:</strong> generates front / back / left / right / top /
               bottom with one shared seed, then TRELLIS multiview mesh. Keep Full body, T-pose, and
@@ -404,7 +1064,7 @@ function StudioPageInner() {
             <>
               <strong>TRELLIS.2 pipeline:</strong> one mesh-ready image (Full body, T-pose, Remove
               background, Front view recommended). Switch to <strong>Multiview</strong> for a
-              six-angle turnaround.
+              six-angle turnaround, or <strong>Body+Cloth</strong> for composable VRM.
             </>
           )}
         </p>
@@ -413,9 +1073,35 @@ function StudioPageInner() {
         ) : null}
       </section>
 
-      {(error || statusLine) && (
-        <div className={`studio-status-banner ${error ? 'error' : ''}`}>
-          {error || statusLine}
+      {(error || statusLine || running) && (
+        <div className={`studio-status-banner ${error ? 'error' : ''} ${running ? 'is-running' : ''}`}>
+          {running ? (
+            <div className="studio-status-running-row">
+              <span className="studio-running-dot" aria-hidden />
+              <div className="studio-status-running-copy">
+                <strong>Job running</strong>
+                <span>
+                  {statusLine ||
+                    (runningNode
+                      ? `${runningNode.label} in progress…`
+                      : 'Pipeline in progress…')}
+                </span>
+              </div>
+              <div className="studio-status-progress" aria-hidden>
+                <div className="studio-status-progress-bar" />
+              </div>
+              <button
+                type="button"
+                className="studio-btn ghost"
+                onClick={handleAddWorkspace}
+                title="Open a new workspace while this job runs"
+              >
+                + New workspace
+              </button>
+            </div>
+          ) : (
+            error || statusLine
+          )}
         </div>
       )}
 
@@ -425,11 +1111,24 @@ function StudioPageInner() {
         apiEndpoint={apiEndpoint}
       />
 
+      <StudioStagePreviews
+        project={project}
+        apiEndpoint={apiEndpoint}
+        running={running}
+        onRerunStage={(mode) => void runPipeline(mode)}
+        onRerunClothing={(index) => void rerunClothingGarment(index)}
+      />
+
       <main className="studio-page-main">
         {viewMode === 'graph' ? (
-          <StudioGraphView project={project} />
+          <StudioGraphView
+            project={project}
+            apiEndpoint={apiEndpoint}
+            running={running}
+            onRerunClothing={(index) => void rerunClothingGarment(index)}
+          />
         ) : (
-          <StudioKanbanView project={project} />
+          <StudioKanbanView project={project} apiEndpoint={apiEndpoint} />
         )}
       </main>
 
@@ -438,6 +1137,11 @@ function StudioPageInner() {
           <a className="studio-btn primary" href={`/?loadMesh=${encodeURIComponent(meshUrl)}`}>
             Open mesh in viewport
           </a>
+        ) : imageReady ? (
+          <span className="studio-footer-hint">
+            Image ready below — click <strong>Generate mesh</strong> when you are satisfied, or{' '}
+            <strong>Run full pipeline</strong> to continue automatically.
+          </span>
         ) : (
           <span className="studio-footer-hint">
             Generate a mesh-ready image, review it, then Generate mesh (or Run full pipeline).

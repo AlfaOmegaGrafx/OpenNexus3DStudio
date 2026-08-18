@@ -2,6 +2,9 @@
 
 #include <jni.h>
 
+// JNI entry points for OpenXrFaceEngine. Face + optional body floats are delivered
+// via the callback object's onOpenXrFaceParameters([FJ[FI)V (see openxr_face_engine.cpp).
+
 extern "C" {
 
 JNIEXPORT void JNICALL

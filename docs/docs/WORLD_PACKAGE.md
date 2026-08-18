@@ -26,7 +26,9 @@ worlds/
     "type": "gaussian_splat",
     "url": "environment.ply",
     "format": "ply",
-    "renderer": "spark"
+    "renderer": "spark",
+    "mesh_url": "environment_mesh.glb",
+    "collider_url": "collider.glb"
   },
   "props": [
     {
@@ -39,6 +41,11 @@ worlds/
   ]
 }
 ```
+
+- `environment.url` — Spark splat (viewport). Never published to RP1/OMB as-is.
+- `environment.mesh_url` — optional OMB/RP1 GLB from `POST /bake-env-mesh` (LingBot env-scan with `gs_dataset/`).
+- `environment.collider_url` — optional walk/physics mesh (often `collider.glb` from the same bake).
+- `props[]` — TRELLIS (or other) GLBs; Image-to-World RP1 path when no env mesh.
 
 ## Scene layers
 
@@ -85,6 +92,8 @@ Walk / Galaxy XR physical replica scans use `POST /api/v1/world-generation/envir
 
 **Phase A / Phase B:** set `refine_to_3dgs: true` for isotropic Spark Gaussians (Phase A). Optionally `train_3dgs: true` (or later `POST /train-3dgs`) for photometric gsplat train — prefer **7–10k** steps, densify **off**. Door metric: `mode: reference_length`, `axis: horizontal`, `true_meters: 0.762` (30 in), measured `recon_length`. Gravity uses floor RANSAC by default (`prefer_floor`); wall-heavy close-ups fall back to camera-up. Client loads LingBot Gaussians with `orientationMode: 'none'`. See `3DAIGC-API/docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md`.
 
+**Env mesh bake (OMB):** `POST /bake-env-mesh` (or `bake_env_mesh: true` on env-scan) writes `environment.mesh_url` for Scene Assembler. Image-to-world (TripoSplat) has no cameras — RP1 uses TRELLIS props only.
+
 If the API returns **404** for a job whose files still exist on DGX, rehydrate Redis on DGX:
 
 ```bash
@@ -101,5 +110,7 @@ Client: `worldPackage.js` builds manifest URL candidates and surfaces a clearer 
 `POST /api/v1/world-generation/environment-scan` — walk video / ≥3 frames → LingBot-Map world package (optional Phase A/B 3DGS) + `metric_calibration` for 1:1 meters.
 
 `POST /api/v1/world-generation/train-3dgs` — Phase B gsplat train on an existing env-scan world with `gs_dataset/`.
+
+`POST /api/v1/world-generation/bake-env-mesh` — TSDF bake → `environment_mesh.glb` for RP1/OMB (requires `gs_dataset/`; not TripoSplat I2W).
 
 See `3DAIGC-API/docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md`.

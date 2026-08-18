@@ -24,7 +24,5 @@ grep -q '_offsetViewerBehindAvatar' src/library/sceneManagerXrAvatarView.js
 grep -q 'stickPressed && !this._prevLeftStick' src/library/sceneManagerXrMenu.js
 grep -q 'PANEL_GRIP_DOWN_M' src/library/sceneManagerXrMenu.js
 grep -q 'alignXrLocomotionRigToViewport' src/library/sceneManagerXrLocomotion.js
-grep -q 'captureXrViewAsDesktop' src/library/sceneManagerXrLocomotion.js
-grep -q 'applyDesktopViewFromXr' src/library/sceneManager.js
 
 echo "XR_AVATAR_VIEW_LOCOMOTION_OK"

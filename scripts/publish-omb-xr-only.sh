@@ -9,6 +9,7 @@ git add \
   package.json \
   package-lock.json \
   scripts/verify-build-deps.mjs \
+  scripts/verify-jsx-placeholders.mjs \
   .env.example \
   docs/api/api.md \
   docs/SPATIAL_FABRIC_INTEGRATION.md \

@@ -124,10 +124,3 @@ src/__tests__/sceneManagerXrMenu.test.js
 scripts/verify_xr_avatar_view_locomotion.sh
 memory-bank/xr-avatar-view-locomotion-protected-state.md
 .cursor/rules/xr-avatar-view-locomotion-protected.mdc
-
-# --- Tasks panel UI (completed collapse + viewport Clear) ---
-src/components/TaskManager.jsx
-src/components/TaskManager.css
-scripts/verify_tasks_panel_ui.sh
-memory-bank/tasks-panel-ui-protected-state.md
-.cursor/rules/tasks-panel-ui-protected.mdc

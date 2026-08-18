@@ -7,7 +7,7 @@
  */
 
 /** Surface dev default — xr-spark-hub-proxy.mjs → DGX https://<DGX_LAN_IP>:8088 */
-const DEFAULT_DEV_HUB = 'https://<SURFACE_LAN_IP>:8443/';
+const DEV_HUB_PORT = 8443;
 
 /**
  * @param {string} url
@@ -17,6 +17,34 @@ function normalizeHubBase(url) {
   const trimmed = String(url || '').trim();
   if (!trimmed) return '';
   return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+}
+
+/**
+ * Dev hub base when VITE_XR_HUB_URL is unset — same host as Studio, XR proxy port.
+ * @returns {string}
+ */
+function resolveDevHubBase() {
+  if (typeof window !== 'undefined') {
+    const host = String(window.location?.hostname || '').trim();
+    if (host) {
+      return `https://${host}:${DEV_HUB_PORT}/`;
+    }
+  }
+  return `https://127.0.0.1:${DEV_HUB_PORT}/`;
+}
+
+/**
+ * @param {string} base
+ * @returns {boolean}
+ */
+function isValidAbsoluteUrl(base) {
+  try {
+    // eslint-disable-next-line no-new
+    new URL(base);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -38,7 +66,9 @@ function parentRemoteLogEnabled() {
 
 export function buildXrHubEmbedUrl(baseUrl = getXrHubEmbedUrl()) {
   const base = String(baseUrl || '').trim();
-  if (!base) return '';
+  if (!base || !isValidAbsoluteUrl(base.endsWith('/') ? base : `${base}/`)) {
+    return '';
+  }
   const url = new URL(base.endsWith('/') ? base : `${base}/`);
   url.searchParams.set('embed', '1');
   if (parentRemoteLogEnabled()) {
@@ -51,10 +81,11 @@ export function buildXrHubEmbedUrl(baseUrl = getXrHubEmbedUrl()) {
 export function getXrHubEmbedUrl() {
   const configured = String(import.meta.env.VITE_XR_HUB_URL || '').trim();
   if (configured) {
-    return normalizeHubBase(configured);
+    const normalized = normalizeHubBase(configured);
+    return isValidAbsoluteUrl(normalized) ? normalized : '';
   }
   if (import.meta.env.DEV) {
-    return DEFAULT_DEV_HUB;
+    return resolveDevHubBase();
   }
   return '';
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildStudioHandoffUrl,
   parseJobHandoffFromLocation,
+  parseLoadMeshFromLocation,
 } from '../library/jobHandoff.js';
 
 describe('jobHandoff', () => {
@@ -25,5 +26,14 @@ describe('jobHandoff', () => {
       openTasks: true,
       prompt: null,
     });
+  });
+
+  it('parseLoadMeshFromLocation reads Studio mesh handoff', () => {
+    expect(
+      parseLoadMeshFromLocation({
+        search: '?loadMesh=%2F__dev_dgx_proxy%2Fapi%2Fv1%2Fsystem%2Fjobs%2Fx%2Fdownload',
+      }),
+    ).toBe('/__dev_dgx_proxy/api/v1/system/jobs/x/download');
+    expect(parseLoadMeshFromLocation({ search: '?jobId=only' })).toBeNull();
   });
 });

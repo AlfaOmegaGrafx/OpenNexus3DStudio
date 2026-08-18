@@ -64,15 +64,21 @@ import {
   clearWorld as clearWorldLayers,
   computeXrFloorAlignmentY,
   ensureSceneRoots,
+  getWorldEnvironmentLayerVisibility,
   loadWorldEnvironmentSplat,
   loadWorldPackage as loadWorldPackageIntoScene,
+  setWorldEnvironmentLayerVisible,
 } from './worldSceneLoader.js';
 import { createSceneManagerXrInteraction } from './sceneManagerXrInteraction.js';
 import {
   XR_HAND_TRACKING_FEATURE,
   isXrInputVisualObject,
 } from './sceneManagerXrControllerVisuals.js';
-import { ensureXrLocomotionRig } from './sceneManagerXrLocomotion.js';
+import {
+  ensureXrLocomotionRig,
+  captureXrViewAsDesktop,
+  applyDesktopViewFromXr,
+} from './sceneManagerXrLocomotion.js';
 import { createDepthVisualizationMaterial, createViewNormalMaterial, createUVMaterial } from './diagnosticMaterials.js';
 import {
   collectModelBones,
@@ -80,6 +86,9 @@ import {
   countModelBones,
   alignSkinnedMeshToRig,
   anchorModelFeetToFloor,
+  applySkinTokensRigMetadata,
+  ensureCreatureTemplateFacesForward,
+  ensureSkinTokensRootFacesCamera,
   findPrimarySkinnedMesh,
   getBoneDisplayWorldPosition,
   getBoneWorldBounds,
@@ -88,6 +97,8 @@ import {
   getViewportFloorAnchorBounds,
   getViewportLayoutBounds,
   getPrimarySkeletonBones,
+  isCreatureTemplateRigExport,
+  isAppearanceComponentRigExport,
   logRigAlignmentDiagnostics,
   mergeModelBones,
   modelHasSkinnedMesh,
@@ -144,11 +155,16 @@ export class SceneManager {
     this.controls = null;
     this.currentModel = null;
     this.currentSplat = null;
+    /** Last loadModel source — string URL/path or `{ type:'file', name }` for companion handoff. */
+    this.lastLoadedSource = null;
     this.playerRoot = null;
     this.worldRoot = null;
     this.propsRoot = null;
     this.worldEnvironmentSplat = null;
+    this.worldEnvironmentMesh = null;
     this.worldColliderMesh = null;
+    this.worldEnvSplatVisible = true;
+    this.worldEnvMeshVisible = false;
     this.worldPropMeshes = [];
     this.activeWorldId = null;
     this.activeWorldManifest = null;
@@ -173,13 +189,15 @@ export class SceneManager {
       boxElement: null
     };
     
-    // Store camera state for XR mode restoration
+    // Store camera state for XR mode (spawn from desktop; exit applies last XR view)
     this.preXRCameraPosition = null;
     this.preXRCameraRotation = null;
     this.preXRCameraTarget = null;
     this.preXRCameraQuaternion = null;
     this.preXRCameraUp = null;
     this.preXRCameraZoom = null;
+    /** Last XR headset view mapped to desktop OrbitControls space. */
+    this.lastXrDesktopView = null;
     
     // Loaders
     this.gltfLoader = new GLTFLoader();
@@ -1949,6 +1967,21 @@ export class SceneManager {
 
   clearWorld() {
     clearWorldLayers(this);
+    this.worldEnvSplatVisible = true;
+    this.worldEnvMeshVisible = false;
+  }
+
+  /**
+   * Show/hide world 3DGS splat or baked env GLB. Showing one hides the other.
+   * @param {'splat'|'mesh'} layer
+   * @param {boolean} visible
+   */
+  setWorldEnvironmentLayerVisible(layer, visible) {
+    return setWorldEnvironmentLayerVisible(this, layer, visible, { exclusive: true });
+  }
+
+  getWorldEnvironmentLayerVisibility() {
+    return getWorldEnvironmentLayerVisibility(this);
   }
 
   _getPlayerParent() {
@@ -2023,10 +2056,28 @@ export class SceneManager {
     }
   }
 
+  /**
+   * Track load source for companion handoff (`/companion`).
+   * @param {string|File} source
+   */
+  _rememberLoadedSource(source) {
+    if (typeof source === 'string') {
+      const trimmed = source.trim();
+      this.lastLoadedSource = trimmed || null;
+      return;
+    }
+    if (typeof File !== 'undefined' && source instanceof File) {
+      this.lastLoadedSource = { type: 'file', name: source.name };
+      return;
+    }
+    this.lastLoadedSource = null;
+  }
+
   async loadModel(source, options = {}) {
     const managedViewport = Boolean(options.fromAigc || options.viewportManaged);
     const loadToken = managedViewport ? this._beginViewportLoad() : null;
     const isStale = () => this._isViewportLoadStale(loadToken);
+    this._rememberLoadedSource(source);
     try {
       this.emit('modelLoadingStart', { source });
       console.log('Loading model:', source);
@@ -2105,6 +2156,9 @@ export class SceneManager {
 
       if (options.autoRigMeta) {
         model.userData.autoRigMeta = options.autoRigMeta;
+      }
+      if (applySkinTokensRigMetadata(model, options.autoRigMeta)) {
+        console.log('[Rig] SkinTokens export — mesh↔rig geometric repair enabled');
       }
       if (this._shouldPreserveExportedOrientation(model, options)) {
         model.userData.preserveExportedOrientation = true;
@@ -3558,6 +3612,10 @@ export class SceneManager {
 
     const applyOrientation = () => {
       if (orientationMode === 'none') {
+        if (model.userData?.skintokensRig) {
+          ensureSkinTokensRootFacesCamera(model);
+        }
+        ensureCreatureTemplateFacesForward(model);
         return;
       }
       if (orientationMode === 'core3d') {
@@ -3650,8 +3708,11 @@ export class SceneManager {
                 });
 
                 if (modelHasSkinnedMesh(model)) {
+                  // Root Y snap only — rebind after parent translation desyncs skin vs bones.
                   model.updateMatrixWorld(true);
-                  rebindSkinnedMeshes(model);
+                  model.traverse((child) => {
+                    if (child.isSkinnedMesh) child.skeleton?.update();
+                  });
                 }
               }
     } else {
@@ -3694,6 +3755,24 @@ export class SceneManager {
       return;
     }
 
+    // Creature / Mesh2Motion paw rigs: shared paw-aware floor snap
+    if (isCreatureTemplateRigExport(this.currentModel)) {
+      const shiftY = anchorModelFeetToFloor(this.currentModel);
+      if (Math.abs(shiftY) > 0.001) {
+        console.log('[Rig] Floor-anchored creature template', { shiftY });
+      }
+      return;
+    }
+
+    // Appearance slot fragments: floor by bone soles (not garment AABB).
+    if (isAppearanceComponentRigExport(this.currentModel)) {
+      normalizeRiggedModelTransforms(this.currentModel, {
+        label: 'ensureModelOnGround-appearance',
+        preserveExportedOrientation: true,
+      });
+      return;
+    }
+
     const useLayoutBounds =
       modelHasSkinnedMesh(this.currentModel) ||
       countModelBones(this.currentModel) > 0;
@@ -3711,15 +3790,14 @@ export class SceneManager {
     
     if (Math.abs(modelBottom) > 0.001) {
       this.currentModel.position.y -= modelBottom;
+      this.currentModel.updateMatrixWorld(true);
+      this.currentModel.traverse((child) => {
+        if (child.isSkinnedMesh) child.skeleton?.update();
+      });
       console.log('Model moved to ground level:', {
         originalBottom: modelBottom,
         newPosition: this.currentModel.position
       });
-    }
-
-    if (modelHasSkinnedMesh(this.currentModel)) {
-      this.currentModel.updateMatrixWorld(true);
-      rebindSkinnedMeshes(this.currentModel);
     }
     
     if (
@@ -6522,22 +6600,17 @@ export class SceneManager {
       resetFaceRecordingAudioXrUnlock();
       await unlockFaceRecordingAudioPlayback();
 
-      // Save the current non-XR view so exiting AR/VR returns to the same 3D renderer view.
-      // Important: only capture if we don't already have a saved view (so VR->AR switching inside XR
-      // doesn't overwrite the original pre-XR view).
-      if (
-        !this.preXRCameraPosition &&
-        this.camera &&
-        this.controls &&
-        !this.renderer?.xr?.isPresenting
-      ) {
+      // Snapshot the current desktop viewpoint so XR spawn matches it.
+      // Only capture when not already presenting (so in-XR mode switches keep the original).
+      if (this.camera && this.controls && !this.renderer?.xr?.isPresenting) {
         this.preXRCameraPosition = this.camera.position.clone();
         this.preXRCameraRotation = this.camera.rotation.clone();
         this.preXRCameraQuaternion = this.camera.quaternion.clone();
         this.preXRCameraUp = this.camera.up.clone();
         this.preXRCameraZoom = this.camera.zoom;
         this.preXRCameraTarget = this.controls.target.clone();
-        console.log('💾 Saved camera state before XR:', {
+        this.lastXrDesktopView = null;
+        console.log('💾 Saved camera state before XR (spawn viewpoint):', {
           position: this.preXRCameraPosition,
           rotation: this.preXRCameraRotation,
           target: this.preXRCameraTarget,
@@ -7364,6 +7437,14 @@ export class SceneManager {
          this._xrExprFirstFrameDiagLogged = false;
          resetFaceRecordingAudioXrUnlock();
 
+         // Capture while wrapper/rig + camera pose are still available.
+         try {
+           this.lastXrDesktopView =
+             captureXrViewAsDesktop(this) || this.lastXrDesktopView;
+         } catch (err) {
+           console.warn('[XR] Failed to capture exit view:', err?.message || err);
+         }
+
          // Use setTimeout to ensure cleanup happens after session fully ends
          setTimeout(() => {
            // Clear XR animation loop
@@ -7543,7 +7624,8 @@ export class SceneManager {
   }
 
   /**
-   * Handle XR session end and restore scene structure
+   * Handle XR session end and restore scene structure.
+   * Desktop viewport becomes the last XR view (not the pre-enter snapshot).
    */
   handleXRSessionEnd(mode = 'xr') {
     console.log(`🧹 Cleaning up ${mode.toUpperCase()} session...`);
@@ -7552,41 +7634,9 @@ export class SceneManager {
     this._xrNoWebXrInputSources = false;
     this.removeVRExitHud();
 
-    // Restore camera position and rotation to pre-XR state
-    if (this.camera && this.preXRCameraPosition) {
-      this.camera.position.copy(this.preXRCameraPosition);
-      if (this.preXRCameraQuaternion) {
-        this.camera.quaternion.copy(this.preXRCameraQuaternion);
-      } else if (this.preXRCameraRotation) {
-        this.camera.rotation.copy(this.preXRCameraRotation);
-      }
-      if (this.preXRCameraUp) {
-        this.camera.up.copy(this.preXRCameraUp);
-      }
-      if (typeof this.preXRCameraZoom === 'number') {
-        this.camera.zoom = this.preXRCameraZoom;
-      }
-      if (typeof this.camera.updateProjectionMatrix === 'function') {
-        this.camera.updateProjectionMatrix();
-      }
-      if (this.controls && this.preXRCameraTarget) {
-        this.controls.target.copy(this.preXRCameraTarget);
-        this.controls.update();
-      }
-      console.log('✅ Camera view restored to pre-XR state:', {
-        position: this.camera.position.clone(),
-        rotation: this.camera.rotation.clone(),
-        target: this.controls?.target?.clone()
-      });
-      // Clear saved state
-      this.preXRCameraPosition = null;
-      this.preXRCameraRotation = null;
-      this.preXRCameraTarget = null;
-      this.preXRCameraQuaternion = null;
-      this.preXRCameraUp = null;
-      this.preXRCameraZoom = null;
-      // Note: preXRBackgroundSnapshot is cleared after restore in AR mode only
-    }
+    // Prefer the view captured on session end / last frame; try once more before unwrap.
+    const exitView =
+      this.lastXrDesktopView || captureXrViewAsDesktop(this) || null;
 
     // Restore scene background for AR (if it was changed for pass-through)
     // VR mode doesn't modify background, so no restoration needed
@@ -7709,6 +7759,40 @@ export class SceneManager {
       
       console.log('✅ Scene structure restored');
     }
+
+    // Desktop viewport = last XR view (content is back in scene-local space).
+    if (exitView) {
+      applyDesktopViewFromXr(this, exitView);
+    } else if (this.camera && this.preXRCameraPosition) {
+      // Fallback if capture failed (e.g. session ended before first frame).
+      this.camera.position.copy(this.preXRCameraPosition);
+      if (this.preXRCameraQuaternion) {
+        this.camera.quaternion.copy(this.preXRCameraQuaternion);
+      } else if (this.preXRCameraRotation) {
+        this.camera.rotation.copy(this.preXRCameraRotation);
+      }
+      if (this.preXRCameraUp) {
+        this.camera.up.copy(this.preXRCameraUp);
+      }
+      if (typeof this.preXRCameraZoom === 'number') {
+        this.camera.zoom = this.preXRCameraZoom;
+      }
+      if (typeof this.camera.updateProjectionMatrix === 'function') {
+        this.camera.updateProjectionMatrix();
+      }
+      if (this.controls && this.preXRCameraTarget) {
+        this.controls.target.copy(this.preXRCameraTarget);
+        this.controls.update();
+      }
+      console.log('⚠️ XR exit view missing — fell back to pre-XR camera');
+    }
+    this.preXRCameraPosition = null;
+    this.preXRCameraRotation = null;
+    this.preXRCameraTarget = null;
+    this.preXRCameraQuaternion = null;
+    this.preXRCameraUp = null;
+    this.preXRCameraZoom = null;
+    this.lastXrDesktopView = null;
 
     // Clear XR renderer reference
     this.xrRenderer = null;
@@ -7915,7 +7999,10 @@ export class SceneManager {
     this.propsRoot = null;
     this.worldPropMeshes = [];
     this.worldEnvironmentSplat = null;
+    this.worldEnvironmentMesh = null;
     this.worldColliderMesh = null;
+    this.worldEnvSplatVisible = true;
+    this.worldEnvMeshVisible = false;
     this.activeWorldId = null;
     this.activeWorldManifest = null;
     
