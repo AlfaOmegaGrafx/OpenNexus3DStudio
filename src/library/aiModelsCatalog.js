@@ -6,8 +6,8 @@
  * Verified DGX Spark paths (Jun 2026):
  * - Image → 3D: TRELLIS.2 (TRELLIS v1 fails xformers on GB200-class GPUs)
  * - Auto rig (full ML): SkinTokens (recommended) or UniRig full (same model id, rig_mode=full)
- * - Auto rig (template VRM): UniRig adapter in template mode (Blender fits template.vrm — not a separate model)
- * - Avatar from image: TRELLIS.2 mesh → UniRig template.vrm
+ * - Auto rig (template VRM): UniRig adapter in template mode (Blender fits template_ict.vrm — not a separate model)
+ * - Avatar from image: TRELLIS.2 mesh → UniRig template_ict.vrm
  * - World props / mesh paint: TRELLIS.2
  *
  * Note: `unirig_auto_rig` is one API model with modes. UI “UniRig template VRM” sets
@@ -75,7 +75,7 @@ export const ALL_MODELS = [
   },
   { value: 'p3sam_mesh_segmentation', label: 'P3-SAM Mesh Segmentation', feature: 'mesh_segmentation' },
   { value: 'skintokens_auto_rig', label: 'SkinTokens Auto Rig (recommended — full rig + GLB)', feature: 'auto_rig' },
-  { value: 'unirig_auto_rig', label: 'UniRig (one backend: template.vrm fit OR full ML — pick mode)', feature: 'auto_rig' },
+  { value: 'unirig_auto_rig', label: 'UniRig (one backend: template_ict.vrm fit OR full ML — pick mode)', feature: 'auto_rig' },
   {
     value: 'appearance_component_auto_rig',
     label: 'Appearance Clothing Fit (VRM slot — Joggers, Shirt, Boots…)',
@@ -122,8 +122,8 @@ export const PREFERRED_PIPELINES = {
     rigMode: AUTO_RIG_MODES.FULL,
   },
   avatarFromImage: {
-    label: 'Avatar from photo (template VRM)',
-    steps: ['TRELLIS.2 image→3D', 'UniRig template.vrm fit → VRM'],
+    label: 'Avatar from Image (ICT template)',
+    steps: ['TRELLIS.2 image→3D', 'UniRig template_ict.vrm fit → VRM'],
     taskType: 'avatar-from-image',
     meshModel: 'trellis2_image_to_textured_mesh',
     rigModel: TEMPLATE_RIG_MODEL_ID,
@@ -236,7 +236,6 @@ export const TASK_TYPE_TO_FEATURE = {
   'image-edit': 'image_edit',
   'text-to-motion': 'text_to_motion',
   'avatar-from-image': null,
-  'avatar-from-photo': null,
   [ARC2AVATAR_TASK_TYPE]: ARC2AVATAR_FEATURE,
 };
 

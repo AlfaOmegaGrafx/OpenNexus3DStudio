@@ -42,7 +42,7 @@ describe('TaskManager template auto-rig', () => {
     expect(rigCall[0]).toBe('http://api.example.com/api/v1/auto-rigging/generate-rig');
     expect(rigCall[1]).toMatchObject({
       rig_mode: 'template',
-      humanoid_template_id: 'template',
+      humanoid_template_id: 'ict',
       output_format: 'vrm',
       model_preference: 'unirig_auto_rig',
     });

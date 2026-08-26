@@ -52,8 +52,7 @@ Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API]
 | Text to Motion (Kimodo) | `text_to_motion` | **Kimodo SOMA-RP-v1.1** → studio motion JSON → VRM / rigged GLB playback |
 | Image to Gaussian Splat | `image_to_splat` | TripoSplat (1 photo), WorldMirror 2.0 (2+), COLMAP (3+) |
 | Image to World | `image_to_world` | `opennexus_image_to_world` (splat env + optional TRELLIS.2 props) |
-| Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig template rig → GLB |
-| Avatar From Photo | client only | AvatarSDK (not 3DAIGC-API) |
+| Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig ICT template → VRM |
 
 **Also shipped (client + API):**
 
@@ -361,14 +360,6 @@ The application connects to a 3DAIGC-API backend. You can configure the endpoint
 # API Configuration (DGX Spark default :7842; Surface dev often uses /__dev_dgx_proxy)
 VITE_API_ENDPOINT=/__dev_dgx_proxy
 
-# AvatarSDK (photo -> avatar)
-# For production, route OAuth through backend if possible.
-VITE_AVATARSDK_CLIENT_ID=<avatarsdk_client_id>
-VITE_AVATARSDK_CLIENT_SECRET=<avatarsdk_client_secret>
-VITE_AVATARSDK_PLAYER_UID=<optional_per_user_or_device_uuid>
-VITE_AVATARSDK_PIPELINE=metaperson_2.0
-VITE_AVATARSDK_PIPELINE_SUBTYPE=male
-
 # Thirdweb Configuration (for blockchain features)
 VITE_THIRDWEB_CLIENT_ID=your_thirdweb_client_id
 VITE_THIRDWEB_SECRET_KEY=your_secret_key
@@ -376,11 +367,6 @@ VITE_THIRDWEB_SECRET_KEY=your_secret_key
 # Base x402 Configuration (when SDK is available)
 VITE_BASE_X402_API_KEY=your_base_api_key
 ```
-
-### AvatarSDK Integration
-- A new AI task type is available in the task panel: `Avatar From Photo (AvatarSDK)`.
-- Choose that task type, upload a face photo, and run it like any other task.
-- The app creates an avatar, polls completion, polls export completion, and exposes the returned export file URL as `modelUrl`/`downloadUrl`.
 
 ### Electron Configuration
 Desktop applications are configured in `package.json` under the `build` section. The main process is in `public/electron.js`.
@@ -426,7 +412,7 @@ npm run dist-linux  # Linux
 
 This README reflects the current project structure. Public technical docs live under `docs/` (see **Additional Documentation** below). Copy `.env.example` to `.env` for local configuration — never commit `.env`.
 
-- **[History & Roadmap](docs/docs/history.md)**: Connect wallet to load profiles or mint files; AI personality for VRM; optional profiles/personality from user‑controlled personal data exports; integration with external 3D launchpads for minting avatars and wearables; **[moeChat](https://github.com/AlfaOmegaGrafx/chat)** (self-hosted companion for “talk to your VRM”, WebXR); **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** — export/handoff only, not merged into this repo
+- **[History & Roadmap](docs/docs/history.md)**: Connect wallet to load profiles or mint files; AI personality for VRM; optional profiles/personality from user‑controlled personal data exports; integration with external 3D launchpads for minting avatars and wearables; **[Companion](https://github.com/AlfaOmegaGrafx/chat)** (self-hosted companion for “talk to your VRM”, WebXR); **optional [AIRI](https://github.com/AlfaOmegaGrafx/airi)** — export/handoff only, not merged into this repo
 - **[Wallet-Owned Assets Approach](docs/WALLET_OWNED_ASSETS_AVATAR_APPROACH.md)**: Programmatic avatar/wearables from connected wallet (RMRK EVM, Thirdweb); soulbound base body + equippable wearables
 
 OpenNexus3DStudio’s avatar model: **soulbound base body** (layer 0, non-transferable) with **equippable** clothing, hair, and accessories—supporting wallet-driven assembly when implemented.

@@ -5,7 +5,10 @@
  * existing VRMExporter path with template metadata merged from the API manifest.
  */
 import { downloadVRMWithAvatar } from './download-utils.js';
-import { DEFAULT_HUMANOID_TEMPLATE_ID } from './avatarPipelineCatalog.js';
+import {
+  DEFAULT_HUMANOID_TEMPLATE_ID,
+  HUMANOID_TEMPLATE_VRM_FILE,
+} from './avatarPipelineCatalog.js';
 import { ensureAbsoluteUrl, get3daigcAuthHeaders } from './taskManager.js';
 import { loadVrmTemplateMetadataFromSession } from './vrmTemplateMetadata.js';
 
@@ -73,7 +76,7 @@ export async function exportAvatarPipelineVrm({
   autoRigMeta = null,
 }) {
   if (!model) {
-    throw new Error('No model loaded to export as VRM');
+    throw new Error('No model loaded to export as an avatar');
   }
 
   const manifest = await fetchHumanoidTemplateManifest(apiEndpoint, humanoidTemplateId);
@@ -107,10 +110,10 @@ export async function exportAvatarPipelineVrm({
 
 /**
  * @param {string} apiEndpoint
- * @param {string} templateVrmUrl - optional direct URL to template.vrm on API static path
+ * @param {string} templateVrmUrl - optional direct URL to template_ict.vrm on API (operator-local)
  */
 export function resolveTemplateVrmAssetUrl(apiEndpoint, templateVrmUrl = '') {
   if (templateVrmUrl && /^https?:\/\//i.test(templateVrmUrl)) return templateVrmUrl;
   const base = ensureAbsoluteUrl(apiEndpoint || '');
-  return `${base.replace(/\/$/, '')}/assets/example_autorig/template.vrm`;
+  return `${base.replace(/\/$/, '')}/assets/example_autorig/${HUMANOID_TEMPLATE_VRM_FILE}`;
 }

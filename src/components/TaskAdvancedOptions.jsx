@@ -3,7 +3,7 @@ import { fetchModelParameters, buildDefaultModelParameters } from '../library/mo
 import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
-  HUMANOID_TEMPLATE_OPTIONS,
+  HUMANOID_TEMPLATE_VRM_FILE,
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
 import {
@@ -355,7 +355,7 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                   <option value="skeleton">Skeleton — bones only (SkinTokens or UniRig)</option>
                   <option value="full">Full — SkinTokens / UniRig + skin weights</option>
                   <option value="skin">Skin — skin-focused rig pass</option>
-                  <option value="template">Template VRM — UniRig fits mesh to template.vrm (GLB)</option>
+                  <option value="template">Template avatar — UniRig fits mesh to template avatar (GLB)</option>
                   <option value="creature_template">
                     Creature template — Mesh2Motion fox / quadruped skeleton (GLB)
                   </option>
@@ -366,27 +366,11 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
                 </p>
               </div>
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE && (
-                <>
-                  <div style={{ marginBottom: '0.4rem' }}>
-                    <label style={labelStyle}>Humanoid template</label>
-                    <select
-                      style={inputStyle}
-                      value={value?.humanoid_template_id ?? DEFAULT_HUMANOID_TEMPLATE_ID}
-                      onChange={(e) => setField('humanoid_template_id', e.target.value)}
-                    >
-                      {HUMANOID_TEMPLATE_OPTIONS.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <p style={{ fontSize: '0.55rem', color: '#888', margin: '0 0 0.4rem' }}>
-                    Uses <code style={{ fontSize: '0.55rem' }}>{HUMANOID_TEMPLATE_OPTIONS[0]?.vrmFile}</code>{' '}
-                    on the API (CC-Wrap-style bone fit). Output is GLB with template skeleton; facial
-                    blend shapes stay on the template topology until non-rigid wrap is added.
-                  </p>
-                </>
+                <p style={{ fontSize: '0.55rem', color: '#888', margin: '0 0 0.4rem' }}>
+                  Uses <code style={{ fontSize: '0.55rem' }}>{HUMANOID_TEMPLATE_VRM_FILE}</code>{' '}
+                  on the API (ICT morph head + humanoid skeleton). Output is GLB/VRM with ARKit blend
+                  shapes on the template topology.
+                </p>
               )}
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.CREATURE_TEMPLATE && (
                 <>

@@ -28,7 +28,6 @@ These are inlined into the browser bundle (`import.meta.env.VITE_*`):
 | Variable | Why |
 |----------|-----|
 | `VITE_3DAIGC_API_KEY` | API bearer token |
-| `VITE_AVATARSDK_CLIENT_SECRET` | OAuth secret |
 | `VITE_THIRDWEB_SECRET_KEY` | Wallet secret |
 | `VITE_PINATA_*`, `VITE_ALCHEMY_*`, `VITE_BASE_X402_*`, `VITE_VANA_*` | Service secrets |
 | `VITE_HELIUS_KEY`, `VITE_OPENSEA_KEY` | Paid API keys |
@@ -44,7 +43,6 @@ These are inlined into the browser bundle (`import.meta.env.VITE_*`):
 | Variable | Purpose |
 |----------|---------|
 | `VITE_THIRDWEB_CLIENT_ID` | Public wallet client id |
-| `VITE_AVATARSDK_CLIENT_ID` | Public AvatarSDK client id (no secret) |
 | `VITE_JOB_STATUS_PATH` | Only if you expose a **public** API URL |
 | `VITE_XR_HUB_URL` | Local dev / self-hosted only — live Spark hub iframe (not used on Vercel public demo) |
 

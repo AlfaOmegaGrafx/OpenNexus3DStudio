@@ -74,26 +74,21 @@ export function headTrackIsNone(headTrack) {
   return normalizeHeadTrack(headTrack) === HEAD_TRACK.NONE;
 }
 
-/** Primary humanoid template id (maps to assets/example_autorig/template.vrm). */
-export const DEFAULT_HUMANOID_TEMPLATE_ID = 'template';
+/** Product humanoid template id (ICT morph head on API). */
+export const DEFAULT_HUMANOID_TEMPLATE_ID = 'ict';
 
-/** @deprecated Use DEFAULT_HUMANOID_TEMPLATE_ID — kept for older API payloads. */
-export const LEGACY_HUMANOID_TEMPLATE_ID = 'sifr2';
+/** VRM filename for operator-local ICT template on the API. */
+export const HUMANOID_TEMPLATE_VRM_FILE = 'template_ict.vrm';
 
-export const HUMANOID_TEMPLATE_OPTIONS = [
-  {
-    value: DEFAULT_HUMANOID_TEMPLATE_ID,
-    label: 'Template VRM (master rig + facial blend shapes)',
-    vrmFile: 'template.vrm',
-  },
-];
+/** @deprecated Legacy ids from pre-ICT jobs — normalize to ict. */
+export const DEPRECATED_HUMANOID_TEMPLATE_IDS = Object.freeze(['template', 'sifr2']);
 
 export const AUTO_RIG_MODES = {
   SKELETON: 'skeleton',
   FULL: 'full',
   SKIN: 'skin',
   TEMPLATE: 'template',
-  /** Phase 5 head stitch: keep template.vrm morph head + AIGC body. */
+  /** Phase 5 head stitch: keep ICT morph head + AIGC body. */
   TEMPLATE_WRAP: 'template_wrap',
   APPEARANCE_COMPONENT: 'appearance_component',
   CREATURE_TEMPLATE: 'creature_template',
@@ -212,7 +207,7 @@ export function isBodyClothStudioTaskType(taskType) {
  */
 export function normalizeHumanoidTemplateId(templateId) {
   const id = String(templateId || DEFAULT_HUMANOID_TEMPLATE_ID).trim().toLowerCase();
-  if (id === LEGACY_HUMANOID_TEMPLATE_ID) return DEFAULT_HUMANOID_TEMPLATE_ID;
+  if (DEPRECATED_HUMANOID_TEMPLATE_IDS.includes(id)) return DEFAULT_HUMANOID_TEMPLATE_ID;
   return id || DEFAULT_HUMANOID_TEMPLATE_ID;
 }
 

@@ -34,19 +34,23 @@ import {
 } from '../library/aiModelsCatalog.js';
 
 describe('avatarPipelineCatalog', () => {
-  it('normalizes legacy sifr2 template id to template', () => {
-    expect(normalizeHumanoidTemplateId('sifr2')).toBe('template');
+  it('normalizes legacy template ids to ict', () => {
+    expect(normalizeHumanoidTemplateId('sifr2')).toBe('ict');
+    expect(normalizeHumanoidTemplateId('template')).toBe('ict');
     expect(normalizeHumanoidTemplateId()).toBe(DEFAULT_HUMANOID_TEMPLATE_ID);
+    expect(DEFAULT_HUMANOID_TEMPLATE_ID).toBe('ict');
   });
 
   it('buildTemplateAutoRigOptions matches API contract', () => {
     const opts = buildTemplateAutoRigOptions({ humanoid_template_id: 'sifr2' });
     expect(opts).toEqual({
       rig_mode: AUTO_RIG_MODES.TEMPLATE,
-      humanoid_template_id: 'template',
+      humanoid_template_id: 'ict',
       output_format: 'vrm',
       model_preference: 'unirig_auto_rig',
     });
+    const ictOpts = buildTemplateAutoRigOptions();
+    expect(ictOpts.humanoid_template_id).toBe('ict');
   });
 
   it('isTemplateRigMode detects template / template_wrap + UniRig', () => {

@@ -173,6 +173,18 @@ Frozen snapshot of the user-confirmed good UI (header, scene-controls, rails, Av
 
 Port **3000** runs on Surface, not on DGX.
 
+**Companion (Surface UI, DGX GPU):** `npm run dev` auto-starts Companion on Surface `:5173` and HTTPS proxy `:8464` (iframe on `/companion`). PersonaPlex stays on DGX `:8998` (Surface WSS `:8455`). If Surface Companion is down, `:8464` falls back to DGX `:5173`. First-time copy: on DGX `bash scripts/sync-companion-to-surface.sh`. Manual UI start: `.\scripts\start-companion-chat-surface.ps1`.
+
+### PersonaPlex / Companion ops
+
+| Task | Where | Command |
+|------|-------|---------|
+| Ensure DGX stack (PersonaPlex + WSS) | **DGX** | `bash scripts/ensure-companion-stack-dgx.sh` |
+| Clear stuck GPU lock (`503 … busy`) | **DGX** | `bash scripts/restart-personaplex-clear-busy.sh` — waits until `/api/chat` is not busy (~2–3 min cold load) |
+| Idle release | **DGX moshi** | Env `PERSONAPLEX_IDLE_TIMEOUT_S` (default **45**) closes dead WS and releases the single GPU lock |
+| Restart Surface companion HTTPS proxy | **Surface** | `.\scripts\restart-companion-8464.ps1` — if Access Denied on old PID, End Task that `node` in elevated Task Manager, then re-run |
+| Health | either | Root `http://10.0.0.158:8998/` → **200**; plain GET `/api/chat` → **400** (needs WS) = free; **503 busy** = stuck session |
+
 ### Kill whatever is holding port 3000
 
 | | |
@@ -235,7 +247,7 @@ Run on **DGX** after every reboot (or when Surface says API/MSF/XR unreachable).
 | MySQL (`msf-mysql`) | 3306 | `MSF_Map_Svc/scripts/ensure-msf-mysql.sh` |
 | MSF Map Service | 8443 | `MSF_Map_Svc/scripts/run-msf-map-svc.sh` |
 
-**Surface (each dev session — not DGX):** `cd OpenNexus3DStudio` → `npm run dev` and `npm run dev:spark-proxies` when using MSF Scene Assembler or Galaxy XR voice.
+**Surface (each dev session — not DGX):** `cd OpenNexus3DStudio` → `npm run dev` (also starts Companion UI `:5173` + companion proxy `:8464` when the chat repo exists on Surface) and `npm run dev:spark-proxies` when using MSF Scene Assembler or Galaxy XR voice. PersonaPlex: DGX `bash scripts/ensure-companion-stack-dgx.sh`.
 
 **Aliases:** `start-dgx-after-reboot.sh` → `ensure-spark-dev-services.sh`. MSF helpers: `ensure-msf-mysql.sh`, `verify-fabric-url.sh`.
 
@@ -578,14 +590,14 @@ cd /home/sifr/3DAIGC-API
 
 ## 9. Avatar pipeline smoke test (DGX)
 
-1. Place your master rig:
-   `cp /path/to/your/master.vrm /home/sifr/3DAIGC-API/assets/example_autorig/template.vrm`
-2. Download weights if needed:
+1. Ensure operator-local ICT morph head is available on the API (`humanoid_template_id=ict`, `HUMANOID_TEMPLATE_VRM` or `assets/example_autorig/template_ict.vrm`).
+2. Download weights if needed:  
    `cd /home/sifr/3DAIGC-API && ./scripts/download_models.sh -m triposplat`
 3. Restart API (section 5).
-4. In **OpenNexus3DStudio** on Surface:
-   - **Avatar from Image** → upload photo → Start, or
-   - Image to 3D → load mesh → Auto Rigging → Rig mode: Template VRM
+4. In **OpenNexus 3D** on Surface:
+   - **Avatar from Image** / Body+Cloth → photo → TRELLIS/Pixal3D headless body + ICT morph head stitch
+   - Clothing → Appearance fit (`appearance_base.vrm` slots), not the wrap head template
+   - Auto Rigging → Rig mode: Template / Template wrap (defaults to **ict** when built)
 
 ---
 
@@ -741,6 +753,10 @@ python main.py
 | **3306** | MySQL (`msf-mysql`) | MSF map DB — Docker, localhost only |
 | **22** | SSH | Cursor Remote, sync scripts, scp |
 | **3000** | Vite | **Surface only** — not on DGX |
+| **5173** | Companion UI | **Surface preferred** (`127.0.0.1`); DGX is fallback |
+| **8464** | Companion HTTPS proxy | **Surface only** — iframe target for `/companion` |
+| **8455** | PersonaPlex WSS proxy | Surface and/or DGX → moshi.server `:8998` |
+| **8998** | PersonaPlex moshi.server | **DGX only** (GPU) |
 | **8188** | ComfyUI | When ComfyUI is running |
 | **11434** | Ollama | Local LLM API |
 | **8080** | OpenShell cluster | Separate from 3DAIGC |

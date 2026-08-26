@@ -85,6 +85,6 @@ Remove `VITE_ASSET_PATH` from Vercel env and `vercel.json`. Build will shallow-c
 ## Security (public Vercel)
 
 - **Not a breach by itself:** disconnected-state UI only names env vars (`VITE_API_ENDPOINT`, etc.) — not their values.
-- **Never set on Vercel:** `VITE_3DAIGC_API_KEY`, `VITE_AVATARSDK_CLIENT_SECRET`, `VITE_THIRDWEB_SECRET_KEY`, Pinata/Alchemy secrets — Vite embeds `VITE_*` in the client bundle.
+- **Never set on Vercel:** `VITE_3DAIGC_API_KEY`, `VITE_THIRDWEB_SECRET_KEY`, Pinata/Alchemy secrets — Vite embeds `VITE_*` in the client bundle.
 - **Production build** hides the API Status panel when `VITE_PUBLIC_DEMO=1`, dev troubleshooting, endpoint editor, and sidebar debug panel.
 - **Audit:** Vercel → Settings → Environment Variables → remove any secret `VITE_*` keys; redeploy.

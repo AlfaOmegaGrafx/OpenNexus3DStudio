@@ -10,7 +10,6 @@ import { logger } from './logger.js';
 import { isLocalDev } from './runtimeUi.js';
 import { performanceMonitor } from './performanceMonitor.js';
 import { rollbackManager } from './rollbackManager.js';
-import avatarSdkService from '../services/avatarSdkService.js';
 import {
   buildJobDownloadUrl,
   enrichCompletedJobPayload,
@@ -249,7 +248,6 @@ export class TaskManager {
       'image-to-splat',
       'avatar-from-image',
       ARC2AVATAR_TASK_TYPE,
-      'avatar-from-photo',
       'image-to-world',
       'environment-scan',
       'text-to-image',
@@ -858,8 +856,6 @@ export class TaskManager {
         return await this.executeMeshEditingImage(prompt, imageFile, options, modelData);
       case 'auto-rigging':
         return await this.executeAutoRigging(options, modelData);
-      case 'avatar-from-photo':
-        return await this.executeAvatarFromPhoto(prompt, imageFile, options);
       case 'avatar-from-image':
         return await this.executeAvatarFromImage(prompt, imageFile, options);
       case ARC2AVATAR_TASK_TYPE:
@@ -2116,23 +2112,6 @@ export class TaskManager {
       mesh_job_id: meshJob.job_id,
       humanoid_template_id: templateRig.humanoid_template_id,
     };
-  }
-
-  async executeAvatarFromPhoto(prompt, imageFile, options = {}) {
-    if (!imageFile) {
-      throw new Error('AvatarSDK task requires an input photo.');
-    }
-
-    return avatarSdkService.generateAvatarFromPhoto({
-      imageFile,
-      name: options?.object_name || options?.name || prompt || `Avatar ${new Date().toISOString()}`,
-      description: options?.description || '',
-      pipeline: options?.pipeline,
-      pipelineSubtype: options?.pipeline_subtype,
-      onProgress: ({ stage, status, progress }) => {
-        this.emitTaskProgress( { stage, status, progress });
-      }
-    });
   }
 
   /**

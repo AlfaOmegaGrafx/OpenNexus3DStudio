@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTask } from '../context/TaskContext';
 import { useScene } from '../context/SceneContext';
-import avatarSdkService from '../services/avatarSdkService.js';
 import { ensureAbsoluteUrl, get3daigcAuthHeaders } from '../library/taskManager';
 import {
   ALL_MODELS,
@@ -217,8 +216,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   });
   const [meshEditSourceImage, setMeshEditSourceImage] = useState(null);
   const [meshEditMaskImage, setMeshEditMaskImage] = useState(null);
-  const [isCheckingAvatarSdk, setIsCheckingAvatarSdk] = useState(false);
-  const [avatarSdkCheckResult, setAvatarSdkCheckResult] = useState(null);
   const [deletingTaskId, setDeletingTaskId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const [isSyncingTasks, setIsSyncingTasks] = useState(false);
@@ -281,10 +278,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   /** When true, skip the auto-rigging default useEffect (Rig panel already set model/mode). */
   const skipAutoRigDefaultsRef = useRef(false);
 
-  const avatarSdkReady = Boolean(
-    import.meta.env.VITE_AVATARSDK_CLIENT_ID && import.meta.env.VITE_AVATARSDK_CLIENT_SECRET
-  );
-  const canStartAnyTask = isApiConnected || avatarSdkReady;
+  const canStartAnyTask = isApiConnected;
   const canBrowseCatalog = canBrowseAiTaskCatalog();
   const normalizedNewObjectName = normalizeObjectName(newObjectName);
   const canSubmitNewTask = Boolean(normalizedNewObjectName);
@@ -335,7 +329,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     if (fileInputRef.current) return;
     const needsImageInput =
       showNewTask &&
-      ['image-to-3d', 'image-to-raw-mesh', 'image-to-splat', 'image-to-world', 'environment-scan', 'avatar-from-image', ARC2AVATAR_TASK_TYPE, 'mesh-painting', 'mesh-editing-image', 'avatar-from-photo'].includes(newTaskType);
+      ['image-to-3d', 'image-to-raw-mesh', 'image-to-splat', 'image-to-world', 'environment-scan', 'avatar-from-image', ARC2AVATAR_TASK_TYPE, 'mesh-painting', 'mesh-editing-image'].includes(newTaskType);
     if (needsImageInput) {
       console.warn('TaskManager: file input ref missing while task needs image upload');
     }
@@ -421,8 +415,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         metric_true_meters: prev.metric_true_meters ?? '0.762',
         metric_recon_length: prev.metric_recon_length ?? '0.47',
         metric_axis: prev.metric_axis || 'horizontal',
-        metric_true_meters: prev.metric_true_meters ?? '',
-        metric_recon_length: prev.metric_recon_length ?? '',
       }));
       if (defaultModel) setNewTaskModel(defaultModel);
     } else if (newTaskType === 'text-to-image') {
@@ -600,7 +592,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
   const requiresPrompt = (taskType) => {
     if (
-      taskType === 'avatar-from-photo' ||
       taskType === 'avatar-from-image' ||
       isArc2AvatarTaskType(taskType) ||
       isBodyClothStudioTaskType(taskType) ||
@@ -628,7 +619,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       return;
     }
     if (!canStartAnyTask) {
-      alert(canBrowseCatalog ? AI_BACKEND_UNAVAILABLE_MSG : 'Configure DGX API or AvatarSDK before starting tasks.');
+      alert(canBrowseCatalog ? AI_BACKEND_UNAVAILABLE_MSG : 'Configure DGX API (VITE_API_ENDPOINT) before starting tasks.');
       return;
     }
     console.log('TaskManager: handleSubmitTask called');
@@ -720,7 +711,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     }
     if (newTaskType === 'avatar-from-image' && !newTaskImage) {
-      alert('⚠️ Avatar from Image requires a photo (mesh + template.vrm rig).');
+      alert('⚠️ Avatar from Image requires a photo (mesh + template avatar rig).');
       return;
     }
     if (isArc2AvatarTaskType(newTaskType)) {
@@ -750,15 +741,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         return;
       }
     }
-    if (newTaskType === 'avatar-from-photo' && !avatarSdkReady) {
-      alert('⚠️ AvatarSDK is not configured. Set VITE_AVATARSDK_CLIENT_ID and VITE_AVATARSDK_CLIENT_SECRET in .env.');
-      return;
-    }
-    if (newTaskType === 'avatar-from-photo' && !newTaskImage) {
-      alert('⚠️ Please upload a face photo for AvatarSDK.');
-      return;
-    }
-    if (newTaskType !== 'avatar-from-photo' && newTaskType !== 'avatar-from-image' && !isApiConnected) {
+    if (newTaskType !== 'avatar-from-image' && !isApiConnected) {
       alert('⚠️ DGX API is not connected. Connect API Status first for this task type.');
       return;
     }
@@ -778,10 +761,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     // For model-based tasks, use a descriptive prompt if none provided
     let prompt =
       newTaskPrompt.trim() ||
-      (newTaskType === 'avatar-from-photo'
-        ? 'Generate avatar from uploaded photo'
-        : newTaskType === 'avatar-from-image'
-          ? 'Generate avatar from photo (mesh + template VRM rig)'
+      (newTaskType === 'avatar-from-image'
+        ? 'Generate avatar from image (mesh + ICT template rig)'
           : newTaskType === 'image-to-world'
             ? objectName
             : newTaskType === 'environment-scan'
@@ -1010,22 +991,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     } else {
       console.error('TaskManager: fileInputRef.current is null - file input not found');
-    }
-  };
-
-  const handleCheckAvatarSdk = async () => {
-    setIsCheckingAvatarSdk(true);
-    setAvatarSdkCheckResult(null);
-    try {
-      const result = await avatarSdkService.checkMetaPersonAvailability();
-      setAvatarSdkCheckResult(result);
-    } catch (error) {
-      setAvatarSdkCheckResult({
-        ok: false,
-        message: error?.message || 'MetaPerson 2.0 access check failed.'
-      });
-    } finally {
-      setIsCheckingAvatarSdk(false);
     }
   };
 
@@ -1284,7 +1249,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const PIPELINE_LABELS = {
     skintokens: 'SkinTokens — biped / character',
     creature: 'Creature template — fox / quadruped',
-    template: 'UniRig → template.vrm fit (Blender; not UniRig ML)',
+    template: 'UniRig → template avatar fit (Blender; not UniRig ML)',
     appearance: 'Appearance fit — clothing / wearable',
   };
 
@@ -1484,7 +1449,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     ? isViewportLoading
                       ? 'Loading into viewport…'
                       : task.type === 'text-to-motion' || isTextToMotionTaskResult(task.result)
-                        ? 'Click to load animation on the VRM'
+                        ? 'Click to load animation on the avatar'
                         : 'Click to open in viewport'
                     : isImageTask && task.status === 'completed'
                       ? 'Generated image — use Download or Image to 3D below'
@@ -1632,7 +1597,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           : '✗ Viewport load failed'
                         : isViewportActive
                           ? isMotion
-                            ? '● Playing on VRM'
+                            ? '● Playing on avatar'
                             : '● In viewport'
                           : '✓ Completed'}
                     {isWorld ? (
@@ -1670,7 +1635,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           borderRadius: '3px',
                           cursor: 'pointer',
                         }}
-                        title="Load studio_motion.json and play on the viewport VRM"
+                        title="Load studio_motion.json and play on the viewport avatar"
                       >
                         Load Animation
                       </button>
@@ -2105,7 +2070,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 </>
               ) : (
                 <>
-                  Configure either DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>) or AvatarSDK credentials (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_ID</code> / <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_SECRET</code>).
+                  Configure DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>).
                 </>
               )}
             </div>
@@ -2144,7 +2109,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               ⚠️ No AI Provider Available
             </div>
             <div style={{ fontSize: '0.6rem', lineHeight: '1.4' }}>
-              Configure either DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>) or AvatarSDK credentials (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_ID</code> / <code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_AVATARSDK_CLIENT_SECRET</code>).
+              Configure DGX API (<code style={{ background: '#f8f9fa', padding: '0.2rem 0.4rem', borderRadius: '3px', fontSize: '0.6rem' }}>VITE_API_ENDPOINT</code>).
             </div>
           </div>
         )}
@@ -2173,7 +2138,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               </a>{' '}
               Workflows use DGX-verified defaults: TRELLIS.2 for image→3D;{' '}
               <strong>SkinTokens</strong> for <em>Auto Rigging → full rig</em>;{' '}
-              <strong>UniRig</strong> for <em>Avatar from Image → template VRM</em> (not SkinTokens).
+              <strong>UniRig</strong> for <em>Avatar from Image → template avatar</em> (not SkinTokens).
               {isApiConnected
                 ? ' Models list updates from the API when connected.'
                 : canBrowseCatalog
@@ -2250,7 +2215,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   <option value="image-to-splat">Image to Gaussian Splat</option>
                   <option value="image-to-world">Image to World (splat + props)</option>
                   <option value="environment-scan">Environment scan (walk → 1:1 twin)</option>
-                  <option value="avatar-from-image">Avatar from Image (VRM)</option>
+                  <option value="avatar-from-image">Avatar from Image</option>
                   <option value={BODY_CLOTH_STUDIO_TASK_TYPE}>
                     Head track · Body+Cloth (Studio)
                   </option>
@@ -2265,7 +2230,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   <option value="mesh-editing-text">Mesh editing (text)</option>
                   <option value="mesh-editing-image">Mesh editing (image)</option>
                   <option value="auto-rigging">Auto Rigging</option>
-                  <option value="avatar-from-photo">Avatar From Photo</option>
                 </select>
               </div>
 
@@ -2343,7 +2307,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               </div>
 
               {isApiConnected &&
-                newTaskType !== 'avatar-from-photo' &&
                 newTaskType !== 'avatar-from-image' &&
                 !isBodyClothStudioTaskType(newTaskType) && (
                 <TaskAdvancedOptions
@@ -2416,13 +2379,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           SkinTokens — biped / character (Eagle Knight, humans)
                         </option>
                         <option value="appearance">
-                          Appearance clothing — fit to VRM slot (Joggers, Shirt, Boots…)
+                          Appearance clothing — fit to avatar slot (Joggers, Shirt, Boots…)
                         </option>
                         <option value="creature">
                           Creature template — fox / quadruped (Mesh2Motion)
                         </option>
                         <option value="template">
-                          UniRig template.vrm fit — Blender humanoid (not UniRig ML / full)
+                          UniRig template avatar fit — Blender humanoid (not UniRig ML / full)
                         </option>
                       </select>
                       <p style={{ fontSize: '0.55rem', color: '#8f8', margin: '0.25rem 0 0' }}>
@@ -2466,7 +2429,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           />
                           <span>
                             XR face morphs (Phase 5 head stitch) — keep{' '}
-                            <code>template.vrm</code> head blend shapes + AIGC body. Humanoid only;
+                            template avatar head blend shapes + AIGC body. Humanoid only;
                             not for creatures/SkinTokens.
                           </span>
                         </label>
@@ -2916,7 +2879,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     Also generate Gaussian splat preview (TripoSplat → Spark.js)
                   </label>
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Pipeline: photo → TRELLIS mesh → template.vrm wrap (VRM). Optional splat loads
+                    Pipeline: photo → TRELLIS mesh → template avatar wrap. Optional splat loads
                     in parallel when ready.
                   </p>
                 </div>
@@ -2924,7 +2887,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
 
               {/* Prompt input - optional for model-based tasks */}
               {!requiresModel(newTaskType) &&
-                newTaskType !== 'avatar-from-photo' &&
                 newTaskType !== 'avatar-from-image' &&
                 !isBodyClothStudioTaskType(newTaskType) &&
                 newTaskType !== 'image-to-world' &&
@@ -2977,8 +2939,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 newTaskType === 'avatar-from-image' ||
                 isArc2AvatarTaskType(newTaskType) ||
                 newTaskType === 'mesh-painting' ||
-                newTaskType === 'mesh-editing-image' ||
-                newTaskType === 'avatar-from-photo') && (
+                newTaskType === 'mesh-editing-image') && (
                 <div className="mb-1.5">
                   <label style={{ fontSize: '0.65rem', marginBottom: '0.25rem', display: 'block' }}>
                     {newTaskType === 'image-to-3d'
@@ -3094,11 +3055,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       Selected: {newTaskImage.name}
                     </div>
                   )}
-                  {newTaskType === 'avatar-from-photo' && !newTaskImage && (
-                    <div style={{ fontSize: '0.6rem', color: '#d9a441', marginTop: '0.25rem' }}>
-                      A face photo is required for AvatarSDK.
-                    </div>
-                  )}
                   {newTaskType === 'mesh-editing-image' && (
                     <div style={{ marginTop: '0.5rem' }}>
                       <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}>
@@ -3121,31 +3077,6 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       />
                     </div>
                   )}
-                  {newTaskType === 'avatar-from-photo' && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={handleCheckAvatarSdk}
-                        disabled={isCheckingAvatarSdk}
-                        style={{ width: '100%', fontSize: '0.65rem', padding: '0.3rem' }}
-                      >
-                        {isCheckingAvatarSdk ? 'Checking MetaPerson 2.0 Access...' : 'Check MetaPerson 2.0 Access'}
-                      </button>
-                      {avatarSdkCheckResult && (
-                        <div
-                          style={{
-                            marginTop: '0.35rem',
-                            fontSize: '0.6rem',
-                            color: avatarSdkCheckResult.ok ? '#7ed957' : '#ff8a8a',
-                            lineHeight: '1.35'
-                          }}
-                        >
-                          {avatarSdkCheckResult.message}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -3165,7 +3096,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       : !canStartAnyTask
                         ? canBrowseCatalog
                           ? AI_BACKEND_UNAVAILABLE_MSG
-                          : 'Connect API or AvatarSDK to start'
+                          : 'Connect DGX API to start'
                         : canSubmitNewTask
                           ? 'Start generation'
                           : 'Enter an object name first'
