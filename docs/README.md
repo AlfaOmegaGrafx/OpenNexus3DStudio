@@ -2,6 +2,7 @@
 
 [![Apache2.0 License](https://img.shields.io/badge/license-Apache2.0-green.svg)](LICENSE)
 [![Cross-Platform](https://img.shields.io/badge/platform-MacOS%20%7C%20Windows%20%7C%20Web%20%7C%20XR-blue)](#)
+[![Live Demo](https://img.shields.io/badge/demo-open--nexus3--d--studio.vercel.app-0070f3?style=flat-square&logo=vercel&logoColor=white)](https://open-nexus3-d-studio.vercel.app/)
 
 **OpenNexus3DStudio: SPACE-TIME EDITION** is a unified 3D AIGC application with advanced WebXR support. It combines legacy **Open3DStudio** capabilities with **OpenNexus3DStudio** (WebXR, WebGPU, blockchain) and integrated **VRM avatar authoring** (appearance traits, animation, mint/export). It works closely with the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) to provide **completely locally deployed** and **free** 3DAIGC workflows. Basically it's an advanced version of the **[Minimal3DStudio](https://github.com/FishWoWater/Minimal3DStudio)** and much like a **replicate of [TripoStudio](https://studio.tripo3d.ai/home?lng=en)**.
 
@@ -17,6 +18,8 @@ Browse the [screenshot & demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7
 Deploy the [3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) backend on your own machine or server (see **API Backend Setup** below). Screenshots: [demo album](https://photos.app.goo.gl/d7TRHmnTT54QashN7).
 
 ### Public demo (Vercel)
+
+**Live demo:** [https://open-nexus3-d-studio.vercel.app/](https://open-nexus3-d-studio.vercel.app/)
 
 The repo is **Vercel deploy-ready** for a public viewport demo (VRM upload, traits, UI) without exposing LAN/DGX secrets:
 
@@ -46,11 +49,11 @@ Task types in the **New Task** panel (`TaskManager.jsx`), backed by [3DAIGC-API]
 | Mesh retopology | `mesh_retopology` | AutoRemesher (default), Instant Meshes, Trimesh Decimate |
 | Mesh UV unwrapping | `uv_unwrapping` | xatlas |
 | Mesh editing (text / image) | `text_mesh_editing` / `image_mesh_editing` | VoxHammer |
-| Auto rigging | `auto_rig` | **SkinTokens** (full GLB), UniRig (template VRM) |
+| Auto rigging | `auto_rig` | **SkinTokens** (full GLB), UniRig |
 | Text to Motion (Kimodo) | `text_to_motion` | **Kimodo SOMA-RP-v1.1** → studio motion JSON |
 | Image to Gaussian Splat | `image_to_splat` | TripoSplat (1 photo), WorldMirror 2.0 (2+), COLMAP (3+) |
 | Image to World | `image_to_world` | `opennexus_image_to_world` |
-| Avatar from Image | client pipeline | TRELLIS.2 mesh → UniRig template rig → GLB |
+| Avatar from Image | client pipeline | TRELLIS to VRM |
 
 **Also shipped:** multi-image input (up to 8 photos), **Publish RP1 / OMB validate**, **Kimodo text-to-motion** animation bar, job handoff. **23 models / 14 features** on DGX (Jun 2026). See root [`README.md`](../README.md) for full detail.
 
@@ -64,7 +67,7 @@ Gaussian splats live in **this app** — same `SceneManager` viewport as VRM and
 |------------|--------|-----------|
 | Splat preview in viewport | `SplatMesh` alongside VRM/meshes | `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) |
 | World package load | **World Library** + `worldSceneLoader.js` | `POST /api/v1/world-generation/image-to-world` |
-| Avatar + optional splat | **Avatar from Image** + “Gaussian splat preview” checkbox | mesh + template rig + parallel TripoSplat |
+| Avatar + optional splat | **Avatar from Image** + “Gaussian splat preview” checkbox | TRELLIS to VRM + optional TripoSplat |
 
 Task types: **Image to Gaussian Splat**, **Image to World (splat + props)** in the New Task panel (`TaskManager.jsx`).
 

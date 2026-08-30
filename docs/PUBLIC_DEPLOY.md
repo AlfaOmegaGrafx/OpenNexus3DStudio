@@ -5,9 +5,11 @@ OpenNexus3DStudio ships two deployment modes:
 | Mode | Where | AI backend | Secrets |
 |------|-------|------------|---------|
 | **Local dev** | `npm run dev` on your PC / DGX | `VITE_API_ENDPOINT`, `DEV_API_PROXY_TARGET` | `.env` (gitignored) |
-| **Public demo** | Vercel (`vercel.json`) | None — viewport, VRM upload, traits UI | No client secrets |
+| **Public demo** | [open-nexus3-d-studio.vercel.app](https://open-nexus3-d-studio.vercel.app/) (`vercel.json`) | None — viewport, VRM upload, traits UI | No client secrets |
 
 ## Vercel (recommended public demo)
+
+**Live deployment:** [https://open-nexus3-d-studio.vercel.app/](https://open-nexus3-d-studio.vercel.app/) — viewport, VRM upload, traits UI; no AI backend or client secrets.
 
 1. Import [AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) in Vercel.
 2. Framework preset: **Vite** (or use repo `vercel.json`).
