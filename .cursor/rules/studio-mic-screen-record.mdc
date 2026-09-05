@@ -1,0 +1,29 @@
+---
+description: Studio + Companion mic is WebRTC-first during Galaxy XR screen recording
+globs: OpenNexus3DStudio/src/library/micConstraints.js,OpenNexus3DStudio/src/library/sharedMicManager.js,OpenNexus3DStudio/src/context/SceneContext.jsx,chat/app/src/personaplex/mic-constraints.ts,chat/app/src/personaplex/session-runtime.ts
+alwaysApply: false
+---
+
+# Mic + Galaxy screen recording (HARD)
+
+User 2026-08-25 (rt5): **AEC + noise suppression + auto gain on** — never raw-first.
+
+## Contract
+
+| Piece | Behavior |
+|-------|----------|
+| Capture | WebRTC (`echoCancellation/noiseSuppression/autoGainControl: true`) |
+| Fallback | `{ audio: true }` only (no raw-first) |
+| Stream | One `sharedMicManager` fan-out — no duplicate `getUserMedia` |
+| XR | Mic **stays open** |
+| Suspend | Visemes only — never `track.stop()` |
+
+## Forbidden regressions
+
+- Raw-first (all DSP off) — avatar hears itself
+- Releasing the mic on XR enter
+
+## Source of truth
+
+- Studio: `micConstraints.js` + `sharedMicManager.js`
+- Companion: `chat/app/src/personaplex/mic-constraints.ts`

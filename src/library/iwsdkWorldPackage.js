@@ -13,6 +13,7 @@ import {
   LocomotionEnvironment,
   MovementMode,
   OneHandGrabbable,
+  PhysicsShapeType,
 } from '@iwsdk/core';
 import { EnvironmentType } from '@iwsdk/locomotor';
 import { resolveTaskModelUrl } from './taskModelUrl.js';
@@ -36,6 +37,11 @@ import {
   parseWorldPackage,
   resolveWorldPackageUrls,
 } from './worldPackage.js';
+import {
+  attachIwsdkDynamicPhysics,
+  attachIwsdkStaticPhysics,
+} from './iwsdkPhysics.js';
+import { removeDefaultWalkableFloor } from './iwsdkXrEnhancements.js';
 
 /** @type {WeakMap<import('@iwsdk/core').World, { splat: object|null, propEntities: object[], colliderEntity: object|null }>} */
 const worldContentByWorld = new WeakMap();
@@ -53,6 +59,9 @@ export function attachIwsdkGrabbableProp(world, mesh, options = {}) {
   const entity = world.createTransformEntity(mesh, { parent });
 
   if (options.interaction?.type === 'static') {
+    attachIwsdkStaticPhysics(entity, {
+      shape: PhysicsShapeType.ConvexHull,
+    });
     return entity;
   }
 
@@ -65,6 +74,11 @@ export function attachIwsdkGrabbableProp(world, mesh, options = {}) {
   entity.addComponent(OneHandGrabbable, {
     rotate: options.rotate !== false,
     translate: options.translate !== false,
+  });
+  attachIwsdkDynamicPhysics(entity, {
+    shape: PhysicsShapeType.ConvexHull,
+    density: options.density ?? 0.8,
+    restitution: options.restitution ?? 0.2,
   });
 
   return entity;
@@ -125,6 +139,7 @@ export async function loadIwsdkEnvironmentSplat(world, url, options = {}) {
 
 /**
  * Optional collision mesh for locomotion (World Labs collider or proxy floor).
+ * Invisible visually (splat is the look); walk + physics collide against it.
  *
  * @param {import('@iwsdk/core').World} world
  * @param {import('three').Object3D} root
@@ -140,9 +155,28 @@ export function attachIwsdkLocomotionCollider(world, root) {
     }
     state.colliderEntity = null;
   }
+
+  // Prefer the authored walk mesh over the lab default plane.
+  removeDefaultWalkableFloor(world);
+
+  root.name = root.name || 'WorldLocomotionCollider';
+  root.visible = false;
+  root.traverse((child) => {
+    if (child.isMesh) {
+      child.visible = false;
+      child.raycast = () => {};
+    }
+  });
+
   const entity = world.createTransformEntity(root, { parent });
   entity.addComponent(LocomotionEnvironment, { type: EnvironmentType.STATIC });
+  // TriMesh matches authored floors; static so props land and players walk.
+  attachIwsdkStaticPhysics(entity, {
+    shape: PhysicsShapeType.TriMesh,
+    friction: 0.9,
+  });
   state.colliderEntity = entity;
+  console.log('[IwsdkWorld] locomotion collider attached (invisible + physics)');
   return entity;
 }
 
@@ -253,8 +287,15 @@ export async function loadIwsdkWorldPackage(world, manifest, manifestUrl, option
     try {
       await loadIwsdkColliderGlb(world, colliderUrl);
     } catch (err) {
-      console.warn('[IwsdkWorld] Collider mesh failed:', err?.message || err);
+      console.warn(
+        '[IwsdkWorld] Collider mesh failed — keeping default walk floor:',
+        err?.message || err,
+      );
     }
+  } else {
+    console.log(
+      '[IwsdkWorld] No collider_url — using default flat walk floor',
+    );
   }
 
   const loader = new GLTFLoader();
@@ -284,7 +325,13 @@ export async function loadIwsdkWorldPackage(world, manifest, manifestUrl, option
         ? attachIwsdkGrabbableProp(world, root, {
             interaction: prop.interaction,
           })
-        : world.createTransformEntity(root, { parent });
+        : (() => {
+            const staticEntity = world.createTransformEntity(root, { parent });
+            attachIwsdkStaticPhysics(staticEntity, {
+              shape: PhysicsShapeType.ConvexHull,
+            });
+            return staticEntity;
+          })();
 
       state.propEntities.push(entity);
     } catch (err) {

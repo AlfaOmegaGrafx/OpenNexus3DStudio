@@ -1,0 +1,34 @@
+---
+description: Companion panel-2D locomotion lock (Surface + Galaxy flat) vs immersive XR follow
+globs: chat/app/src/components/vrm/galatea.tsx,chat/app/src/lib/companion-locomotion-policy.ts,chat/app/src/lib/companion-follow.ts,chat/packages/orcust-automaton/**/*.ts
+alwaysApply: false
+---
+
+# Companion locomotion — do not mix Surface / Galaxy 2D with XR follow
+
+**User-locked 2026-08-24.** Evidence: both panel-2D clients log `mode {immersive:false}` + `2d locked`.
+
+## Contract
+
+| Context | Behavior |
+|---------|----------|
+| **Surface PC embed** | Locked — no camera follow, no 0.5 m distance rule, no `walk.vrma` |
+| **Galaxy XR 2D panel** (not Enter VR/MR) | Same lock |
+| **Galaxy Enter VR / Enter MR** | World **anchor** on entry → **follow** only after headset moves ≥ 0.5 m (1 m standoff + depart/arrive + `walk.vrma`) |
+
+## Forbidden regressions
+
+- `followEnabled = immersive \|\| !embed` (made Surface chase the camera)
+- Continuous follow the moment immersive starts (kills world anchor)
+- Default `allowDistanceWalk = true` on `OrcustAutomaton` (must default **false**)
+- Relying on nulling `currentTarget` alone while Arrive stays active
+
+## Source of truth
+
+- Policy: `chat/app/src/lib/companion-locomotion-policy.ts` (+ tests)
+- Runtime: `galatea.tsx` — `lockPanel2d()` before **and** after `entityManager.update`, plus world XZ pin
+- Package: `allowDistanceWalk` / IdleState / WalkState gates
+
+## After `chat/app/src/` edits
+
+`bash OpenNexus3DStudio/scripts/sync-companion-to-surface.sh` — hard-refresh existing OpenNexus 3D tab (no new browser tab).

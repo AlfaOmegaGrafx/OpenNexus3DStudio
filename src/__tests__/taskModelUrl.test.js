@@ -206,10 +206,17 @@ describe('taskModelUrl', () => {
     );
   });
 
-  it('detects glb for DGX job download URLs (hostname with dots)', () => {
+  it('does not guess glb for bare job download URLs (format comes from result)', () => {
     const url =
       'http://dgx-spark.local:7842/api/v1/system/jobs/f51628ad-f2a6-4703-b621-cd2def5cf4c6/download';
-    expect(inferModelFileExtensionFromSource(url)).toBe('glb');
+    expect(inferModelFileExtensionFromSource(url)).toBe('');
+    expect(
+      getTaskResultFileExtension({
+        format: 'vrm',
+        mesh_url: url,
+        mesh_file_info: { file_extension: '.vrm' },
+      }),
+    ).toBe('vrm');
   });
 
   it('getTaskResultFbxUrl prefers job download with asset=fbx', () => {

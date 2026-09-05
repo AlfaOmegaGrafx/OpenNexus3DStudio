@@ -33,7 +33,8 @@ ctx = (
     "## Agent continuity (auto-verified at session start)\n\n"
     f"Status: **{status}**\n\n"
     "Mandatory: load RepoResident (`.agent/STATE.md`), MindLink (`.brain/`), "
-    "memory-bank, then sync DGX→Surface after src edits.\n\n"
+    "memory-bank, then sync DGX→Surface after src edits.\n"
+    "Companion: Companion UI on Surface :5173 (iframe :8464); PersonaPlex on DGX :8998.\n\n"
     "### Verify tail\n```\n" + summary[-3500:] + "\n```\n"
 )
 print(json.dumps({

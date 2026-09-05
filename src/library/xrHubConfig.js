@@ -122,3 +122,17 @@ export function showXrAiPanelAtSidebarTop() {
 
 /** Sidebar mic icon — scroll to and expand XR Voice. */
 export const OPEN_XR_AI_PANEL_EVENT = 'openXrAiPanel';
+
+/** Set before sidebar expand so XrAiPanel mounts expanded (event may fire before mount). */
+let pendingXrVoiceExpand = false;
+
+export function requestXrVoiceExpand() {
+  pendingXrVoiceExpand = true;
+}
+
+/** @returns {boolean} */
+export function consumeXrVoiceExpandRequest() {
+  if (!pendingXrVoiceExpand) return false;
+  pendingXrVoiceExpand = false;
+  return true;
+}

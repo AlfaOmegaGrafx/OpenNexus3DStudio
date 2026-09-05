@@ -1,0 +1,13 @@
+---
+description: Queue new user chats mid-code; finish current work first
+alwaysApply: true
+---
+
+# Mid-chat queue
+
+If the user sends another message **while you are mid-code**:
+
+1. Finish the current coherent slice (do not drop half-done edits).
+2. Then handle the new / queued request.
+
+Do not abandon in-flight work to start a conflicting rewrite. Detail: `memory-bank/mid-chat-queue.md`.

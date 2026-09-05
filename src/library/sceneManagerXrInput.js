@@ -32,6 +32,10 @@ const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _dir = new THREE.Vector3(0, 0, -1);
 
+const HANDS = /** @type {const} */ (['left', 'right']);
+const CONTROLLER_AXIS_ACTIVE = 0.2;
+const CONTROLLER_BUTTON_ACTIVE = 0.15;
+
 function isHandTrackingSource(inputSource) {
   const profiles = Array.isArray(inputSource?.profiles) ? inputSource.profiles : [];
   const p = profiles.join(' ').toLowerCase();
@@ -39,28 +43,66 @@ function isHandTrackingSource(inputSource) {
     p.includes('generic-hand') ||
     p.includes('hand-select') ||
     p.includes('generic-fixed-hand') ||
-    p.includes('hand-tracking')
+    p.includes('hand-tracking') ||
+    !!inputSource?.hand
   );
 }
 
-function isControllerLive(inputSource) {
-  if (!inputSource?.gamepad) return false;
+/**
+ * Galaxy XR keeps docked controllers in ``inputSources`` with a connected gamepad.
+ * Treat as active only when buttons/stick show real use — otherwise hands stay primary.
+ * @param {XRInputSource|null|undefined} inputSource
+ */
+function isControllerActivelyUsed(inputSource) {
+  if (!inputSource || isHandTrackingSource(inputSource)) return false;
   const gp = inputSource.gamepad;
-  if (gp.connected === false) return false;
-  return gp.buttons?.length > 0 || gp.axes?.length > 0;
+  if (!gp || gp.connected === false) return false;
+  if (gp.buttons?.some((b) => b?.pressed || (b?.value ?? 0) > CONTROLLER_BUTTON_ACTIVE)) {
+    return true;
+  }
+  if (gp.axes?.some((a) => Math.abs(a ?? 0) > CONTROLLER_AXIS_ACTIVE)) {
+    return true;
+  }
+  return false;
 }
 
+/**
+ * @param {XRInputSource[]} xrInputSources
+ * @param {XrHandedness} handedness
+ */
 function shouldPreferHand(xrInputSources, handedness) {
   const hand = xrInputSources.find(
     (s) => s.handedness === handedness && isHandTrackingSource(s),
   );
   const ctrl = xrInputSources.find(
-    (s) => s.handedness === handedness && !isHandTrackingSource(s) && isControllerLive(s),
+    (s) => s.handedness === handedness && !isHandTrackingSource(s),
   );
   if (hand && !ctrl) return true;
   if (ctrl && !hand) return false;
-  if (hand && ctrl) return !isControllerLive(ctrl);
+  if (hand && ctrl) return !isControllerActivelyUsed(ctrl);
   return !!hand;
+}
+
+/**
+ * One source per hand — callers use ``pointers.find(handedness)``.
+ * @param {XRInputSource[]} sources
+ * @param {XrHandedness} handedness
+ */
+function pickSourceForHandedness(sources, handedness) {
+  const candidates = sources.filter((s) => s && s.handedness === handedness);
+  if (candidates.length === 0) {
+    return { src: null, preferHand: false };
+  }
+  const preferHand = shouldPreferHand(sources, handedness);
+  if (preferHand) {
+    const hand = candidates.find((s) => isHandTrackingSource(s));
+    return { src: hand || candidates[0], preferHand: true };
+  }
+  const activeCtrl = candidates.find(
+    (s) => !isHandTrackingSource(s) && isControllerActivelyUsed(s),
+  );
+  const anyCtrl = candidates.find((s) => !isHandTrackingSource(s));
+  return { src: activeCtrl || anyCtrl || candidates[0], preferHand: false };
 }
 
 function readSelectPressed(inputSource) {
@@ -130,10 +172,10 @@ export class SceneManagerXrInput {
 
     const sources = Array.isArray(inputSources) ? inputSources : [];
 
-    for (const src of sources) {
-      if (!src || src.handedness === 'none') continue;
+    for (const handedness of HANDS) {
+      const { src, preferHand } = pickSourceForHandedness(sources, handedness);
+      if (!src) continue;
 
-      const handedness = /** @type {XrHandedness} */ (src.handedness);
       const key = handedness;
       const prev = this._prev.get(key) || { select: false, squeeze: false };
 
@@ -156,7 +198,7 @@ export class SceneManagerXrInput {
       this.pointers.push({
         handedness,
         connected: true,
-        preferHand: shouldPreferHand(sources, handedness),
+        preferHand,
         rayOrigin: rayPose?.position || gripPose.position.clone(),
         rayDirection: rayPose?.direction || new THREE.Vector3(0, 0, -1),
         gripPosition: gripPose?.position || rayPose.position.clone(),

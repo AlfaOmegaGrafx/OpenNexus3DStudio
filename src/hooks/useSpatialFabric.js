@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   isSceneAssemblerConfigured,
   openSpatialFabricInBrowser,
+  openSpaceTimeBrowser,
+  openSpaceTimeImmersive,
+  buildSpaceTimeImmersivePageUrl,
   publishGlbBlobAndOpenMetaverseBrowser,
   publishJobAndOpenMetaverseBrowser,
   publishWorldAndOpenMetaverseBrowser,
@@ -118,6 +121,25 @@ export function useSpatialFabric(apiEndpoint = '') {
     [apiEndpoint],
   );
 
+  const openSpaceTime = useCallback(
+    async (opts = {}) => {
+      return openSpaceTimeBrowser(config, { ...opts, apiEndpoint });
+    },
+    [apiEndpoint, config],
+  );
+
+  const openSpaceTimeXr = useCallback(
+    (opts = {}) => {
+      return openSpaceTimeImmersive(config, opts);
+    },
+    [config],
+  );
+
+  const spaceTimeImmersiveUrl = useCallback(
+    (opts = {}) => buildSpaceTimeImmersivePageUrl(config, opts),
+    [config],
+  );
+
   return {
     config,
     loading,
@@ -126,6 +148,9 @@ export function useSpatialFabric(apiEndpoint = '') {
     openBrowser,
     openSceneAssembler,
     openOmbGuidelines,
+    openSpaceTimeBrowser: openSpaceTime,
+    openSpaceTimeImmersive: openSpaceTimeXr,
+    buildSpaceTimeImmersivePageUrl: spaceTimeImmersiveUrl,
     publishJob,
     publishWorld,
     sendGlbToMetaverseBrowser,

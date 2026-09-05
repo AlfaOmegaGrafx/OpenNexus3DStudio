@@ -57,8 +57,8 @@ when any row above fires in the viewport — a stricter second check after downl
 | **VRM load** | `.vrm` file, loot assets, etc. | `vrmLoader.normalizeVRM` only — **no** contract flags, **no** `preserveExportedOrientation`. Full pipeline: [VRM_UPLOAD_DISPLAY_EXPORT.md](VRM_UPLOAD_DISPLAY_EXPORT.md) |
 | **AIGC GLB** | Avatar-from-image / template rig on DGX | Validate contract; targeted skinned-mesh repair when `needsSkinnedMeshRigRepair` (contract FAIL, feet/XZ mismatch, or template-rig export); feet anchored to y=0 |
 
-DGX template rig **should** export a GLB in the same coordinate frame as the ICT humanoid template
-(`humanoid_template_id: "ict"`). Contract
+DGX template rig **should** export a GLB in the same coordinate frame as the humanoid template
+(`humanoid_template_id: "humanoid"`). Contract
 violations mean the Blender export step drifted from that reference — fix on DGX, not by
 reusing VRM loader flags on VRM files.
 

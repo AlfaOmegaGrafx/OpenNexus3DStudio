@@ -7,9 +7,12 @@ import {
   readLeftThumbstickAxes,
   readRightThumbstickAxes,
 } from './sceneManagerXrAxes.js';
+import {
+  XR_LOCOMOTION_MODE_AVATAR,
+  XR_LOCOMOTION_MODE_VIEWPOINT,
+} from './sceneManagerXrConstants.js';
 
-export const XR_LOCOMOTION_MODE_AVATAR = 'avatar';
-export const XR_LOCOMOTION_MODE_VIEWPOINT = 'viewpoint';
+export { XR_LOCOMOTION_MODE_AVATAR, XR_LOCOMOTION_MODE_VIEWPOINT };
 
 const MOVE_SPEED = 2.4;
 const SNAP_TURN_DEG = 30;

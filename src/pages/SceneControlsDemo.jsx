@@ -29,7 +29,7 @@ const SceneControlsDemoPage = () => {
               <div className="step-number">1</div>
               <div className="step-content">
                 <h3>Load a 3D Model</h3>
-                <p>Use the file upload in the main application or drag & drop a VRM/GLB file</p>
+                <p>Use the file upload in the main application or drag & drop an avatar or GLB file</p>
               </div>
             </div>
             <div className="step">

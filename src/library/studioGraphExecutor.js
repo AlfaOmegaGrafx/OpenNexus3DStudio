@@ -10,10 +10,12 @@ import {
 } from './taskModelUrl.js';
 import {
   buildOrthographicMultiviewPrompts,
+  buildTextToImageNegativePrompt,
   buildTextToImagePrompt,
   createMultiviewSeed,
   normalizeTextToImagePromptOptions,
 } from './textToImagePromptOptions.js';
+import { cropHeadlessBodyReferenceImage } from './headlessBodyImageCrop.js';
 import { sampleFaceSkinSwatch } from './sampleFaceSkinSwatch.js';
 import {
   getPromptText,
@@ -196,6 +198,11 @@ async function runSingleTextToImageView(createAndStartTask, deps, {
   viewId,
   studioScope = {},
 }) {
+  const negativePrompt = buildTextToImageNegativePrompt(promptOptions);
+  const modelParameters = {};
+  if (seed != null) modelParameters.seed = seed;
+  if (negativePrompt) modelParameters.negative_prompt = negativePrompt;
+
   const apiResult = await createAndStartTask({
     type: 'text-to-image',
     prompt,
@@ -206,7 +213,7 @@ async function runSingleTextToImageView(createAndStartTask, deps, {
       height: 1024,
       object_name: objectName,
       text_to_image_prompt_options: promptOptions,
-      model_parameters: seed != null ? { seed } : undefined,
+      model_parameters: Object.keys(modelParameters).length ? modelParameters : undefined,
       ...studioScope,
     },
   });
@@ -637,17 +644,34 @@ export async function runStudioPipeline(project, deps, opts = {}) {
           node.data?.objectName || current.name || 'studio',
           'studio',
         );
-        const imageFile = await fetchImageAsFile(
+        let imageFile = await fetchImageAsFile(
           primaryMeta.imageUrl || imageUrl,
           apiEndpoint,
           `${baseName}_${primaryMeta.viewId || 'front'}.png`,
         );
 
+        const promptOptsForMesh = getTextToImagePromptOptions(current);
+        const composableBodyMesh =
+          current.templateId === 'krea_composable_avatar_body' ||
+          getStudioTemplate(current.templateId)?.id === 'krea_composable_avatar_body';
+        const headlessForMesh =
+          composableBodyMesh || Boolean(promptOptsForMesh?.headless_body);
+        if (headlessForMesh) {
+          onStatus?.('Cropping head band from body reference before TRELLIS…');
+          imageFile = await cropHeadlessBodyReferenceImage(imageFile);
+        }
+
         const referenceFiles = [];
         for (const ref of referenceMetas) {
-          referenceFiles.push(
-            await fetchImageAsFile(ref.imageUrl, apiEndpoint, `${baseName}_${ref.viewId}.png`),
+          let refFile = await fetchImageAsFile(
+            ref.imageUrl,
+            apiEndpoint,
+            `${baseName}_${ref.viewId}.png`,
           );
+          if (headlessForMesh) {
+            refFile = await cropHeadlessBodyReferenceImage(refFile);
+          }
+          referenceFiles.push(refFile);
         }
 
         const objectName =
@@ -847,20 +871,59 @@ export async function runStudioPipeline(project, deps, opts = {}) {
             ? `/api/v1/system/jobs/${apiResult.job_id}/download`
             : null);
 
+        const rigJobId = apiResult?.job_id || null;
         emit(
           updateNode(current, node.id, {
             status: 'completed',
             data: {
-              jobId: apiResult?.job_id || null,
+              jobId: rigJobId,
               meshUrl: riggedUrl || meshUrl,
               objectName,
               modelPreference: options.model_preference,
               rigMode,
+              format:
+                apiResult?.format ||
+                apiResult?.result?.format ||
+                (rigMode === AUTO_RIG_MODES.TEMPLATE ||
+                rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP ||
+                rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT
+                  ? 'vrm'
+                  : null),
               inputMeshUrl: meshUrl,
               inputMeshJobId,
             },
           }),
         );
+
+        // Bone preview canvas is not the main viewport — load VRM so motion /
+        // expressions see currentVRM.humanoid (otherwise: "Load an avatar first").
+        if (
+          typeof window !== 'undefined' &&
+          (riggedUrl || rigJobId) &&
+          (rigMode === AUTO_RIG_MODES.TEMPLATE ||
+            rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP ||
+            rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT)
+        ) {
+          const loadPayload = {
+            ...(apiResult && typeof apiResult === 'object' ? apiResult : {}),
+            job_id: rigJobId,
+            feature: 'auto_rig',
+            format:
+              apiResult?.format ||
+              apiResult?.result?.format ||
+              'vrm',
+            mesh_url: riggedUrl || `/api/v1/system/jobs/${rigJobId}/download`,
+          };
+          window.dispatchEvent(
+            new CustomEvent('loadModelFromUrl', {
+              detail: {
+                result: loadPayload,
+                taskId: rigJobId ? `job_${rigJobId}` : null,
+                source: 'studio-auto-rig',
+              },
+            }),
+          );
+        }
 
         const clothingNode = current.nodes.find((n) => n.kind === 'appearance_clothing');
         const exportNode = current.nodes.find((n) => n.kind === 'export_asset');
@@ -909,6 +972,31 @@ export async function runStudioPipeline(project, deps, opts = {}) {
           };
           emit(current);
         }
+      }
+
+      // Body+Cloth must never silently skip clothing when the template includes it.
+      if (!accessories.length && template?.includeClothing) {
+        accessories = parseClothingAccessoryLines(DEFAULT_STUDIO_CLOTHING_TEXT);
+        onStatus?.(
+          `Clothing accessories empty — forcing ${accessories.length} default garment slots`,
+        );
+        emit(
+          updateNode(current, node.id, {
+            data: {
+              accessories,
+              results: node.data?.results || [],
+              clothingText: DEFAULT_STUDIO_CLOTHING_TEXT,
+            },
+          }),
+        );
+        current = {
+          ...current,
+          data: {
+            ...(current.data || {}),
+            clothingText: DEFAULT_STUDIO_CLOTHING_TEXT,
+          },
+        };
+        emit(current);
       }
 
       if (!accessories.length) {

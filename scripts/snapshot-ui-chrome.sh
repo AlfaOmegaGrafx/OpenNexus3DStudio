@@ -16,6 +16,11 @@ FILES=(
   src/components/TaskProgressBar.css
   src/components/BottomDisplayMenu.jsx
   src/components/BottomDisplayMenu.module.css
+  src/components/KimodoMotionPromptBar.jsx
+  src/components/KimodoMotionPromptBar.module.css
+  src/components/Mesh2MotionControllerOverlay.jsx
+  src/components/Mesh2MotionControllerOverlay.css
+  src/library/viewportLayoutSync.js
   src/components/NativeFaceRelayHud.jsx
   src/pages/AppearanceSimple.jsx
   src/pages/Appearance.module.css

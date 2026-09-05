@@ -22,6 +22,7 @@
 | Doc | Role | Git |
 |-----|------|-----|
 | **`MONETIZATION_ROADMAP.md`** (repo root) | Canonical timed roadmap + checkboxes | **Gitignored moat** — sync via scp only |
+| **`MVP_REVENUE_EVM.md`** (repo root) | Day-to-day first-revenue track (EVM / CPI / SPI / WBS P0–P2+) | **Gitignored moat** — sync via scp only |
 | **`FUTURE_RD.md`** (repo root) | Parked R&D for later versions (e.g. age-aware body) | **Gitignored moat** — stub: `docs/FUTURE_RD.md` |
 | **`3DAIGC-API/MESH_WRAP_ROADMAP.md`** (API root) | Mesh-wrap / GNM head-stitch roadmap | **Gitignored moat** — stub: `3DAIGC-API/docs/MESH_WRAP_ROADMAP.md` |
 | **`memory-bank/`** (OpenNexus + 3DAIGC-API) | Agent ops / protected-state / strategy | **Gitignored moat** — scp only |

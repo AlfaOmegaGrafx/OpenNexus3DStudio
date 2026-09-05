@@ -1,0 +1,22 @@
+---
+description: User-facing copy says Role, not Persona (Companion Settings + side panel)
+globs: "**/CompanionPage.jsx,**/chat/app/src/components/ui/settings/**/*,**/companion-settings-2d-policy.ts,**/companionHandoff.js"
+alwaysApply: false
+---
+
+# User-facing: Role, not Persona
+
+**Locked 2026-08-25.** In Companion UI labels, buttons, flash text, and status (Surface + Galaxy 2D + immersive XR), say **Role** — not “Persona”.
+
+| Do | Don’t (user-facing) |
+|----|---------------------|
+| Role (nav / tab) | Persona |
+| Change / Upload / Reset Role | Change Persona |
+| Use Role as Live Speech | Use Persona as Live Speech |
+| No role yet | No persona yet |
+| Push Role to Companion | Push Persona to Companion |
+
+**Keep technical:** `PersonaPlex`, `personaplex`, route id `character`, `personalityContext`, Personality field label, Live Speech.
+
+Policy constants: `COMPANION_UI_ROLE_COPY` in `chat/app/src/lib/companion-settings-2d-policy.ts`  
+Full UI lock: `OpenNexus3DStudio/src/moat/companion/UI-UX-COMPANION.md` (gitignored).

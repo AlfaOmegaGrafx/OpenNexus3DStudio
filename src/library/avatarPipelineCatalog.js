@@ -74,21 +74,24 @@ export function headTrackIsNone(headTrack) {
   return normalizeHeadTrack(headTrack) === HEAD_TRACK.NONE;
 }
 
-/** Product humanoid template id (ICT morph head on API). */
-export const DEFAULT_HUMANOID_TEMPLATE_ID = 'ict';
+/** Product humanoid template id (operator-local morph head on API). */
+export const DEFAULT_HUMANOID_TEMPLATE_ID = 'humanoid';
 
-/** VRM filename for operator-local ICT template on the API. */
-export const HUMANOID_TEMPLATE_VRM_FILE = 'template_ict.vrm';
+/** VRM filename for operator-local humanoid template on the API. */
+export const HUMANOID_TEMPLATE_VRM_FILE = 'humanoid_template.vrm';
 
-/** @deprecated Legacy ids from pre-ICT jobs — normalize to ict. */
-export const DEPRECATED_HUMANOID_TEMPLATE_IDS = Object.freeze(['template', 'sifr2']);
+/** @deprecated Legacy ids from older jobs — normalize to humanoid. */
+export const DEPRECATED_HUMANOID_TEMPLATE_IDS = Object.freeze([
+  'template',
+  'sifr2',
+]);
 
 export const AUTO_RIG_MODES = {
   SKELETON: 'skeleton',
   FULL: 'full',
   SKIN: 'skin',
   TEMPLATE: 'template',
-  /** Phase 5 head stitch: keep ICT morph head + AIGC body. */
+  /** Phase 5 head stitch: keep morph head + AIGC body. */
   TEMPLATE_WRAP: 'template_wrap',
   APPEARANCE_COMPONENT: 'appearance_component',
   CREATURE_TEMPLATE: 'creature_template',

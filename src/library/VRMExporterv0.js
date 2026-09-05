@@ -973,6 +973,14 @@ export default class VRMExporterv0 {
             skins: outputSkins,
             textures: outputTextures,
         };
+        // Marketplace-portable AI Role (MIT schema) — glTF root extras
+        if (vrm?.avatarRole || vrm?.extras?.['opennexus.avatar_role']) {
+            const rolePayload = vrm.avatarRole || vrm.extras['opennexus.avatar_role'];
+            outputData.extras = {
+                ...(outputData.extras || {}),
+                'opennexus.avatar_role': rolePayload,
+            };
+        }
         console.log("output", outputData);
         const jsonChunk = new GlbChunk(parseString2Binary(JSON.stringify(outputData, undefined, 2)), "JSON");
         const binaryChunk = new GlbChunk(concatBinary(bufferViews.map((buf) => buf.buffer)), "BIN\x00");

@@ -146,7 +146,7 @@ export default function IwsdkImmersive() {
             (worldLabel
               ? `World: ${worldLabel} — `
               : '') +
-            'Far: aim + trigger (ray dot). Near: walk up + grip squeeze. Exit: Menu/B, red panel, or Escape'}
+            'Far: aim + trigger. Near: grip. Drop: physics settle. Walk: floor/collider. Exit: Menu/B / red panel / Escape'}
           {phase === 'error' && (error || 'Failed to start')}
         </span>
       </div>
@@ -157,11 +157,13 @@ export default function IwsdkImmersive() {
         On the headset use your PC LAN IP (not localhost), e.g.{' '}
         <code>https://&lt;SURFACE_LAN_IP&gt;:3000/xr?worldManifest=/worlds/my-world/world.manifest.json</code>{' '}
         — reload the full page before Enter VR (hot reload breaks XR on device).{' '}
-        <strong>Props use IWSDK grab</strong> (DistanceGrabbable + OneHandGrabbable); splat env is visual only.
+        <strong>Props</strong> use IWSDK grab + Havok physics (settle when dropped).{' '}
+        <strong>Walk mesh</strong>: <code>collider_url</code> in the world package (invisible; replaces the flat lab floor).{' '}
+        <strong>In-headset HUD</strong>: UIKitML panel follows your head. Splat env is visual only.
         Stuck? Exit XR here, red panel, or Menu/B.
         {' '}
-        <strong>VRM face tracking</strong> (OpenNexus XR Face APK relay) runs on the main app at{' '}
-        <code>/</code>, not this IWSDK lab — use <code>https://&lt;PC-IP&gt;:3000/?nativeFaceRelay=1</code> and load a VRM there.
+        <strong>Avatar face tracking</strong> (OpenNexus XR Face APK relay) runs on the main app at{' '}
+        <code>/</code>, not this IWSDK lab — use <code>https://&lt;PC-IP&gt;:3000/?nativeFaceRelay=1</code> and load an avatar there.
         {' '}
         <strong>Product path:</strong> load worlds on <code>/</code> (SceneManager + Spark); this lab is for IWSDK interaction regression.
       </p>

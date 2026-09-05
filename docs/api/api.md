@@ -939,7 +939,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../API_A
   - `mesh_file_id`: File ID from upload endpoint (**recommended**)
 - **Parameters**:
   - `rig_mode`: Rig mode (`skeleton`, `skin`, `full`, **`template`** for humanoid template VRM bones-only, **`template_wrap`** for Phase 5 head stitch (template morph head + AIGC body), **`appearance_component`** for Appearance Editor clothing fit on `appearance_base.vrm`, or `creature_template`)
-  - `humanoid_template_id`: When `rig_mode` is `template` or `template_wrap`, template id (default **`ict`**; deprecated ids `template`/`sifr2` map to `ict`)
+  - `humanoid_template_id`: When `rig_mode` is `template` or `template_wrap`, template id (default **`humanoid`**; deprecated ids map to `humanoid`)
   - `appearance_slot`: When `rig_mode` is `appearance_component`, slot name (`Body`, `Head`, `Hands`, `Shoes`, `Chest`, `Waist`, `Neck`, `Legs`)
   - `output_format`: Output format (`glb` recommended for template / appearance modes)
   - `model_preference`: Model to use (`unirig_auto_rig` for template modes; `appearance_component_auto_rig` for clothing)
@@ -983,7 +983,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../API_A
 ### Humanoid Template Manifest
 - **URL**: `/api/v1/auto-rigging/humanoid-templates/{template_id}/manifest`
 - **Method**: `GET`
-- **Description**: Metadata for ICT humanoid template (bone counts, blend-shape preset names) used by OpenNexus3DStudio VRM export
+- **Description**: Metadata for humanoid template (bone counts, blend-shape preset names) used by OpenNexus3DStudio VRM export
 - **Authentication**: None required
 - **Response** (abbreviated):
 ```json

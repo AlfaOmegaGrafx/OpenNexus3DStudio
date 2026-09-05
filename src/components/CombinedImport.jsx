@@ -39,21 +39,21 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
         }
         
         if (validation.isFallbackVRM) {
-          alert('VRM model imported successfully in fallback mode (no humanoid bones)!');
+          alert('Avatar imported successfully in fallback mode (no humanoid bones)!');
         } else {
-          alert('VRM model imported successfully!');
+          alert('Avatar imported successfully!');
         }
       } else {
         console.warn('VRM validation issues:', validation.issues);
         if (validation.isFallbackVRM) {
-          alert(`VRM imported in fallback mode with issues: ${validation.issues.join(', ')}`);
+          alert(`Avatar imported in fallback mode with issues: ${validation.issues.join(', ')}`);
         } else {
-          alert(`VRM imported with issues: ${validation.issues.join(', ')}`);
+          alert(`Avatar imported with issues: ${validation.issues.join(', ')}`);
         }
       }
     } catch (error) {
-      console.error('VRM import failed:', error);
-      alert(`VRM import failed: ${error.message}`);
+      console.error('Avatar import failed:', error);
+      alert(`Avatar import failed: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -201,7 +201,7 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
               <div>
                 <p style={{ fontSize: '0.8rem', margin: '0.2rem 0' }}>Drag & drop a file here, or click to select</p>
                 <p className="text-sm text-gray-400" style={{ fontSize: '0.75rem', margin: '0.15rem 0' }}>
-                  Supports: GLB, GLTF, OBJ, FBX, VRM, JPG, PNG
+                  Supports: GLB, GLTF, OBJ, FBX, Avatar, JPG, PNG
                 </p>
               </div>
             )}
@@ -212,7 +212,7 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
           <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>Supported Formats:</h4>
           <div className="format-list">
             <div className="format-item">
-              <strong>3D Models:</strong> GLB, GLTF, OBJ, FBX, VRM, DAE, STL
+              <strong>3D Models:</strong> GLB, GLTF, OBJ, FBX, Avatar, DAE, STL
             </div>
             <div className="format-item">
               <strong>Images:</strong> JPG, PNG, BMP, TGA
@@ -222,7 +222,7 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
 
         {vrmMetadata && (
           <div className="vrm-metadata" style={{ marginTop: '0.5rem', padding: '0 0.75rem' }}>
-            <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>VRM Metadata:</h4>
+            <h4 className="text-sm font-semibold" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>Avatar metadata:</h4>
             <div className="metadata-grid" style={{ fontSize: '0.7rem' }}>
               <div className="metadata-item" style={{ marginBottom: '0.2rem' }}>
                 <span className="metadata-label">Title:</span>
@@ -247,7 +247,7 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
                 {validationResult.valid ? '✓' : '⚠'}
               </span>
               <span className="status-text">
-                {validationResult.valid ? 'VRM is valid' : 'VRM has issues'}
+                {validationResult.valid ? 'Avatar is valid' : 'Avatar has issues'}
                 {validationResult.isFallbackVRM && ' (Fallback Mode)'}
               </span>
             </div>
@@ -256,7 +256,7 @@ const CombinedImport = forwardRef(({ onFileLoad }, ref) => {
               <div className="fallback-info" style={{ marginBottom: '0.3rem' }}>
                 <h4 className="text-sm font-semibold text-yellow-400" style={{ fontSize: '0.75rem', marginBottom: '0.2rem' }}>⚠️ Fallback Mode:</h4>
                 <p className="text-xs text-yellow-300" style={{ fontSize: '0.7rem' }}>
-                  This VRM model lacks humanoid bones and is loaded in fallback mode. 
+                  This avatar lacks humanoid bones and is loaded in fallback mode. 
                   Some features may be limited, but the model can still be viewed and exported.
                 </p>
               </div>

@@ -1,0 +1,50 @@
+---
+description: HARD — RemoteLog (+ ADB on Galaxy) before any Space-Time XR code change
+alwaysApply: true
+---
+
+# Space-Time XR — evidence before code (NO EXCEPTIONS)
+
+**User locked 2026-09-03:** Always check **RemoteLog** (and **ADB** when Galaxy is involved) **before modifying** Space-Time XR code. Do not guess enter/exit pose, follow cam, or locomotion from desktop-only smoke.
+
+## Scope
+
+`/spacetime-xr`, `SpaceTimeImmersive.jsx`, `spacetimeXr*.js`, fabric walk, VRM walker, view-cycle, XR enter/exit persist.
+
+## Before ANY fix
+
+1. **Pull Surface RemoteLog** (agent does this — do not ask the user to paste unless fetch fails):
+
+```bash
+scp Surface-PC-Tailscale:"C:/Users/alfao/Documents/GitHub/OpenNexus3DStudio/logs/remote-log.txt" \
+  /home/sifr/OpenNexus3DStudio/logs/surface-pull/remote-log.txt
+```
+
+2. **Grep** recent `[spacetime-xr]` lines — especially:
+   - `XR enter` / `XR exit` / `persisted view` / `restored avatar`
+   - `corridor spawn` / `viewport outside scene` / `avatar placed`
+   - `control mode` / `locomotion mode` / `initial ground follow`
+   - `walk BVH` / `scene walk bounds`
+
+3. **ADB** when the repro is on Galaxy XR (`10.0.0.224` / `SM-I610` / `xrvst2`):
+
+```bash
+ssh Surface-PC-Tailscale "adb devices -l"
+# optional: adb logcat -d -t 80  (Chrome/WebXR when relevant)
+```
+
+4. **Cite** timestamps + key log fields in the reply, then edit.
+
+## Pose / persist invariants (do not regress)
+
+- Persist XR viewpoint in **locomotion-rig / scene space** (inverse of `locomotionRig`), not raw headset world ≈ `(0,0)`.
+- Persist avatar as **rig-local** `playerRoot.position` + `rotation.y` — never rewrite local from world after zeroing the rig.
+- Do **not** rebuild walk BVH on every `sessionend`.
+- First load may use corridor spawn when desktop orbit is outside the scene; re-enter must reuse the last in-XR persist.
+
+## Related
+
+- `galaxy-adb-before-code-changes.mdc` — Galaxy / WebXR ADB gate
+- `remote-log-first.mdc` — general Surface remote-log
+- `companion-evidence-before-fix.mdc` — Companion / PersonaPlex (separate stack)
+- No new browser tab after sync — hard-refresh existing `/spacetime-xr`

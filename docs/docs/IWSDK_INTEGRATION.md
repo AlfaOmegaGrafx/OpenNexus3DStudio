@@ -39,18 +39,19 @@ IWSDK is a normal npm dependency—not copied into `src/`. Code imports from `@i
 
 | Package | Version (approx.) | Role |
 |---------|-------------------|------|
-| `@iwsdk/core` | 0.4.1 | Main WebXR ECS runtime (`World`, systems, session) |
+| `@iwsdk/core` | 0.5.3 | Main WebXR ECS runtime (`World`, systems, session) |
 | `@iwsdk/locomotor` | (dep of core) | Locomotion: teleport, slide, turn |
 | `@iwsdk/xr-input` | (dep of core) | Controllers, hands, rays, pointers |
-| `@iwsdk/glxf` | (dep of core) | GLXF scene loader |
 
 Installed via:
 
 ```bash
-npm install @iwsdk/core
+npm install @iwsdk/core@^0.5.3
 ```
 
 `three` is already in this project; do not pin a second conflicting Three.js unless IWSDK docs require a specific range.
+
+> **0.5.x note:** `@iwsdk/glxf` and Meta Spatial Editor integration were removed upstream. OpenNexus `/xr` uses `World.create()` + procedural entities (no GLXF). Native `.iwsdk.scene.json` / editor workflow is optional for the lab.
 
 ### npm / Thirdweb note
 
@@ -65,6 +66,8 @@ Legacy `@thirdweb-dev/react` and `@thirdweb-dev/sdk` (v4, `ethers@^5` only) were
 | Package | Role |
 |---------|------|
 | `@iwsdk/vite-plugin-dev` | Quest emulation + headless Playwright agent browser + MCP WebSocket |
+
+`vite.config.js` loads the plugin with **dynamic** `await import('@iwsdk/vite-plugin-dev')` (ESM-only package; a static top-level import fails Vite config load via `require` on Windows).
 | `@iwsdk/cli` | `iwsdk dev up`, `iwsdk xr …`, `iwsdk browser screenshot`, `iwsdk mcp stdio` |
 | `@iwsdk/reference` | Semantic IWSDK API search MCP (`iwsdk-reference`) |
 
@@ -127,9 +130,9 @@ See [Getting Started (AI)](https://iwsdk.dev/ai/) and [MCP Tools](https://iwsdk.
 
 | Package | Purpose | Install when |
 |---------|---------|--------------|
-| `@iwsdk/vite-plugin-uikitml` | Compile UIKitML → JSON for spatial in-headset UI | Building XR-native panels (not flat React overlays) |
 | `@iwsdk/vite-plugin-gltf-optimizer` | Optimize GLTF/GLB at build time | Large world/prop assets; slow loads on headset |
-| `@iwsdk/vite-plugin-metaspatial` | Meta Spatial Editor → GLXF / component discovery | Using Meta Spatial Editor in the pipeline |
+
+> **Removed in 0.5.x:** `@iwsdk/vite-plugin-uikitml` (load `.uikitml` as static assets), `@iwsdk/vite-plugin-metaspatial` / `@iwsdk/glxf` (use native `.iwsdk.scene.json` + editor instead).
 
 ### Do not install for this repo
 
@@ -162,14 +165,15 @@ Open locally: `https://localhost:3000/xr` (HTTPS required for WebXR on device).
 | Hand-only (controllers down) | Hands take primary input; rays stay active; red Exit panel follows your head |
 | Exit XR | Controller **Menu** or **B**; ray-select red **Exit** panel (head-locked); **Exit XR** button or **Escape** on phone/PC |
 
-`src/library/iwsdkXrEnhancements.js` runs a headset input pipeline: controllers stay primary for locomotion, hands stay tracked when docked, ray + grab pointers, walkable floor, session `inputsourceschange` hooks. Pinch/select feedback uses a **yellow** ray and cursor (`0xffdd00`). Demo cube uses **both** `DistanceGrabbable` and a `OneHandGrabbable` proximity volume. `layers: false` avoids some Galaxy XR black-frame issues. `@iwsdk/core` 0.4.1+ restores the browser camera after XR exit (`xr.restoreCameraOnExit`, default `true`).
+`src/library/iwsdkXrEnhancements.js` runs a headset input pipeline: controllers stay primary for locomotion, hands stay tracked when docked, ray + grab pointers, walkable floor, session `inputsourceschange` hooks. Pinch/select feedback uses a **yellow** ray and cursor (`0xffdd00`). Demo cube uses **both** `DistanceGrabbable` and a `OneHandGrabbable` proximity volume. `layers: false` avoids some Galaxy XR black-frame issues. `@iwsdk/core` restores the browser camera after XR exit (`xr.restoreCameraOnExit`, default `true`).
 
 ## Recommended order of work
 
 1. ~~**Wire `@iwsdk/core` in code**~~ — done (`/xr` route + `iwsdkWorld.js`).
 2. ~~**Add dev tooling**~~ — `vite-plugin-dev` + `cli` + `reference` + MCP sync (done).
 3. **Galaxy XR / Chrome** — test WebXR on device (HTTPS required; see `docs/docs/HTTPS_SETUP.md`).
-4. **Later** — UIKitML, GLTF optimizer, Meta Spatial, optional Gaussian splat worlds (e.g. [sensai-webxr-worldmodels](https://github.com/V4C38/sensai-webxr-worldmodels)).
+4. ~~**Presence basics on `/xr`**~~ — Havok physics on props + floor, `collider_url` walk mesh (replaces default plane), head-locked UIKitML HUD (`public/ui/xr-lab-hud.uikitml`).
+5. **Later** — GLTF optimizer, native `.iwsdk.scene.json` authoring, optional Gaussian splat polish (e.g. [sensai-webxr-worldmodels](https://github.com/V4C38/sensai-webxr-worldmodels)). **Not** folding IWSDK into main `SceneManager` yet (see Option A blueprint when ready).
 
 Face tracking in Chrome XR remains a separate concern (relay / future `expression-tracking`); **not wired on `/xr`**. For VRM + APK face relay, use the main app at `https://<PC-LAN-IP>:3000/?nativeFaceRelay=1` (see [WEBCAM_AVATAR_CONTROL.md](./WEBCAM_AVATAR_CONTROL.md)).
 
@@ -190,7 +194,7 @@ See also `.cursor/rules/xr-strategy.mdc` for Galaxy XR / face bridge context.
 ## Quick verification
 
 ```bash
-npm ls @iwsdk/core @iwsdk/locomotor @iwsdk/xr-input @iwsdk/glxf --depth=1
+npm ls @iwsdk/core @iwsdk/locomotor @iwsdk/xr-input --depth=1
 ```
 
 ---
@@ -199,6 +203,7 @@ npm ls @iwsdk/core @iwsdk/locomotor @iwsdk/xr-input @iwsdk/glxf --depth=1
 
 | Date | Change |
 |------|--------|
+| 2026-08-25 | `/xr` presence: Havok physics (worker), collider_url walk mesh replaces default floor, UIKitML head-locked HUD |
 | 2026-05-27 | Initial doc: core installed; optional packages catalog; Thirdweb v4 removed |
 | 2026-05-27 | Galaxy XR–first dev strategy; `npm run dev` vs `dev:iwsdk`; headset logging |
 | 2026-05-28 | Yellow pinch ray/cursor; fork sync note; extra `iwsdk:*` npm scripts; CLI scene/ecs/adapter docs |

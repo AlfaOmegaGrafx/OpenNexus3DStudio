@@ -257,9 +257,9 @@ const Scene3D = ({ model, renderMode }) => {
     }
     try {
       await exportModel('vrm');
-      alert('VRM exported successfully!');
+      alert('Avatar exported successfully!');
     } catch (error) {
-      alert(`VRM export failed: ${error.message}`);
+      alert(`Avatar export failed: ${error.message}`);
     }
   };
 

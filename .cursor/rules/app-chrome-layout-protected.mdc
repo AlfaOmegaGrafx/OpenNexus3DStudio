@@ -5,7 +5,7 @@ alwaysApply: true
 
 # App chrome layout — protected (do not regress)
 
-**User-confirmed good state (2026-06-18; Avatar Creator chrome refreshed 2026-08-13).**  
+**User-confirmed good state (2026-06-18; Avatar Creator chrome refreshed 2026-08-13; viewport overlays locked 2026-08-19).**  
 Read `memory-bank/app-chrome-layout-protected-state.md` before editing header, task progress, or side rail layout.
 
 **If chrome regresses by mistake:** restore the frozen good state, do not reinvent layout:
@@ -27,6 +27,7 @@ Snapshot lives in `backups/ui-chrome-good-state/`. Only refresh with `bash scrip
 | CSS vars | Do **not** define `--app-content-top` on `.app` (shadows measured px value) |
 | Collapsed rails | Mirror left/right via shared `--collapsed-rail-*` tokens and paired selectors |
 | Z-index | Side panels ≤ 998; fix overlap by adjusting `top`, not raising panel z-index |
+| Viewport overlays | Animation bar + Adjuster scale with `.main-viewport` width via `applyViewportOverlayScale()` (inline transform; Galaxy XR ignores CSS-var scale) |
 
 ## Forbidden without explicit user request
 
@@ -38,7 +39,7 @@ Snapshot lives in `backups/ui-chrome-good-state/`. Only refresh with `bash scrip
 
 ## Protected files
 
-`App.jsx`, `App.css`, `TaskProgressBar.jsx`, `TaskProgressBar.css`, `TaskManager.jsx` (import), Avatar Creator appearance CSS/panels in the ui-chrome snapshot
+`App.jsx`, `App.css`, `TaskProgressBar.jsx`, `TaskProgressBar.css`, `TaskManager.jsx` (import), Avatar Creator appearance CSS/panels in the ui-chrome snapshot, `viewportLayoutSync.js`, `BottomDisplayMenu.module.css`, `KimodoMotionPromptBar.module.css`, `Mesh2MotionControllerOverlay.css/jsx`
 
 ## Before merging layout touches
 

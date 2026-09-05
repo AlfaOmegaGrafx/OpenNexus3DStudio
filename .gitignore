@@ -322,6 +322,9 @@ MONETIZATION_ROADMAP_*.html
 MONETIZATION_ROADMAP*.html
 MONETIZATION_ROADMAP_BACKUP.md
 /FUTURE_RD.md
+/MVP_REVENUE_EVM.md
+MVP_REVENUE_EVM.md
+MVP_REVENUE_EVM_*.md
 protect-monetization-roadmap.js
 protect-roadmap.bat
 Pitch Deck/
@@ -476,6 +479,8 @@ certs/
 **/MONETIZATION_ROADMAP_*.html
 **/MONETIZATION_ROADMAP*.html
 **/MONETIZATION_ROADMAP_BACKUP.md
+**/MVP_REVENUE_EVM.md
+**/MVP_REVENUE_EVM_*.md
 **/protect-monetization-roadmap.js
 **/protect-roadmap.bat
 **/Pitch Deck/
@@ -558,3 +563,35 @@ native/android-xr-face-bridge/.jdk/
 src/moat/
 scripts/companion-*.mjs
 scripts/start-companion-*
+
+# Moat / scratch / memory hygiene (never commit)
+scripts/staging-ardy/
+scripts/tmp-*
+scripts/tmp-*/
+scripts/vite-*-smoke.mjs
+scripts/vite-test-*.mjs
+scripts/vite-list-*.mjs
+scripts/vite-transform-*.mjs
+*.bak
+AGENTS.mindlink.md.bak
+CLAUDE.mindlink.md.bak
+pnpm-lock.yaml
+pnpm-workspace.yaml
+native/**/*.bak
+native/**/*.gradle.kts.test
+
+# Moat staging helpers (never commit)
+scripts/staging-arc2avatar/
+
+# Local companion restore snapshots (may contain moat overlay) — never commit
+docs/restore-points/
+
+# Companion / Live Speech ops that reference moat overlay paths — local only
+scripts/ensure-companion-stack-dgx.sh
+scripts/restart-personaplex-clear-busy.sh
+scripts/restart-companion-*.ps1
+scripts/restart-surface-companion-stack.ps1
+scripts/sync-companion-to-surface.sh
+scripts/probe-companion-*.ps1
+scripts/probe-companion-*.sh
+scripts/sync-moechat-to-surface.sh

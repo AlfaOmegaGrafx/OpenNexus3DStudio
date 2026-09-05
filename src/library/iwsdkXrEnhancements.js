@@ -4,10 +4,12 @@
  * - updatePointers hand connectivity without reassigning visual adapters
  */
 import {
+  ActionLocomotionInputProvider,
   createSystem,
   FollowBehavior,
   Follower,
   LocomotionEnvironment,
+  PanelUI,
   RayInteractable,
 } from '@iwsdk/core';
 import { EnvironmentType } from '@iwsdk/locomotor';
@@ -34,6 +36,11 @@ import {
   PlaneGeometry,
   SphereGeometry,
 } from 'three';
+import {
+  attachIwsdkStaticPhysics,
+} from './iwsdkPhysics.js';
+
+const XR_LAB_HUD_UIKITML = '/ui/xr-lab-hud.uikitml';
 
 const RAY_PRESSED_COLOR = new Color(0xffdd00);
 
@@ -131,34 +138,32 @@ export function patchGalaxyXrLocomotionInput() {
   }
   galaxyLocomotionPatched = true;
 
-  import('@iwsdk/core/dist/locomotion/locomotion-input-provider.js')
-    .then(({ ActionLocomotionInputProvider }) => {
-      const proto = ActionLocomotionInputProvider.prototype;
-      const origMove = proto.getMoveAxis;
-      proto.getMoveAxis = function getMoveAxisGalaxy(out) {
-        origMove.call(this, out);
-        out.x = -out.x;
-        out.y = -out.y;
-        return out;
-      };
+  try {
+    const proto = ActionLocomotionInputProvider.prototype;
+    const origMove = proto.getMoveAxis;
+    proto.getMoveAxis = function getMoveAxisGalaxy(out) {
+      origMove.call(this, out);
+      out.x = -out.x;
+      out.y = -out.y;
+      return out;
+    };
 
-      const origTurn = proto.getTurnAxis;
-      proto.getTurnAxis = function getTurnAxisGalaxy() {
-        return -origTurn.call(this);
-      };
+    const origTurn = proto.getTurnAxis;
+    proto.getTurnAxis = function getTurnAxisGalaxy() {
+      return -origTurn.call(this);
+    };
 
-      const origLeft = proto.getTurnLeftDown;
-      const origRight = proto.getTurnRightDown;
-      proto.getTurnLeftDown = function getTurnLeftDownGalaxy(micro) {
-        return origRight.call(this, micro);
-      };
-      proto.getTurnRightDown = function getTurnRightDownGalaxy(micro) {
-        return origLeft.call(this, micro);
-      };
-    })
-    .catch((err) => {
-      console.warn('[IwsdkXR] Galaxy locomotion patch skipped:', err?.message || err);
-    });
+    const origLeft = proto.getTurnLeftDown;
+    const origRight = proto.getTurnRightDown;
+    proto.getTurnLeftDown = function getTurnLeftDownGalaxy(micro) {
+      return origRight.call(this, micro);
+    };
+    proto.getTurnRightDown = function getTurnRightDownGalaxy(micro) {
+      return origLeft.call(this, micro);
+    };
+  } catch (err) {
+    console.warn('[IwsdkXR] Galaxy locomotion patch skipped:', err?.message || err);
+  }
 }
 
 /**
@@ -580,9 +585,14 @@ function ensureSessionHooks(world, session) {
 }
 
 /**
+ * Default flat floor for demo / worlds without collider_url.
+ * Tagged on world so a real walk mesh can replace it.
+ *
  * @param {import('@iwsdk/core').World} world
  */
 export function addWalkableFloor(world) {
+  if (world.__iwsdkDefaultFloorEntity) return world.__iwsdkDefaultFloorEntity;
+
   const floorGeo = new PlaneGeometry(24, 24);
   const floorMat = new MeshStandardMaterial({ color: 0x2a2a2e });
   const floor = new Mesh(floorGeo, floorMat);
@@ -594,6 +604,55 @@ export function addWalkableFloor(world) {
   floorEntity.addComponent(LocomotionEnvironment, {
     type: EnvironmentType.STATIC,
   });
+  // Physics floor so dropped props settle (Havok Static).
+  attachIwsdkStaticPhysics(floorEntity);
+  world.__iwsdkDefaultFloorEntity = floorEntity;
+  return floorEntity;
+}
+
+/**
+ * Remove the lab's default plane when a world collider GLB is loaded.
+ * @param {import('@iwsdk/core').World} world
+ */
+export function removeDefaultWalkableFloor(world) {
+  const entity = world?.__iwsdkDefaultFloorEntity;
+  if (!entity) return;
+  try {
+    entity.dispose?.();
+  } catch {
+    /* best effort */
+  }
+  world.__iwsdkDefaultFloorEntity = null;
+  console.log('[iwsdk-xr] default walk floor removed — using world collider');
+}
+
+/**
+ * Head-locked UIKitML status HUD (grab / physics / exit hints).
+ * @param {import('@iwsdk/core').World} world
+ */
+export function addXrLabStatusHud(world) {
+  if (world.__iwsdkStatusHudEntity) return world.__iwsdkStatusHudEntity;
+
+  const host = new Group();
+  host.name = 'IwsdkXrLabHud';
+  // Small world scale — UIKitML uses CSS-like px; transform scales the panel in meters.
+  host.scale.setScalar(0.0012);
+
+  const panelEntity = world.createTransformEntity(host, {
+    parent: world.sceneEntity,
+    persistent: true,
+  });
+  panelEntity.addComponent(PanelUI, { config: XR_LAB_HUD_UIKITML });
+  panelEntity.addComponent(Follower, {
+    target: world.player.head,
+    offsetPosition: [0, 0.14, -0.55],
+    behavior: FollowBehavior.FaceTarget,
+    speed: 10,
+    tolerance: 0.04,
+  });
+
+  world.__iwsdkStatusHudEntity = panelEntity;
+  return panelEntity;
 }
 
 /**
@@ -699,6 +758,7 @@ export function applyHeadsetXrEnhancements(world) {
   installHeadsetInputPipeline(world);
   addPhysicalHeadsetSkyFallback(world);
   addWalkableFloor(world);
+  addXrLabStatusHud(world);
   addExitPanel(world);
   registerXrControllerExitSystem(world);
 }

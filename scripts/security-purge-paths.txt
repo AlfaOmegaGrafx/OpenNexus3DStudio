@@ -16,6 +16,7 @@ key.pem
 certs/
 MONETIZATION_ROADMAP.md
 MONETIZATION_ROADMAP_BACKUP.md
+MVP_REVENUE_EVM.md
 Pitch Deck/
 Data Connect memory/
 uploads/

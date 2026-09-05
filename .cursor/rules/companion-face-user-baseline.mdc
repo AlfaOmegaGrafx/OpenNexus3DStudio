@@ -1,0 +1,13 @@
+---
+description: Companion immersive walk-past face baseline (You got it / rt18)
+globs: app/src/lib/companion-face-user.ts,app/src/components/vrm/galatea.tsx,app/src/lib/companion-follow.ts
+alwaysApply: false
+---
+
+# Immersive face-user (walk-past)
+
+Baseline **`20260825-rt18`** (user: “You got it”). Policy: `companion-face-user.ts`.
+
+- Immersive: `updateOrientation = false`, always face headset after steering (`lerpYaw` short arc → full 180°)
+- Follow: radial 1 m `copyFollowStandoffTarget` — do not revive orbit-deadzone / distance-latch without a new pin
+- Full UI lock: `OpenNexus3DStudio/src/moat/companion/UI-UX-COMPANION.md` (gitignored)

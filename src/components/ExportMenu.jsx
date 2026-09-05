@@ -69,7 +69,7 @@ export const ExportMenu = ({currentPrice, onPurchaseClick}) => {
           />
           <CustomButton
             theme="light"
-            text="VRM 0"
+            text="Avatar"
             icon="download"
             size={14}
             className={styles.button}

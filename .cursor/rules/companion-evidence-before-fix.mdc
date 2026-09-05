@@ -1,0 +1,55 @@
+---
+description: HARD STOP — grep Surface remote-log + DGX stack logs before any Companion/PersonaPlex/Live Speech fix
+alwaysApply: true
+---
+
+# Companion / Live Speech — evidence before code (NO EXCEPTIONS)
+
+User rule (locked Aug 23 2026): **Always** read runtime logs **before** editing code for Companion, PersonaPlex, Live Speech motion, `:8464` iframe, or `:8998` moshi.
+
+Skipping log grep is a regression — same severity as skipping SessionMem or graphify.
+
+## Required before ANY fix (Companion / PersonaPlex / Live Speech)
+
+Run **both** (DGX agent can SSH to Surface for remote-log):
+
+### 1. Surface remote log
+
+| Path | Enable |
+|------|--------|
+| `OpenNexus3DStudio/logs/remote-log.txt` | `https://<Surface-LAN>:3000/companion/?remoteLog=1` |
+
+Grep recent lines (match user repro timestamp):
+
+```bash
+rg -n "companion-iframe|PersonaPlex|applyEmotes|ReferenceError|not defined|Microphone failed|Maximum update|live-speech|handshake|WebSocket" logs/remote-log.txt | tail -60
+```
+
+Iframe console appears as **`[companion-iframe]`** when embed relay is active (`?embed=1&remoteLog=1` on iframe).
+
+### 2. DGX stack logs
+
+| Path | What |
+|------|------|
+| `/tmp/opennexus-companion-stack/personaplex-server.log` | moshi handshake, opus, idle timeout, voice file |
+| `/tmp/opennexus-companion-stack/companion.log` | Companion Vite / proxy (Surface may own `:5173`) |
+
+```bash
+tail -80 /tmp/opennexus-companion-stack/personaplex-server.log
+tail -40 /tmp/opennexus-companion-stack/companion.log
+```
+
+## Agent behavior
+
+1. **Agent pulls logs** — DGX agent runs `scp`/`ssh` to Surface `logs/remote-log.txt` and `tail` DGX stack logs **without asking the user to paste**. User paste is fallback only when SSH fails or log file is missing.
+2. **Grep first** — cite the log line(s) that prove the bug (e.g. `applyEmotesToTextPrompt is not defined`).
+3. **Cross-check** — client ReferenceError in remote-log vs server handshake/idle-timeout in personaplex-server.log.
+4. **Fix to match evidence** — do not guess from HUD text alone.
+5. **After fix** — agent re-fetches remote-log + DGX logs and reports what changed; tell user to hard-refresh (no new tab).
+6. **Sync** — `sync-companion-to-surface.sh` after `chat/app/src/` edits.
+
+## Related rules
+
+- `remote-log-first.mdc` — OpenNexus viewport/VRM
+- `no-guess-use-data.mdc` — general evidence discipline
+- `galaxy-adb-before-code-changes.mdc` — XR headset (add ADB when Galaxy involved)

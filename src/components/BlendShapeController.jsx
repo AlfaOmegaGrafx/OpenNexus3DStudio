@@ -60,17 +60,18 @@ const BlendShapeController = ({
 
   useEffect(() => {
     if (isActive) {
+      // Skeleton mode: bone panel only — never open blend shapes.
       setShowBonePanel(true);
-      setIsExpanded(true);
-      if (cardHeaderRef.current) {
-        setTimeout(() => {
-          cardHeaderRef.current?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-            inline: 'nearest'
-          });
-        }, 0);
-      }
+      setBonePanelExpanded(true);
+      setIsExpanded(false);
+      setTimeout(() => {
+        const bonePanel = document.querySelector('.bone-structure-panel');
+        bonePanel?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      }, 0);
     }
   }, [isActive]);
 
@@ -147,7 +148,7 @@ const BlendShapeController = ({
               <div className="no-blend-shapes">
                 <p>No blend shapes found</p>
                 <p className="text-sm text-gray-400">
-                  Assemble a character in Appearance or import a VRM — facial blend shapes appear here
+                  Assemble a character in Appearance or import an avatar — facial blend shapes appear here
                 </p>
               </div>
             ) : (

@@ -1,10 +1,11 @@
 /**
- * Patches @iwsdk/vite-plugin-dev for Character Studio dev on Windows + Cursor:
+ * Patches @iwsdk/vite-plugin-dev for OpenNexus3DStudio / Character Studio on Windows + Cursor:
  *
  * 1. Playwright browser URL — probe loopback, fall back to LAN when Cursor forwards :3000
  * 2. Injection bundle — activate IWER only in Playwright (__IWER_MCP_MANAGED), not on Galaxy XR LAN IP
  *
  * Idempotent — safe to run before every `npm run dev`.
+ * Targets @iwsdk/vite-plugin-dev 0.5.x (browserUrl uses resolvedUrls.local).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +19,9 @@ const injectionTarget = path.join(pkgRoot, 'injection-bundle.js');
 
 const BROWSER_URL_MARKER = '[CharacterStudio] IWSDK browser URL';
 const INJECTION_MARKER = '[CharacterStudio] IWER MCP managed activation';
+
+const BROWSER_URL_ORIGINAL =
+  "                browserUrl = new URL('/', server.resolvedUrls?.local?.[0] ?? fallbackLocalUrl).toString();";
 
 const BROWSER_URL_PATCHED_BLOCK = `                // ${BROWSER_URL_MARKER}
                 const envBrowser = process.env.IWSDK_BROWSER_HOST?.trim();
@@ -48,12 +52,15 @@ const BROWSER_URL_PATCHED_BLOCK = `                // ${BROWSER_URL_MARKER}
                     if (loopbackOk) {
                         browserUrl = loopbackUrl;
                     } else {
-                        browserUrl = lanUrl || \`\${protocol}://localhost:\${actualPort}\`;
+                        browserUrl = lanUrl || new URL('/', server.resolvedUrls?.local?.[0] ?? fallbackLocalUrl).toString().replace(/\\/$/, '');
                         if (lanUrl) {
                             console.log(\`[vite] IWSDK Playwright → \${browserUrl} (loopback :\${actualPort} busy — e.g. Cursor port forward)\`);
                         }
                     }
                 }`;
+
+const INJECTION_ORIGINAL = '}(e.activation,e.userAgentException,e.iwer)){';
+const INJECTION_PATCHED = `/*${INJECTION_MARKER}*/}(e.activation,e.userAgentException,e.iwer)||window.__IWER_MCP_MANAGED){`;
 
 function patchBrowserUrl() {
   if (!fs.existsSync(indexTarget)) {
@@ -64,12 +71,11 @@ function patchBrowserUrl() {
   if (src.includes(BROWSER_URL_MARKER)) {
     return;
   }
-  const original = '                browserUrl = `${protocol}://localhost:${actualPort}`;';
-  if (!src.includes(original)) {
+  if (!src.includes(BROWSER_URL_ORIGINAL)) {
     console.warn('[patch-iwsdk-browser-host] browser URL line missing — skip');
     return;
   }
-  src = src.replace(original, BROWSER_URL_PATCHED_BLOCK);
+  src = src.replace(BROWSER_URL_ORIGINAL, BROWSER_URL_PATCHED_BLOCK);
   fs.writeFileSync(indexTarget, src);
   console.log('[patch-iwsdk-browser-host] Playwright URL: loopback probe + LAN fallback');
 }
@@ -83,13 +89,11 @@ function patchInjectionActivation() {
   if (src.includes(INJECTION_MARKER)) {
     return;
   }
-  const original = '}(e.activation,e.userAgentException)){';
-  const replacement = `/*${INJECTION_MARKER}*/}(e.activation,e.userAgentException)||window.__IWER_MCP_MANAGED){`;
-  if (!src.includes(original)) {
+  if (!src.includes(INJECTION_ORIGINAL)) {
     console.warn('[patch-iwsdk-browser-host] activation check missing — skip');
     return;
   }
-  src = src.replace(original, replacement);
+  src = src.replace(INJECTION_ORIGINAL, INJECTION_PATCHED);
   fs.writeFileSync(injectionTarget, src);
   console.log('[patch-iwsdk-browser-host] IWER activates only on localhost or Playwright agent tab');
 }

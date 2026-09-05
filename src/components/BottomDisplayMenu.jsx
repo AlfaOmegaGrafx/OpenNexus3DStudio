@@ -345,7 +345,7 @@ export default function BottomDisplayMenu({ loadedAnimationName, randomize }) {
                 )}
                 {hasWebcamControl && (
                   <div
-                    className={`${styles.optionButtons} ${webcamAvatarActive ? styles.optionButtonsActive : ''}`}
+                    className={`${styles.optionButtons} ${styles.optionButtonsWebcam} ${webcamAvatarActive ? styles.optionButtonsActive : ''}`}
                     onClick={handleWebcamToggle}
                     title={
                       webcamAvatarActive

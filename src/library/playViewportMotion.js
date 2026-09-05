@@ -20,7 +20,7 @@ export async function playTextToMotionOnViewport({
 
   const vrm = pickPrimaryAnimationVrm(sceneManager, characterManager);
   if (!vrm?.humanoid) {
-    throw new Error('Load a VRM in the viewport first.');
+    throw new Error('Load an avatar in the viewport first.');
   }
 
   const am = characterManager?.animationManager;

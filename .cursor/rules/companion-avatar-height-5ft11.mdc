@@ -1,0 +1,33 @@
+---
+description: Companion immersive avatar = true 5′11″ + feet on local-floor (unit-scale measure)
+globs: chat/app/src/lib/companion-avatar-scale.ts,chat/app/src/components/vrm/galatea.tsx
+alwaysApply: false
+---
+
+# Companion avatar height (HARD)
+
+User-confirmed eye-to-eye at true **5′11″** on Galaxy XR (2026-08-24). Do not regress.
+
+## Contract
+
+| Context | Behavior |
+|---------|----------|
+| **Surface / Galaxy 2D** | `COMPANION_DESKTOP_AVATAR_SCALE` (1.05), `feetOffsetY = 0` |
+| **Immersive VR/MR** | Scale to `COMPANION_AVATAR_TARGET_HEIGHT_M` (71×0.0254). Local `feetOffsetY = -minY×scale` so feet sit on floor. Entity locomotion Y stays `COMPANION_XR_FLOOR_Y` (0). |
+
+## Forbidden regressions
+
+- Measuring bbox with R3F `root.scale` still applied (under-scales → too short)
+- Accepting empty first-frame skinned bbox and leaving desktop 1.05 forever in immersive
+- Changing locomotion / entity Y to “fix” height (offset is **local** on the VRM primitive)
+- Applying immersive height normalize on panel-2D
+
+## Source of truth
+
+`chat/app/src/lib/companion-avatar-scale.ts` (+ tests). Wired in `galatea.tsx` via `resolveCompanionAvatarPresentation` + measure retry (`COMPANION_AVATAR_MEASURE_MAX_ATTEMPTS`).
+
+Log: `[galatea-avatar] immersive height { measuredHeightM, scale, feetOffsetY, targetHeightM }`.
+
+## After `chat/app/src/` edits
+
+`bash OpenNexus3DStudio/scripts/sync-companion-to-surface.sh` — hard-refresh existing OpenNexus 3D tab (no new browser tab).

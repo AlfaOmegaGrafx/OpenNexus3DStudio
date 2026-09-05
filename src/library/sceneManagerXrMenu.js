@@ -864,7 +864,7 @@ export class SceneManagerXrMenu {
     this._buildActionColumn(panelContent, [
       { action: 'studio-randomize', text: 'Randomize traits' },
       { action: 'studio-emotion', text: 'Cycle emotion' },
-      { action: 'studio-export-vrm', text: 'Export VRM' },
+      { action: 'studio-export-vrm', text: 'Export avatar' },
       {
         action: 'studio-randomize',
         text: this._jobBusyLabel || 'Character Studio · loot / emotions',

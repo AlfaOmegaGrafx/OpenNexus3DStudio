@@ -32,6 +32,7 @@ import {
   getTaskResultFbxUrl,
   getAutoRigMetaFromResult,
   getTaskResultFileExtension,
+  isQuadRetopoTaskResult,
   isTextToImageTaskResult,
   isTextToMotionTaskResult,
   normalizeTaskLoadPayload,
@@ -62,19 +63,17 @@ import MintSimple from './pages/MintSimple';
 import LoadSimple from './pages/LoadSimple';
 import ToolsSimple from './pages/ToolsSimple';
 import BottomDisplayMenu from './components/BottomDisplayMenu';
+import Mesh2MotionControllerOverlay from './components/Mesh2MotionControllerOverlay';
 import NativeFaceRelayHud from './components/NativeFaceRelayHud';
 import { useDragToScroll } from './hooks/useDragToScroll';
 import { subscribeViewportLayoutSync } from './library/viewportLayoutSync';
+import { syncSidebarScrollToElement } from './library/boneStructurePanelScroll';
 import { showApiStatusPanel } from './library/runtimeUi';
 import {
   showXrAiPanel,
-  showXrAiPanelAtSidebarTop,
   OPEN_XR_AI_PANEL_EVENT,
+  requestXrVoiceExpand,
 } from './library/xrHubConfig';
-import {
-  captureCompanionHandoffFromScene,
-  storeCompanionHandoff,
-} from './library/companionHandoff.js';
 import './App.css';
 
 /** Electron dialog returns a filesystem path; loaders expect a `file:` URL in the renderer. */
@@ -97,6 +96,7 @@ function AppContent() {
   const [openNexusSidebarCollapsed, setOpenNexusSidebarCollapsed] = useState(true); // OpenNexus avatar sidebar — default collapsed
   const combinedImportRef = useRef(null);
   const xrAiPanelRef = useRef(null);
+  const pendingXrPanelOpenRef = useRef(false);
   const headerRef = useRef(null);
   const sceneControlsRef = useRef(null);
   const appContentRef = useRef(null);
@@ -493,6 +493,7 @@ function AppContent() {
       const resolvedFileExtension =
         fileExtension ||
         (isTemplateRig || isAppearanceComponentRig ? 'vrm' : undefined);
+      const quadTopology = isQuadRetopoTaskResult(taskResult, task);
 
       const runLoad = async () => {
         console.log(`App: Loading model (${source}):`, resolved);
@@ -501,6 +502,7 @@ function AppContent() {
           viewportManaged: true,
           avatarFromImage: isAvatarFromImage,
           taskType: task?.type,
+          quadTopology,
           ensureForwardFacing: false,
           orientationMode: 'none',
           autoScale: false,
@@ -774,6 +776,148 @@ function AppContent() {
     return () => window.removeEventListener('sceneViewportReady', flushPending);
   }, [isViewportReady]);
 
+  // Adjuster Target → Object/Bone syncs header Render mode + bone panel visibility.
+  useEffect(() => {
+    if (!sceneManager) return undefined;
+    const onAdjusterUiRenderMode = (payload) => {
+      const mode = payload?.mode;
+      if (mode === 'skeleton') {
+        setSkeletonActive(true);
+        updateRenderMode('skeleton');
+        setRenderModeStates((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((key) => {
+            next[key] = key === 'skeleton';
+          });
+          return next;
+        });
+        if (window.blendShapeControls) {
+          window.blendShapeControls.setBlendShapesVisible?.(false);
+          window.blendShapeControls.setBonePanelVisible?.(true);
+          setTimeout(() => {
+            const bonePanel = document.querySelector('.bone-structure-panel');
+            bonePanel?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+              inline: 'nearest',
+            });
+          }, 50);
+        }
+        return;
+      }
+      if (mode === 'solid') {
+        setSkeletonActive(false);
+        updateRenderMode('solid');
+        setRenderModeStates((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((key) => {
+            next[key] = key === 'solid';
+          });
+          return next;
+        });
+        if (window.blendShapeControls) {
+          // Leaving skeleton: hide bone panel; do not force-open blend shapes.
+          window.blendShapeControls.setBonePanelVisible?.(false);
+        }
+      }
+    };
+    sceneManager.on('adjusterUiRenderMode', onAdjusterUiRenderMode);
+    return () => sceneManager.off('adjusterUiRenderMode', onAdjusterUiRenderMode);
+  }, [sceneManager, updateRenderMode]);
+
+  const handleSkeletonToggle = useCallback((options = {}) => {
+    const { expandSidebarIfCollapsed = false } = options;
+
+    const applyToggle = () => {
+      const newSkeletonActive = !skeletonActive;
+      setSkeletonActive(newSkeletonActive);
+
+      if (newSkeletonActive) {
+        updateRenderMode('skeleton');
+        setRenderModeStates((prev) => {
+          const newStates = { ...prev };
+          Object.keys(newStates).forEach((key) => {
+            newStates[key] = key === 'skeleton';
+          });
+          return newStates;
+        });
+        if (window.blendShapeControls) {
+          window.blendShapeControls.setBlendShapesVisible(false);
+          window.blendShapeControls.setBonePanelVisible(true);
+          setTimeout(() => {
+            document.querySelector('.bone-structure-panel')?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+              inline: 'nearest',
+            });
+          }, 100);
+        }
+        return;
+      }
+
+      updateRenderMode('solid');
+      setRenderModeStates((prev) => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach((key) => {
+          newStates[key] = key === 'solid';
+        });
+        return newStates;
+      });
+      if (window.blendShapeControls) {
+        window.blendShapeControls.setBlendShapesVisible(true);
+        window.blendShapeControls.setBonePanelVisible(false);
+        setTimeout(() => {
+          document.querySelector('.blend-shape-controller')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+            inline: 'nearest',
+          });
+        }, 100);
+      }
+    };
+
+    if (expandSidebarIfCollapsed && sidebarCollapsed) {
+      setSidebarCollapsed(false);
+      setTimeout(applyToggle, 150);
+      return;
+    }
+    applyToggle();
+  }, [skeletonActive, sidebarCollapsed, updateRenderMode]);
+
+  const scrollXrVoicePanelIntoView = useCallback(() => {
+    const sidebar = sidebarScrollRef.current;
+    const host = xrAiPanelRef.current;
+    if (!sidebar || !host) return false;
+    const header = host.querySelector('.xr-ai-panel-header');
+    if (!(header instanceof HTMLElement)) return false;
+    syncSidebarScrollToElement(sidebar, header);
+    const sideRect = sidebar.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    return Math.abs(headerRect.top - sideRect.top) <= 2;
+  }, []);
+
+  const openXrVoiceFromCollapsedRail = useCallback(() => {
+    requestXrVoiceExpand();
+    pendingXrPanelOpenRef.current = true;
+    setSidebarCollapsed(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (sidebarCollapsed || !pendingXrPanelOpenRef.current) return undefined;
+    pendingXrPanelOpenRef.current = false;
+
+    window.dispatchEvent(new CustomEvent(OPEN_XR_AI_PANEL_EVENT));
+
+    const retries = [0, 48, 120, 240, 400];
+    retries.forEach((delayMs) => {
+      window.setTimeout(() => {
+        scrollXrVoicePanelIntoView();
+      }, delayMs);
+    });
+
+    return undefined;
+  }, [sidebarCollapsed, scrollXrVoicePanelIntoView]);
+
   // Handle render mode changes with state tracking
   const handleRenderModeChange = useCallback((mode) => {
     console.log('Render mode change requested:', mode);
@@ -827,6 +971,10 @@ function AppContent() {
   // Handle file loading
   const handleFileLoad = useCallback(async (file) => {
     try {
+      if (file?.name?.toLowerCase?.().endsWith('.vrm')) {
+        const { rememberSpacetimeWalkerVrm } = await import('./library/spacetimeXrWalker.js');
+        rememberSpacetimeWalkerVrm(file);
+      }
       await loadModel(file);
       if (typeof file?.path === 'string' && file.path.length > 0 && window.electronAPI?.rememberImportDirectory) {
         const i = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
@@ -839,7 +987,7 @@ function AppContent() {
       
       // Show user-friendly error message
       if (error.message.includes('Unsupported file format')) {
-        alert(`❌ ${error.message}\n\nPlease try uploading a supported 3D model file (.glb, .gltf, .obj, .fbx, or .vrm)`);
+        alert(`❌ ${error.message}\n\nPlease try uploading a supported 3D model file (.glb, .gltf, .obj, .fbx, or avatar)`);
       } else {
         alert(`❌ Failed to load file: ${error.message}`);
       }
@@ -1022,12 +1170,12 @@ function AppContent() {
           <a
             className="title-xr-lab-link"
             href="/companion"
-            title="Voice companion handoff (WebXR + VRM)"
+            title="Talk to your avatar companion (WebXR)"
             onClick={() => {
               try {
                 storeCompanionHandoff(captureCompanionHandoffFromScene(sceneManager));
               } catch (error) {
-                console.warn('App: companion handoff capture failed:', error?.message || error);
+                console.warn('App: companion avatar capture failed:', error?.message || error);
               }
             }}
           >
@@ -1174,91 +1322,7 @@ function AppContent() {
               </button>
               <button 
                 className={`header-btn ${renderModeStates.skeleton ? 'active' : ''}`}
-                onClick={() => {
-              console.log('Skeleton button clicked, current skeletonActive:', skeletonActive);
-              const newSkeletonActive = !skeletonActive;
-              setSkeletonActive(newSkeletonActive);
-              
-              if (newSkeletonActive) {
-                // SKELETON ON: Activate skeleton mode
-                console.log('Activating skeleton mode');
-                
-                // 1. Set render mode to skeleton (direct call, not through handleRenderModeChange)
-                updateRenderMode('skeleton');
-                
-                // 2. Update render mode states
-                setRenderModeStates(prev => {
-                  const newStates = { ...prev };
-                  Object.keys(newStates).forEach(key => {
-                    newStates[key] = key === 'skeleton';
-                  });
-                  return newStates;
-                });
-                
-                // 3. Control panels via blendShapeControls
-                if (window.blendShapeControls) {
-                  console.log('Skeleton ON - hiding blend shapes, showing bone structure');
-                  window.blendShapeControls.setBlendShapesVisible(false);
-                  window.blendShapeControls.setBonePanelVisible(true);
-                  
-                  // 4. Auto-scroll to bone structure panel
-                  setTimeout(() => {
-                    const bonePanel = document.querySelector('.bone-structure-panel');
-                    if (bonePanel) {
-                      bonePanel.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'start',
-                        inline: 'nearest'
-                      });
-                      console.log('Scrolled to bone structure panel');
-                    } else {
-                      console.log('Bone structure panel not found for scrolling');
-                    }
-                  }, 100); // Small delay to ensure panel is rendered
-                } else {
-                  console.log('window.blendShapeControls not available');
-                }
-              } else {
-                // SKELETON OFF: Return to normal mode
-                console.log('Deactivating skeleton mode');
-                
-                // 1. Set render mode back to solid (direct call, not through handleRenderModeChange)
-                updateRenderMode('solid');
-                
-                // 2. Update render mode states
-                setRenderModeStates(prev => {
-                  const newStates = { ...prev };
-                  Object.keys(newStates).forEach(key => {
-                    newStates[key] = key === 'solid';
-                  });
-                  return newStates;
-                });
-                
-                // 3. Control panels via blendShapeControls
-                if (window.blendShapeControls) {
-                  console.log('Skeleton OFF - showing blend shapes, hiding bone structure');
-                  window.blendShapeControls.setBlendShapesVisible(true);
-                  window.blendShapeControls.setBonePanelVisible(false);
-                  
-                  // 4. Auto-scroll to blend shapes panel
-                  setTimeout(() => {
-                    const blendShapesPanel = document.querySelector('.blend-shape-controller');
-                    if (blendShapesPanel) {
-                      blendShapesPanel.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'start',
-                        inline: 'nearest'
-                      });
-                      console.log('Scrolled to blend shapes panel');
-                    } else {
-                      console.log('Blend shapes panel not found for scrolling');
-                    }
-                  }, 100); // Small delay to ensure panel is rendered
-                } else {
-                  console.log('window.blendShapeControls not available');
-                }
-              }
-            }}
+                onClick={() => handleSkeletonToggle()}
                 title="Skeleton Mode"
               >
                 🦴 Skeleton
@@ -1422,10 +1486,7 @@ function AppContent() {
             }}
             renderModeStates={renderModeStates}
             skeletonActive={skeletonActive}
-            onSkeletonClick={() => {
-              console.log('🦴 Skeleton button clicked');
-              setSkeletonActive(!skeletonActive);
-            }}
+            onSkeletonClick={() => handleSkeletonToggle()}
           />
         </div>
         <button
@@ -1575,7 +1636,7 @@ function AppContent() {
             {/* Collapsed Sidebar Icons */}
             {sidebarCollapsed && (
               <div className="collapsed-sidebar-icons">
-                <button 
+                <button
                   className="sidebar-icon"
                   type="button"
                   onClick={() => {
@@ -1590,46 +1651,9 @@ function AppContent() {
                 >
                   📁
                 </button>
-                <button 
+                <button
                   className="sidebar-icon"
-                  onClick={() => {
-                    setSkeletonActive(!skeletonActive);
-                  }}
-                  data-tooltip="Toggle Skeleton"
-                  title="Toggle Skeleton"
-                >
-                  👤
-                </button>
-                <button 
-                  className="sidebar-icon"
-                  onClick={() => {
-                    if (currentModel) {
-                      exportModel('glb', { filename: 'export.glb' });
-                    } else {
-                      alert('No model to export');
-                    }
-                  }}
-                  data-tooltip="Export GLB"
-                  title="Export GLB"
-                >
-                  📤
-                </button>
-                <button 
-                  className="sidebar-icon"
-                  onClick={() => {
-                    setSidebarCollapsed(false);
-                    requestAnimationFrame(() => {
-                      window.dispatchEvent(new CustomEvent(OPEN_XR_AI_PANEL_EVENT));
-                      xrAiPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    });
-                  }}
-                  data-tooltip="XR Voice (DGX)"
-                  title="XR Voice (DGX)"
-                >
-                  🎙️
-                </button>
-                <button 
-                  className="sidebar-icon"
+                  type="button"
                   onClick={() => {
                     if (!beginAiTaskOrBrowseCatalog('text-to-3d')) return;
                     const objectName = promptForObjectName('');
@@ -1642,10 +1666,11 @@ function AppContent() {
                   data-tooltip={isConnected ? 'AI Text-to-3D' : 'Browse Text-to-3D models'}
                   title={isConnected ? 'AI Text-to-3D' : 'Browse Text-to-3D models'}
                 >
-                  🎭
+                  🔤
                 </button>
-                <button 
+                <button
                   className="sidebar-icon"
+                  type="button"
                   onClick={() => {
                     if (!beginAiTaskOrBrowseCatalog('image-to-3d')) return;
                     const input = document.createElement('input');
@@ -1668,12 +1693,46 @@ function AppContent() {
                   data-tooltip={isConnected ? 'AI Image-to-3D' : 'Browse Image-to-3D models'}
                   title={isConnected ? 'AI Image-to-3D' : 'Browse Image-to-3D models'}
                 >
-                  🤖
+                  🖼️
+                </button>
+                {showXrAiPanel() && (
+                <button
+                  className="sidebar-icon"
+                  type="button"
+                  onClick={openXrVoiceFromCollapsedRail}
+                  data-tooltip="XR Voice (DGX)"
+                  title="XR Voice (DGX)"
+                >
+                  🎙️
+                </button>
+                )}
+                <button
+                  className={`sidebar-icon ${skeletonActive ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => handleSkeletonToggle({ expandSidebarIfCollapsed: true })}
+                  data-tooltip="Toggle Skeleton"
+                  title="Toggle Skeleton"
+                >
+                  🦴
+                </button>
+                <button
+                  className="sidebar-icon"
+                  type="button"
+                  onClick={() => {
+                    if (currentModel) {
+                      exportModel('glb', { filename: 'export.glb' });
+                    } else {
+                      alert('No model to export');
+                    }
+                  }}
+                  data-tooltip="Export GLB"
+                  title="Export GLB"
+                >
+                  📤
                 </button>
               </div>
             )}
 
-          {/* Always mounted: ref must work when sidebar is collapsed (was unmounted before). */}
           <div
             className="combined-import-mount"
             style={
@@ -1695,10 +1754,15 @@ function AppContent() {
             <CombinedImport ref={combinedImportRef} onFileLoad={handleFileLoad} />
           </div>
 
-          {/* Full Sidebar Content */}
           {!sidebarCollapsed && (
             <>
-          {showXrAiPanelAtSidebarTop() && (
+          <TaskManager 
+            tasks={tasks}
+            onAITask={handleAITask}
+            isApiConnected={isConnected}
+          />
+          <WorldLibrary apiEndpoint={apiEndpoint} compact />
+          {showXrAiPanel() && (
           <div ref={xrAiPanelRef}>
             <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
           </div>
@@ -1714,13 +1778,13 @@ function AppContent() {
             }}
             isActive={skeletonActive}
           />
-          <GLBExport apiEndpoint={apiEndpoint} />
-          <VRMExport />
           <Core3DPanel />
           <CreatureAnimationPanel />
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
+          <VRMExport />
+          <GLBExport apiEndpoint={apiEndpoint} />
           {showApiStatusPanel() && (
           <APIStatus 
             endpoint={apiEndpoint}
@@ -1729,40 +1793,6 @@ function AppContent() {
             onEndpointChange={setApiEndpoint}
             onTestConnection={forceConnectionCheck}
           />
-          )}
-          {showXrAiPanel() && !showXrAiPanelAtSidebarTop() && (
-          <div ref={xrAiPanelRef}>
-            <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
-          </div>
-          )}
-          <TaskManager 
-            tasks={tasks}
-            onAITask={handleAITask}
-            isApiConnected={isConnected}
-          />
-          <WorldLibrary apiEndpoint={apiEndpoint} compact />
-          {import.meta.env.DEV && (
-          <div style={{ background: '#333', padding: '0.5rem', margin: '0.25rem 0', borderRadius: '4px', fontSize: '0.7rem' }}>
-            <div>API Connected: {isConnected ? 'YES' : 'NO'}</div>
-            <div>Tasks: {tasks.length}</div>
-            <div>Tasks: {JSON.stringify(tasks.map(t => ({ id: t.id, status: t.status, name: t.name })))}</div>
-            <div>API Endpoint: {apiEndpoint}</div>
-            <button 
-              onClick={forceConnectionCheck}
-              style={{ 
-                background: '#007bff', 
-                color: 'white', 
-                border: 'none', 
-                padding: '0.25rem 0.5rem', 
-                borderRadius: '3px', 
-                cursor: 'pointer',
-                marginTop: '0.25rem',
-                fontSize: '0.7rem'
-              }}
-            >
-              Force Check Connection
-            </button>
-          </div>
           )}
             </>
           )}
@@ -1773,6 +1803,7 @@ function AppContent() {
             model={currentModel}
             renderMode={renderMode}
           />
+          <Mesh2MotionControllerOverlay sceneManager={sceneManager} model={currentModel} />
           {/* Bottom Animations Panel (overlay-anchored so it isn't clipped by the full-height scene) */}
           <div className="bottom-menu-overlay">
             <BottomDisplayMenu />

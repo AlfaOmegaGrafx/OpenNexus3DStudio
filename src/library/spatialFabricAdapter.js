@@ -6,7 +6,7 @@
  */
 
 import { inferModelFileExtensionFromSource } from './taskModelUrl.js';
-import { get3daigcAuthHeaders } from './taskManager.js';
+import { get3daigcAuthHeaders, normalizeApiBaseUrl } from './taskManager.js';
 import {
   fetchWorldPackage,
   resolveWorldPackageUrls,
@@ -142,7 +142,7 @@ export function buildSceneAssemblerOpenUrl(cfg = {}, opts = {}) {
  * Merge API config with Vite env fallbacks.
  * @param {object|null|undefined} apiConfig
  */
-function rewriteFabricUrlToPublicBase(fabricUrl, publicBase) {
+export function rewriteFabricUrlToPublicBase(fabricUrl, publicBase) {
   if (!fabricUrl || !publicBase) return fabricUrl || '';
   try {
     const path = new URL(fabricUrl).pathname + new URL(fabricUrl).search;
@@ -152,10 +152,41 @@ function rewriteFabricUrlToPublicBase(fabricUrl, publicBase) {
   }
 }
 
+/**
+ * Rewrite Tailscale/DGX fabric URLs to the browser-reachable MSF proxy (:8453 on Surface).
+ * @param {string} fabricUrl
+ * @param {object|null|undefined} [cfg]
+ * @param {{ rootIx?: number, publicBase?: string }} [opts]
+ */
+export function resolveBrowserReachableFabricUrl(fabricUrl, cfg = {}, opts = {}) {
+  const merged = mergeSpatialFabricConfig(cfg ?? {});
+  const rootIx = Number(opts.rootIx ?? merged.rootIx ?? 1);
+  let publicBase = (opts.publicBase || merged.msfPublicUrl || '').replace(/\/$/, '');
+  if (!publicBase && typeof window !== 'undefined' && window.location?.hostname) {
+    publicBase = `${window.location.protocol}//${window.location.hostname}:8453`;
+  }
+  const normalized = normalizeSpaceTimeFabricUrl(
+    fabricUrl || merged.fabricMsfUrl || '',
+    { rootIx },
+  );
+  if (!normalized) return '';
+  return publicBase ? rewriteFabricUrlToPublicBase(normalized, publicBase) : normalized;
+}
+
 export function mergeSpatialFabricConfig(apiConfig) {
   const env = getSpatialFabricEnv();
-  let msfPublicUrl = (env.msfPublicUrl || apiConfig?.public_base_url || '').replace(/\/$/, '');
-  let fabricMsfUrl = (env.fabricMsfUrl || apiConfig?.fabric_msf_url || '').replace(/\/$/, '');
+  let msfPublicUrl = (
+    env.msfPublicUrl ||
+    apiConfig?.msfPublicUrl ||
+    apiConfig?.public_base_url ||
+    ''
+  ).replace(/\/$/, '');
+  let fabricMsfUrl = (
+    env.fabricMsfUrl ||
+    apiConfig?.fabricMsfUrl ||
+    apiConfig?.fabric_msf_url ||
+    ''
+  ).replace(/\/$/, '');
   if (msfPublicUrl && fabricMsfUrl && env.msfPublicUrl) {
     fabricMsfUrl = rewriteFabricUrlToPublicBase(fabricMsfUrl, msfPublicUrl);
   }
@@ -683,6 +714,174 @@ export function openSpatialFabricInBrowser(url, preopenedTab = null, opts = {}) 
   throw new Error(
     `Browser blocked opening Scene Assembler. Open manually: ${target}`,
   );
+}
+
+/**
+ * Normalize fabric URL for Space-Time Host (live Sneeze scene from MySQL).
+ * Rewrites legacy sample.msf → sneeze.msf and appends ?root= when missing.
+ * @param {string} url
+ * @param {{ rootIx?: number }} [opts]
+ */
+export function normalizeSpaceTimeFabricUrl(url, opts = {}) {
+  const rootIx = Number(opts.rootIx ?? 1);
+  let fabric = (url || '').replace(/\/$/, '');
+  if (!fabric) return '';
+  fabric = fabric.replace(/\/fabric\/sample\.msf(\?.*)?$/i, '/fabric/sneeze.msf$1');
+  if (/\/fabric\/sneeze\.msf$/i.test(fabric) && rootIx > 0) {
+    fabric += `?root=${rootIx}`;
+  } else if (/sneeze\.msf/i.test(fabric) && !/[?&]root=/i.test(fabric) && rootIx > 0) {
+    fabric += `${fabric.includes('?') ? '&' : '?'}root=${rootIx}`;
+  }
+  return fabric;
+}
+
+/**
+ * Fabric URL for the native Space-Time Browser (not Scene Assembler HTML).
+ * Uses sneeze.msf (live DB scene), not sample.msf (RP1 MVIO pointer only).
+ * @param {object|null|undefined} cfg from mergeSpatialFabricConfig
+ * @param {{ rootIx?: number }} [opts]
+ */
+export function buildSpaceTimeBrowserFabricUrl(cfg = {}, opts = {}) {
+  const rootIx = Number(opts.rootIx ?? cfg.rootIx ?? 1);
+  let directFabric = (cfg.fabricMsfUrl || cfg.fabric_msf_url || '').replace(/\/$/, '');
+  const merged = mergeSpatialFabricConfig(cfg ?? {});
+  if (!directFabric && merged.fabricMsfUrl) directFabric = merged.fabricMsfUrl;
+  if (!directFabric && merged.msfPublicUrl) {
+    directFabric = `${merged.msfPublicUrl.replace(/\/$/, '')}/fabric/sneeze.msf`;
+  }
+  return normalizeSpaceTimeFabricUrl(directFabric, { rootIx });
+}
+
+/**
+ * Deep link consumed by spacetime-host (Phase B).
+ * @param {string} fabricUrl
+ */
+export function buildSpaceTimeBrowserDeepLink(fabricUrl) {
+  if (!fabricUrl) return '';
+  const encoded = encodeURIComponent(fabricUrl);
+  return `spacetime://fabric?url=${encoded}`;
+}
+
+/**
+ * WebXR immersive fabric URL for Galaxy XR (Chrome on headset + nativeFaceRelay).
+ * @param {object|null|undefined} cfg
+ * @param {{ rootIx?: number, origin?: string }} [opts]
+ */
+export function buildSpaceTimeImmersivePageUrl(cfg = {}, opts = {}) {
+  const merged = mergeSpatialFabricConfig(cfg ?? {});
+  const fabricUrl = resolveBrowserReachableFabricUrl(
+    buildSpaceTimeBrowserFabricUrl(merged, opts),
+    merged,
+    opts,
+  );
+  if (!fabricUrl) return '';
+  const origin =
+    opts.origin ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  const params = new URLSearchParams({
+    nativeFaceRelay: '1',
+    remoteLog: '1',
+    fabricUrl,
+  });
+  if (opts.useMainAvatar === true || opts.useMainAvatar === '1') {
+    params.set('useMainAvatar', '1');
+  } else if (typeof window !== 'undefined') {
+    try {
+      if (sessionStorage.getItem('opennexus.spacetimeXrVrmUrl')) {
+        params.set('useMainAvatar', '1');
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (opts.vrmUrl) {
+    params.set('vrmUrl', opts.vrmUrl);
+  }
+  return `${origin.replace(/\/$/, '')}/spacetime-xr?${params.toString()}`;
+}
+
+/**
+ * Open Galaxy XR immersive fabric walker in a new tab (Surface / headset Chrome).
+ * @param {object|null|undefined} cfg
+ */
+export function openSpaceTimeImmersive(cfg = {}) {
+  const url = buildSpaceTimeImmersivePageUrl(cfg);
+  if (!url) {
+    throw new Error(
+      'Space-Time XR needs MSF fabric URL — set VITE_RP1_FABRIC_MSF_URL or link MSF in API config.',
+    );
+  }
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(url);
+  }
+  return { url, fabricUrl: buildSpaceTimeBrowserFabricUrl(cfg), copied: true };
+}
+
+/**
+ * Ask 3DAIGC-API to launch Space-Time Browser on DGX, or return launch hints.
+ * @param {object|null|undefined} cfg
+ * @param {{ fabricMsfUrl?: string, apiEndpoint?: string }} [opts]
+ */
+export async function openSpaceTimeBrowser(cfg = {}, opts = {}) {
+  const merged = mergeSpatialFabricConfig(cfg ?? {});
+  const fabricUrl = opts.fabricMsfUrl
+    ? normalizeSpaceTimeFabricUrl(opts.fabricMsfUrl, { rootIx: opts.rootIx })
+    : buildSpaceTimeBrowserFabricUrl(merged, opts);
+  if (!fabricUrl) {
+    throw new Error(
+      'Space-Time Browser needs MSF fabric URL — set VITE_RP1_FABRIC_MSF_URL or link MSF in API config.',
+    );
+  }
+
+  const deepLink = buildSpaceTimeBrowserDeepLink(fabricUrl);
+  const apiBase = normalizeApiBaseUrl(
+    opts.apiEndpoint ?? import.meta.env.VITE_API_ENDPOINT ?? '',
+  );
+
+  if (apiBase) {
+    try {
+      const res = await fetch(
+        apiUrl(apiBase, '/api/v1/spatial-fabric/open-space-time-browser'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...get3daigcAuthHeaders(),
+          },
+          body: JSON.stringify({ fabric_url: fabricUrl, deep_link: deepLink }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[SpatialFabric] Space-Time Browser launch:', data);
+        return { launched: true, fabricUrl, deepLink, ...data };
+      }
+      const errBody = await readSpatialFabricJson(res);
+      throw new Error(
+        formatSpatialFabricApiError(res, errBody, 'Space-Time Browser launch'),
+      );
+    } catch (err) {
+      if (err instanceof Error && /Space-Time Browser launch failed/i.test(err.message)) {
+        throw err;
+      }
+      console.warn('[SpatialFabric] Space-Time Browser API launch error', err);
+      throw new Error(
+        `Space-Time Browser launch failed: could not reach 3DAIGC-API at ${apiBase}. ` +
+          'On Surface use /__dev_dgx_proxy and restart npm run dev so Vite forwards to DGX.',
+      );
+    }
+  }
+
+  const hint =
+    `No API endpoint configured — on DGX run:\n` +
+    `bash /home/sifr/SpaceTimeHost/scripts/run-dgx.sh --url '${fabricUrl}'\n\n` +
+    `Deep link: ${deepLink}`;
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(deepLink);
+  }
+
+  return { launched: false, fabricUrl, deepLink, hint };
 }
 
 const SPLAT_MESH_EXTENSIONS = new Set(['ply', 'splat', 'spz', 'ksplat', 'sog']);

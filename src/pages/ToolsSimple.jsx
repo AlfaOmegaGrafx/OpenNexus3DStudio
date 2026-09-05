@@ -122,10 +122,10 @@ const ToolsSimple = ({ onNavigate }) => {
       
       await downloadVRMWithAvatar(vrmModel, avatarToUse, filenameWithoutExt, finalExportOptions);
       
-      alert(`VRM model exported successfully as ${exportOptions.filename}`);
+      alert(`Avatar exported successfully as ${exportOptions.filename}`);
     } catch (error) {
       console.error('VRM export failed:', error);
-      alert(`VRM export failed: ${error.message}`);
+      alert(`Avatar export failed: ${error.message}`);
     } finally {
       setIsExporting(false);
     }
@@ -168,9 +168,9 @@ const ToolsSimple = ({ onNavigate }) => {
     }
     try {
       await exportModel('vrm');
-      alert('VRM exported successfully!');
+      alert('Avatar exported successfully!');
     } catch (error) {
-      alert(`VRM export failed: ${error.message}`);
+      alert(`Avatar export failed: ${error.message}`);
     }
   };
 
@@ -412,13 +412,13 @@ const ToolsSimple = ({ onNavigate }) => {
                 handleOptionChange('filename', filename);
               }}
               className={styles.input}
-              placeholder="export.vrm"
+              placeholder="my-avatar"
             />
           </div>
 
           {/* VRM Version */}
           <div className={styles.optionGroup}>
-            <label className={styles.label}>VRM Version:</label>
+            <label className={styles.label}>Avatar format:</label>
             <select
               value={exportOptions.vrmVersion}
               onChange={(e) => handleOptionChange('vrmVersion', e.target.value)}
@@ -479,9 +479,9 @@ const ToolsSimple = ({ onNavigate }) => {
               onClick={handleVRMExport}
               className={`${styles.button} ${styles.vrmButton}`}
               disabled={!currentModel}
-              title="Export current model as VRM"
+              title="Export current model as avatar"
             >
-              🎭 Export VRM
+              🎭 Export avatar
             </button>
             <button 
               onClick={handleGLBExport}

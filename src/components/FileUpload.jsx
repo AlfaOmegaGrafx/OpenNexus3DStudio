@@ -54,7 +54,7 @@ const FileUpload = ({ onFileLoad }) => {
               <div>
                 <p>Drag & drop a file here, or click to select</p>
                 <p className="text-sm text-gray-400 mt-2">
-                  Supports: GLB, GLTF, OBJ, FBX, VRM, JPG, PNG
+                  Supports: GLB, GLTF, OBJ, FBX, Avatar, JPG, PNG
                 </p>
               </div>
             )}
@@ -65,7 +65,7 @@ const FileUpload = ({ onFileLoad }) => {
           <h4 className="text-sm font-semibold mb-2">Supported Formats:</h4>
           <div className="format-list">
             <div className="format-item">
-              <strong>3D Models:</strong> GLB, GLTF, OBJ, FBX, VRM, DAE, STL
+              <strong>3D Models:</strong> GLB, GLTF, OBJ, FBX, Avatar, DAE, STL
             </div>
             <div className="format-item">
               <strong>Images:</strong> JPG, PNG, BMP, TGA

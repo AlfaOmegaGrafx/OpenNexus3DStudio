@@ -147,7 +147,7 @@ function MergeOptions({showDropToDownload, showCreateAtlas, mergeMenuTitle}) {
                     <div className={styles["checkbox-container"]}></div>
                 </label>
                 <div/><div/>
-                Download VRM
+                Download avatar
             </div>
           </div>
         </>
@@ -166,7 +166,7 @@ function MergeOptions({showDropToDownload, showCreateAtlas, mergeMenuTitle}) {
                     <div className={styles["checkbox-container"]}></div>
                 </label>
                 <div/><div/>
-                Download VRM Preview
+                Download avatar preview
             </div>
           </div>
         </>

@@ -1,0 +1,46 @@
+---
+description: Companion bottom navbar — floating chips + Stage Suspense (do not regress opaque slab)
+globs: chat/app/src/components/{stage,ui/navbar*,ui/companion-navbar-frost}.tsx,/home/sifr/chat/app/src/components/{stage,ui/navbar*,ui/companion-navbar-frost}.tsx
+alwaysApply: false
+---
+
+# Companion navbar — protected (floating chips + VRM-stable mount)
+
+**User-confirmed good state (2026-08-22).** Soft look before *and after* avatar load. Do not reintroduce a filled plate.
+
+## Invariants
+
+| Area | Rule |
+|------|------|
+| Layout | Floating chips only (`NAV_CHIP` on buttons). Outer navbar `Container` must **not** set `backgroundOpacity`, `backgroundColor`, or filled plate props |
+| Mount | `Stage` wraps **only** `{children}` in `<Suspense>`. `<Navbar />` is a **sibling outside** that Suspense so VRM `useLoader` suspend does not remount the bar |
+| Frost | `CompanionNavbarFrost` stays a no-op stub (`() => null`). No full-bleed DOM frost strip |
+| Soft glass elsewhere | Settings dialog / Providers cards may keep soft opacity (~0.65–0.68). That is **not** the bottom bar |
+
+## Forbidden without explicit user request
+
+- Putting a translucent/opaque filled plate behind the whole bottom navbar
+- Moving `<Navbar />` inside the Stage (or `_app`) Suspense that wraps VRM/scene children
+- Re-enabling DOM frost / full-bleed blur strip under the bar
+- “Fixing” dark-on-VRM by cranking panel `backgroundOpacity` back toward 1 on a filled plate
+
+## Why
+
+VRM load suspends via `useLoader`. If the nearest Suspense wraps the whole `Outlet`/`Stage`, Navbar remounts and a plate/slab look returns after avatar load.
+
+## Protected files
+
+- `/home/sifr/chat/app/src/components/stage.tsx`
+- `/home/sifr/chat/app/src/components/ui/navbar.tsx`
+- `/home/sifr/chat/app/src/components/ui/navbar-chat.tsx`
+- `/home/sifr/chat/app/src/components/ui/navbar-settings.tsx`
+- `/home/sifr/chat/app/src/components/ui/companion-navbar-frost.tsx`
+
+## Before shipping navbar/stage changes
+
+```bash
+bash /home/sifr/OpenNexus3DStudio/scripts/verify-companion-navbar.sh
+bash /home/sifr/OpenNexus3DStudio/scripts/sync-companion-to-surface.sh
+```
+
+Hard-refresh the existing Companion tab — do **not** open a new Studio/Companion browser tab.

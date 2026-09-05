@@ -16,7 +16,7 @@
 ## Glossary
 - **Task** — one generation job in the UI backed by an API feature/model.
 - **Environment scan** — walk video → LingBot-Map world package (API `environment_scan`).
-- **Template rig** — API Blender path applying the ICT humanoid template to AIGC mesh.
+- **Template rig** — API Blender path applying the humanoid template to AIGC mesh.
 - **MSF** — fabric hosted on DGX MSF `:8443`; Surface often proxies `:8453`.
 
 ## Landmines

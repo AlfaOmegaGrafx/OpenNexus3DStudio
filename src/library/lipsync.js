@@ -107,6 +107,21 @@ export class LipSync {
     }
   }
 
+  /** Disconnect mic audio graph; hardware stream is owned by sharedMicManager. */
+  releaseMicrophone() {
+    if (this.mediaStreamSource) {
+      try {
+        this.mediaStreamSource.disconnect();
+      } catch {
+        /* noop */
+      }
+      this.mediaStreamSource = null;
+    }
+    this.meter?.shutdown?.();
+    this.meter = null;
+    this._micStream = null;
+  }
+
   isSuspended() {
     return this._suspended;
   }
@@ -185,10 +200,7 @@ export class LipSync {
 
 
   destroy() {
-    if (this._micStream) {
-      this._micStream.getTracks().forEach((t) => t.stop())
-      this._micStream = null
-    }
+    this._micStream = null;
     this.meter?.shutdown()
     this.meter = null
     try {

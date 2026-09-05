@@ -1,7 +1,9 @@
 # Graphify scope: app source + docs (skip deps and generated artifacts)
+# Note: when this file exists, .gitignore is NOT merged — list moat/companion explicitly.
 node_modules/
 graphify-out/
 src/graphify-out/
+src/moat/**/graphify-out/
 public/loot-assets/
 docs/node_modules/
 docs/build/
@@ -10,3 +12,12 @@ coverage/
 native/android-xr-face-bridge/app/build/
 MONETIZATION_ROADMAP.md
 MONETIZATION_ROADMAP_BACKUP.md
+
+# PersonaPlex / Companion (local moat + HTTPS/WSS proxy scripts — partly gitignored)
+!src/moat/
+!src/moat/companion/
+!scripts/companion-*.mjs
+!scripts/ensure-companion-stack-dgx.sh
+!scripts/start-companion-*.sh
+!scripts/start-companion-*.ps1
+!scripts/sync-companion-to-surface.sh

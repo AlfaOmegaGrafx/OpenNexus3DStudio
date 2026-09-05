@@ -1,0 +1,89 @@
+.spacetime-xr-page {
+  position: fixed;
+  inset: 0;
+  background: #121218;
+  color: #e8e9ed;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, sans-serif;
+}
+
+.spacetime-xr-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(18, 18, 24, 0.92);
+  border-bottom: 1px solid #333;
+  z-index: 2;
+}
+
+.spacetime-xr-back {
+  color: #93c5fd;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.spacetime-xr-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.spacetime-xr-copy {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.spacetime-xr-status {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  z-index: 2;
+}
+
+.spacetime-xr-error {
+  color: #fca5a5;
+}
+
+.spacetime-xr-canvas-host {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  touch-action: none;
+}
+
+.spacetime-xr-canvas-host canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+
+.spacetime-xr-vr-btn {
+  position: absolute !important;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.spacetime-xr-help {
+  padding: 8px 14px 12px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  z-index: 2;
+}
+
+.spacetime-xr-help code {
+  word-break: break-all;
+  color: #9ca3af;
+}
+
+.spacetime-xr-avatar-input {
+  display: none;
+}

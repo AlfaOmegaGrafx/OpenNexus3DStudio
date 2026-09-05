@@ -1,29 +1,60 @@
 ---
-description: Auto-run agent continuity verify at every Cursor session start (RepoResident, MindLink, SessionMem, sync rules)
+description: Auto-run agent continuity — ALL memory helpers + rules every session/turn (NO EXCEPTIONS)
 alwaysApply: true
 ---
 
 # Agent continuity at session start (mandatory)
 
-Do **not** wait for the user to ask. On the **first agent turn of every new chat/session** in this workspace:
+Do **not** wait for the user to ask. On the **first agent turn of every new chat/session**, and after restart/compaction:
 
-1. **Run** (DGX):
-   ```bash
-   bash scripts/verify-agent-continuity.sh --all-repos
-   ```
-   Surface:
-   ```powershell
-   .\scripts\verify-agent-continuity.ps1
-   ```
-2. If FAIL → fix missing rules/hooks/files in the same turn, then re-run until PASS (or report a true blocker).
-3. **Load memory** (read, don't skip):
-   - RepoResident: `.agent/STATE.md`, `CLAUDE.md`
-   - MindLink: `.brain/MEMORY.md`, `.brain/SESSION.md` (+ `.agent/areas/mindlink.md`)
-   - Cursor memory bank: `memory-bank/activeContext.md` when present
-4. **Hooks** also fire `sessionStart` / `workspaceOpen` → `.cursor/hooks/session-continuity.sh` (and `~/.cursor/hooks/` on DGX). Treat hook `OPENNEXUS_CONTINUITY_STATUS` as a hint; still run the script if you have not verified this session.
-5. After DGX edits under `src/`, auto-push:
-   ```bash
-   bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete
-   ```
+## 1. Continuity verify
 
-SessionMem team sync (`sync-sessionmem-team.sh`) after milestones when memories changed — do not skip silently if the user said “remember” / continuity / push to Surface.
+DGX:
+```bash
+bash scripts/verify-agent-continuity.sh --all-repos
+```
+Surface:
+```powershell
+.\scripts\verify-agent-continuity.ps1
+```
+
+If FAIL → fix missing rules/hooks/files, then re-run until PASS (or report a true blocker).
+
+## 2. ALL memory helpers (Checklist A — no skips)
+
+Full detail: `.cursor/rules/agent-read-first-startup.mdc`. Map: `memory-bank/agent-helpers-mandatory-startup.md`.
+
+| # | Helper | Action |
+|---|--------|--------|
+| 1 | Continuity verify | Script above |
+| 2 | Entry routers | Read `AGENTS.md` → `CLAUDE.md` → `CURSOR.md` |
+| 3 | **RepoResident** | Read `.agent/STATE.md` (authority); MAP/DECISIONS when routing |
+| 4 | **cursor-memory-bank** | Read `memory-bank/activeContext.md` + `progress.md` |
+| 5 | **MindLink** | MCP `mindlink_read_memory` (Core + User Profile) + Read `SESSION.md`, LOG last 5, `SHARED.md`; fallback Read `.brain/` |
+| 6 | **SessionMem** | MCP `retrieveMemories`; fallback `memory-bank/sessionmem-seeds.md` |
+| 7 | **Cursor rules** | **Read every** alwaysApply `.mdc` in `.cursor/rules/` (DGX: also `~/.cursor/rules/`) — not just the index |
+| 8 | **graphify** | `graphify query "<task>"` before Read/Grep/Glob |
+
+**Do not be lazy.** Do not treat “I already know” as a skip.
+
+## 3. Every turn (Checklist B) before repo tools
+
+- SessionMem `retrieveMemories`
+- graphify query
+- Glob-matched Cursor rules for files you will touch
+- Re-read STATE + activeContext + SESSION if area changed / after compaction
+
+## 4. Hooks + companion
+
+- Hooks: `sessionStart` / `workspaceOpen` → `.cursor/hooks/session-continuity.sh` (and `~/.cursor/hooks/` on DGX). Hook status is a hint — still run verify if not done this session.
+- `--all-repos` on DGX also ensures companion stack (PersonaPlex `:8998`, WSS `:8455`). Companion UI prefers Surface `:5173` (iframe `:8464`); DGX `:5173` is fallback. Git commits do not start these.
+
+## 5. After DGX `src/` edits
+
+```bash
+bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete
+```
+
+SessionMem team sync (`sync-sessionmem-team.sh`) after milestones when memories changed — do not skip if the user said “remember” / continuity / push to Surface.
+
+**Note:** This rule lists **helpers to run**, not a dump of every SessionMem/MindLink fact. Facts stay in those stores; this rule makes loading them mandatory.

@@ -1,17 +1,17 @@
 # State — rewritten in full at session END. Cap: 40 lines.
 
-Session: 38
-Focus: Public main aligned with GitHub; companion overlay local-only
-Active: companion live embed lives in gitignored `src/moat/` + chat overlay
-Next: keep Surface on origin/main; restore overlay via scp, not git
+Session: 46
+Focus: Full DGX + Surface stack started
+Active: API :7842, MSF :8443, XR hub :8088, companion GPU, Surface Vite
+Next: hard-refresh existing OpenNexus 3D tab at :3000/
 Blocked: none
 
 ## Watch-outs
+- **NO EXCEPTIONS:** Checklist A (8) / B every turn
 - **HARD STOP:** never open a new Studio browser tab
-- Never git add FUTURE_RD.md, MESH_WRAP_ROADMAP.md (API root), memory-bank/, backups/, src/moat/
-- Unreleased speech/motion strategy = moat (gitignored only); never name vendors in tracked docs
+- PersonaPlex ~19GB resident — Krea 24GB gate should fit
+- GNOME RDP :3390 not xrdp :3389
 
 ## Recently shipped
-- Public companion stubs + gitignored live overlay
-- Creature animation panel / fox catalog on main
-- Prior: moat-docs verify; FUTURE_RD parking lot
+- ICT wrap IBM rebuild + viewport Open-in-viewport
+- Krea vram_requirement 24576

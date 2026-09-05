@@ -9,11 +9,51 @@
  * preferred we drive joints from ``frame.getJointPose`` ourselves (same idea as IWSDK).
  */
 import * as THREE from './three.js';
+import { XR_HAND_TRACKING_FEATURE } from './sceneManagerXrConstants.js';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
 
+export { XR_HAND_TRACKING_FEATURE };
+
 /** Opacity for controller meshes while hands are the primary input (seated / hand tracking). */
 export const XR_CONTROLLER_IDLE_OPACITY = 0.5;
+
+/** Target-ray line length (m) from controller aim pose. */
+export const XR_CONTROLLER_RAY_LENGTH_M = 4;
+
+/** World-space reticle diameter (m). */
+const XR_RETICLE_WORLD_SIZE_M = 0.09;
+
+let _reticleRingTexture = null;
+
+/** @returns {import('three').CanvasTexture} */
+function getReticleRingTexture() {
+  if (_reticleRingTexture) return _reticleRingTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size * 0.34, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#88ccff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  _reticleRingTexture = new THREE.CanvasTexture(canvas);
+  _reticleRingTexture.colorSpace = THREE.SRGBColorSpace;
+  return _reticleRingTexture;
+}
+
+const _reticleWorldPos = new THREE.Vector3();
+const _reticleRayDir = new THREE.Vector3();
 
 /**
  * @param {import('three').Object3D|null|undefined} root
@@ -57,6 +97,9 @@ export function isXrInputVisualObject(obj) {
 /**
  * @param {import('./sceneManager.js').SceneManager} sceneManager
  */
+/**
+ * @param {import('./sceneManager.js').SceneManager | { scene: import('three').Scene, renderer: import('three').WebGLRenderer, alwaysShowTargetRay?: boolean }} sceneManager
+ */
 export function createSceneManagerXrControllerVisuals(sceneManager) {
   return new SceneManagerXrControllerVisuals(sceneManager);
 }
@@ -67,6 +110,7 @@ export class SceneManagerXrControllerVisuals {
    */
   constructor(sceneManager) {
     this.sceneManager = sceneManager;
+    this.alwaysShowTargetRay = !!sceneManager?.alwaysShowTargetRay;
     /** @type {(import('three').Group|undefined)[]} */
     this._grips = [];
     /** @type {(import('three').Group|undefined)[]} */
@@ -81,6 +125,8 @@ export class SceneManagerXrControllerVisuals {
     this._onInputSourcesChange = null;
     /** @type {XRSession | null} */
     this._session = null;
+    /** @type {Map<string, import('three').Sprite>} */
+    this._worldReticles = new Map();
   }
 
   /**
@@ -272,6 +318,10 @@ export class SceneManagerXrControllerVisuals {
           somePreferHand ? XR_CONTROLLER_IDLE_OPACITY : 1,
           somePreferHand,
         );
+        const ray = this._controllers[i].userData.opennexusTargetRay;
+        const reticle = this._controllers[i].userData.opennexusTargetReticle;
+        if (ray) ray.visible = this.alwaysShowTargetRay || !somePreferHand;
+        if (reticle) reticle.visible = this.alwaysShowTargetRay || !somePreferHand;
       }
     }
 
@@ -343,6 +393,122 @@ export class SceneManagerXrControllerVisuals {
     }
   }
 
+  /**
+   * Aim ray + ring reticle on the WebXR target-ray space (Three.js getController slot).
+   * @param {import('three').Group} controller
+   */
+  _ensureTargetRay(controller) {
+    if (!controller || controller.userData.opennexusTargetRay) return;
+
+    const points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)];
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({
+        color: 0x88ccff,
+        transparent: true,
+        opacity: 0.88,
+        depthTest: false,
+      }),
+    );
+    line.scale.z = XR_CONTROLLER_RAY_LENGTH_M;
+    line.name = 'XRTargetRay';
+    line.renderOrder = 10;
+    controller.add(line);
+
+    const reticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.024, 0.036, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+      }),
+    );
+    reticle.position.z = -XR_CONTROLLER_RAY_LENGTH_M;
+    reticle.visible = false;
+    reticle.name = 'XRTargetReticle';
+    reticle.renderOrder = 11;
+    controller.add(reticle);
+
+    controller.userData.opennexusTargetRay = line;
+    controller.userData.opennexusTargetReticle = reticle;
+  }
+
+  /**
+   * Billboard ring in world space — always faces the headset (not edge-on to the ray).
+   * @param {'left'|'right'} handedness
+   */
+  _ensureWorldReticle(handedness) {
+    let sprite = this._worldReticles.get(handedness);
+    const parent = this._parent();
+    if (!sprite && parent) {
+      const mat = new THREE.SpriteMaterial({
+        map: getReticleRingTexture(),
+        transparent: true,
+        opacity: 0.96,
+        depthTest: false,
+        depthWrite: false,
+      });
+      sprite = new THREE.Sprite(mat);
+      sprite.name = `XRTargetReticleWorld:${handedness}`;
+      sprite.renderOrder = 999;
+      parent.add(sprite);
+      this._worldReticles.set(handedness, sprite);
+    }
+    return sprite || null;
+  }
+
+  /**
+   * Place billboard reticle at ray hit distance (menu, etc.).
+   * @param {import('./sceneManagerXrInput.js').XrPointerState[]} pointers
+   * @param {(pointer: import('./sceneManagerXrInput.js').XrPointerState) => { distance: number }|null} hitResolver
+   */
+  updateTargetReticles(pointers, hitResolver) {
+    if (!this._attached || !hitResolver) return;
+
+    const activeHands = new Set();
+
+    for (const pointer of pointers) {
+      if (!pointer?.connected) continue;
+      activeHands.add(pointer.handedness);
+
+      const controller =
+        this._controllers.find(
+          (c) => c?.userData?.inputSource?.handedness === pointer.handedness,
+        ) ||
+        this._controllers[pointer.handedness === 'left' ? 0 : 1] ||
+        null;
+
+      const ray = controller?.userData?.opennexusTargetRay;
+      const meshReticle = controller?.userData?.opennexusTargetReticle;
+      const worldReticle = this._ensureWorldReticle(pointer.handedness);
+
+      const hit = hitResolver(pointer);
+      const dist = hit?.distance ?? XR_CONTROLLER_RAY_LENGTH_M;
+      const clamped = Math.max(0.08, Math.min(XR_CONTROLLER_RAY_LENGTH_M, dist));
+
+      if (ray) ray.scale.z = clamped;
+      if (meshReticle) meshReticle.visible = false;
+
+      if (worldReticle) {
+        _reticleRayDir.copy(pointer.rayDirection).normalize();
+        _reticleWorldPos
+          .copy(pointer.rayOrigin)
+          .addScaledVector(_reticleRayDir, clamped);
+        worldReticle.position.copy(_reticleWorldPos);
+        worldReticle.scale.set(XR_RETICLE_WORLD_SIZE_M, XR_RETICLE_WORLD_SIZE_M, 1);
+        worldReticle.visible = true;
+      }
+    }
+
+    for (const [handedness, sprite] of this._worldReticles) {
+      if (!activeHands.has(handedness)) {
+        sprite.visible = false;
+      }
+    }
+  }
+
   _ensurePlaceholder(parent, name, color) {
     if (parent.userData.opennexusPlaceholder) return;
     const mesh = new THREE.Mesh(
@@ -386,6 +552,7 @@ export class SceneManagerXrControllerVisuals {
       const controller = renderer.xr.getController(i);
       controller.name = `XRController${i}`;
       controller.userData.opennexusXrInputVisual = true;
+      this._ensureTargetRay(controller);
       this._controllers[i] = controller;
 
       const hand = renderer.xr.getHand(i);
@@ -517,6 +684,3 @@ export class SceneManagerXrControllerVisuals {
     return this._attached;
   }
 }
-
-/** Features to request so hand meshes can appear (controllers need none). */
-export const XR_HAND_TRACKING_FEATURE = 'hand-tracking';

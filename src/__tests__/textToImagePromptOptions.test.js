@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildOrthographicMultiviewPrompts,
+  buildTextToImageNegativePrompt,
   buildTextToImagePrompt,
   buildHeadlessBodySubjectPrompt,
   normalizeTextToImagePromptOptions,
@@ -11,6 +12,7 @@ import {
   STUDIO_GARMENT_TEXT_TO_IMAGE_OPTIONS,
   studioGarmentTextToImageOptionsForSlot,
   STUDIO_ORTHOGRAPHIC_VIEW_IDS,
+  HEADLESS_BODY_NEGATIVE_PROMPT,
 } from '../library/textToImagePromptOptions.js';
 
 describe('textToImagePromptOptions', () => {
@@ -139,11 +141,22 @@ describe('textToImagePromptOptions', () => {
       STUDIO_HEADLESS_BODY_TEXT_TO_IMAGE_OPTIONS,
     );
     expect(prompt).toContain('neck-down');
-    expect(prompt).toContain('no head');
+    expect(prompt).toMatch(/NO HEAD|no head/i);
+    expect(prompt).toContain('no skull');
     expect(prompt).toContain('open neck');
-    expect(prompt).toContain('blank collar');
+    expect(prompt).toContain('blank');
     expect(prompt).toContain('T-pose');
+    expect(prompt).toContain('NOT crossed arms');
+    expect(prompt).toContain('avoid: head');
     expect(prompt).not.toContain('head to toe visible');
+  });
+
+  it('headless body negative prompt bans head and crossed arms for Krea', () => {
+    const negative = buildTextToImageNegativePrompt(STUDIO_HEADLESS_BODY_TEXT_TO_IMAGE_OPTIONS);
+    expect(negative).toBe(HEADLESS_BODY_NEGATIVE_PROMPT);
+    expect(negative).toContain('head');
+    expect(negative).toContain('crossed arms');
+    expect(buildTextToImageNegativePrompt({ headless_body: false })).toBe('');
   });
 
   it('garment prompt is isolated clothing without full body', () => {

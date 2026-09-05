@@ -7,6 +7,8 @@
  * Playback fetches GET /__native_face_recording_audio?id=<id> (optional; face-only if missing).
  */
 
+import { acquireSharedMicStream, releaseSharedMicStream } from './sharedMicManager.js';
+
 const AUDIO_RECORD_PATH = '/__native_face_record_audio';
 const AUDIO_PLAYBACK_PATH = '/__native_face_recording_audio';
 const MAX_RECORDING_BYTES = 32 * 1024 * 1024;
@@ -14,6 +16,7 @@ const MIN_PLAYBACK_BYTES = 256;
 
 let _mediaRecorder = null;
 let _micStream = null;
+let _micStreamShared = false;
 let _chunks = [];
 let _recordingId = null;
 /** @type {HTMLAudioElement|null} */
@@ -209,10 +212,9 @@ export async function startFaceRecordingAudio(recordingId) {
   _recordingId = recordingId;
   _chunks = [];
   try {
-    _micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: false,
-    });
+    // Shared mic is owned by sharedMicManager (lip-sync / other callers may already hold it).
+    _micStream = await acquireSharedMicStream();
+    _micStreamShared = true;
     const mime = pickMimeType();
     _mediaRecorder = mime
       ? new MediaRecorder(_micStream, { mimeType: mime })
@@ -238,10 +240,11 @@ export async function stopFaceRecordingAudio(upload = true) {
   _mediaRecorder = null;
   _recordingId = null;
 
-  if (_micStream) {
-    _micStream.getTracks().forEach((t) => t.stop());
-    _micStream = null;
+  if (_micStreamShared) {
+    releaseSharedMicStream();
+    _micStreamShared = false;
   }
+  _micStream = null;
 
   if (!recorder) {
     _chunks = [];

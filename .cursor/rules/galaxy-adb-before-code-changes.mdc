@@ -1,0 +1,18 @@
+---
+description: ADB + remote-log + logcat before Galaxy/viewport/Adjuster code
+alwaysApply: true
+---
+
+# Evidence before Galaxy / viewport / Adjuster code
+
+**User (2026-08-20):** check remotelogs, catlogs, and adb **before coding** — do not wait to be reminded.
+
+When the task involves **Galaxy XR**, **Space-Time XR** (`/spacetime-xr`), headset controllers, WebXR, Android XR, native face, **viewport Adjuster / Mesh2Motion gizmo**, or headset IME/input:
+
+1. **Before any code edit:** pull Surface `logs/remote-log.txt` and grep the feature (`[spacetime-xr]`, enter/exit, control mode, etc.)
+2. **`adb devices -l`** via Surface when the headset is in the repro
+3. Brief **`adb logcat`** when IME / keyboard / controller UI / WebXR session errors are implicated
+4. Do not guess headset, pose, or overlay fixes without that evidence
+
+Space-Time XR detail: `spacetime-xr-evidence-before-fix.mdc`.  
+Also: `memory-bank/galaxy-adb-before-code-changes.md`, `memory-bank/evidence-before-code-changes.md`

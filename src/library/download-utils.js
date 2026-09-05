@@ -638,6 +638,17 @@ async function parseVRM (glbModel, avatar, options){
 
   const metadataMerged = GetMetadataFromAvatar(avatar, vrmMeta, vrmName);
 
+  // OpenNexus Avatar Role → glTF extras (marketplace / Companion)
+  let avatarRoleForExport = options.avatarRole || null;
+  if (!avatarRoleForExport) {
+    try {
+      const { readAvatarRoleFromStorage } = await import('./avatarRole.js');
+      avatarRoleForExport = readAvatarRoleFromStorage();
+    } catch {
+      avatarRoleForExport = null;
+    }
+  }
+
   // Store original model position and rotation before export
   const originalPosition = glbModel.position.clone();
   const originalRotation = glbModel.rotation.clone();
@@ -678,6 +689,7 @@ async function parseVRM (glbModel, avatar, options){
     const vrmData = {
       ...getVRMBaseData(avatar),
       ...getAvatarData(glbModel, metadataMerged,options),
+      ...(avatarRoleForExport ? { avatarRole: avatarRoleForExport } : {}),
     }
     
     // FIX: Log materials to verify ORM textures are present

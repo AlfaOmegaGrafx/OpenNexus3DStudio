@@ -1,5 +1,12 @@
-Agent entry point: read `CLAUDE.md` in full — it is the operating manual — then follow its
-Session protocol. Everything else is routed via `.agent/`.
+Agent entry point — **NO EXCEPTIONS. All helpers + all Cursor rules. Do not be lazy.**
 
-Optional MindLink memory: `.brain/` (see `.agent/areas/mindlink.md`). Prefer `.agent/` for
-engineering state.
+| When | Requirement |
+|------|-------------|
+| **Session / restart / compaction** | **Checklist A (8 steps)** — includes Read every `alwaysApply` rule in `.cursor/rules/` |
+| **Every turn before repo tools** | **Checklist B** — SessionMem + graphify + glob-matched rules |
+
+**Checklist A:** verify → AGENTS→CLAUDE→CURSOR → RepoResident → memory-bank → MindLink → SessionMem → **Cursor rules (Read each alwaysApply .mdc)** → graphify.
+
+**Rules index:** `memory-bank/cursor-rules-always-apply-index.md` (index only — still Read the rule files).
+
+Rule: `.cursor/rules/agent-read-first-startup.mdc`

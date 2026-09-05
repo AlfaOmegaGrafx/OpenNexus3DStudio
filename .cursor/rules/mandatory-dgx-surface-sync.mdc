@@ -1,0 +1,29 @@
+---
+description: HARD — after every OpenNexus/chat edit on DGX, auto-run Surface scp sync before saying done
+alwaysApply: true
+---
+
+# Mandatory DGX → Surface sync (NO EXCEPTIONS)
+
+Editing only on DGX leaves Surface (browser / Galaxy / commits) stale. That caused white screens, missing defaults, and commit drift.
+
+## After ANY edit on DGX
+
+| What changed | Required command (agent runs it — never ask the user) |
+|--------------|--------------------------------------------------------|
+| `OpenNexus3DStudio/src/**` (incl. **gitignored `src/moat/`**) | `cd /home/sifr/OpenNexus3DStudio && bash scripts/sync-changes-to-pc.sh --include-src --retry-until-complete` |
+| OpenNexus docs/scripts/rules (no src) | `bash scripts/sync-changes-to-pc.sh --retry-until-complete` |
+| `chat/app/src/**` Companion overlay | SCP those files to `Surface:…/chat/…` **or** dedicated companion sync — do **not** use `sync-companion-to-surface.sh` if it does `git checkout -f` |
+| memory-bank / agent context | add `--include-agent-context` |
+
+## Done means synced
+
+- Do **not** tell the user a fix is ready until the sync command has **succeeded**.
+- Ad-hoc single-file `scp` is OK for hotfixes **only if** you immediately also run `sync-changes-to-pc.sh --include-src` so commits/Surface stay aligned.
+- Do **not** open a new Studio browser tab after sync — hard-refresh existing `:3000/` tab.
+
+## Why `--include-src`
+
+`src/moat/` is **gitignored**. Incremental sync without `--include-src` **skips** live Companion/OpenNexus moat files. Always use `--include-src` after moat or any `src/` edit.
+
+See: `OpenNexus3DStudio/.cursor/rules/dgx-sync-reminder.mdc`, `agent-run-instructions.mdc`.

@@ -3,7 +3,6 @@ import { fetchModelParameters, buildDefaultModelParameters } from '../library/mo
 import {
   AUTO_RIG_MODES,
   DEFAULT_HUMANOID_TEMPLATE_ID,
-  HUMANOID_TEMPLATE_VRM_FILE,
   TEMPLATE_RIG_MODEL_ID,
 } from '../library/avatarPipelineCatalog.js';
 import {
@@ -11,7 +10,7 @@ import {
   CREATURE_TEMPLATE_RIG_MODEL_ID,
   DEFAULT_CREATURE_TEMPLATE_ID,
 } from '../library/creaturePipelineCatalog.js';
-import { getDefaultAutoRigOutputFormat } from '../library/aiModelsCatalog.js';
+import { getDefaultAutoRigOutputFormat, isQuadRemeshModel } from '../library/aiModelsCatalog.js';
 import {
   API_MAX_MESH_VERTICES,
   PIPELINE_MESH_DECIMATION_MAX,
@@ -60,6 +59,8 @@ export function formatTriangleCount(triangles) {
 const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }) => {
   const isAutoRig = taskType === 'auto-rigging';
   const isTextToImage = taskType === 'text-to-image';
+  const isMeshRetopology = taskType === 'mesh-retopology';
+  const isQuadRemesh = isQuadRemeshModel(modelId);
   const [expanded, setExpanded] = useState(false);
   const [schema, setSchema] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -219,7 +220,73 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
             </>
           )}
 
-          {!isAutoRig && !isTextToImage && (
+          {isMeshRetopology && (
+            <>
+              <div style={{ marginBottom: '0.4rem' }}>
+                <label style={labelStyle}>Output format</label>
+                <select
+                  style={inputStyle}
+                  value={value?.output_format ?? (isQuadRemesh ? 'obj' : 'glb')}
+                  onChange={(e) => setField('output_format', e.target.value)}
+                >
+                  <option value="glb">GLB (Mesh Decimate default — viewport)</option>
+                  <option value="obj">OBJ (quad topology — AutoRemesher default)</option>
+                  <option value="ply">PLY</option>
+                </select>
+                <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                  {isQuadRemesh ? (
+                    <>
+                      <strong>Mesh Decimate</strong> → pick GLB here. <strong>AutoRemesher</strong>{' '}
+                      defaults to OBJ (true quads); GLB triangulates quads for viewport loading.
+                    </>
+                  ) : (
+                    <>Mesh Decimate keeps the original triangles — use GLB for the viewport.</>
+                  )}
+                </p>
+              </div>
+              {modelId === 'autoremesher_retopology' && (
+                <>
+                  <div style={{ marginBottom: '0.4rem' }}>
+                    <label style={labelStyle}>
+                      Adaptivity ({Number(value?.model_parameters?.adaptivity ?? 0.35).toFixed(2)})
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={value?.model_parameters?.adaptivity ?? 0.35}
+                      onChange={(e) =>
+                        setModelParam('adaptivity', parseFloat(e.target.value))
+                      }
+                      style={{ width: '100%' }}
+                    />
+                    <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                      Lower adaptivity reduces holes on organic AIGC meshes (default 0.35).
+                    </p>
+                  </div>
+                  <div style={{ marginBottom: '0.4rem' }}>
+                    <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(value?.model_parameters?.include_all_fragments)}
+                        onChange={(e) =>
+                          setModelParam('include_all_fragments', e.target.checked)
+                        }
+                      />
+                      Remesh all significant fragments (not just largest shell)
+                    </label>
+                    <p style={{ ...hintStyle, marginTop: '0.25rem' }}>
+                      Off (default) remeshes the main character shell only — fewer holes. On
+                      includes cape/finger debris but may leave gaps between islands.
+                    </p>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {!isAutoRig && !isTextToImage && !isMeshRetopology && (
             <>
               <div style={{ marginBottom: '0.5rem' }}>
                 <label style={labelStyle}>OMB Spatial Fabric preset (generation)</label>
@@ -367,9 +434,8 @@ const TaskAdvancedOptions = ({ apiEndpoint, modelId, taskType, value, onChange }
               </div>
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.TEMPLATE && (
                 <p style={{ fontSize: '0.55rem', color: '#888', margin: '0 0 0.4rem' }}>
-                  Uses <code style={{ fontSize: '0.55rem' }}>{HUMANOID_TEMPLATE_VRM_FILE}</code>{' '}
-                  on the API (ICT morph head + humanoid skeleton). Output is GLB/VRM with ARKit blend
-                  shapes on the template topology.
+                  Uses operator-local humanoid template on the API. Output is GLB/VRM with
+                  ARKit blend shapes.
                 </p>
               )}
               {(value?.rig_mode ?? 'skeleton') === AUTO_RIG_MODES.CREATURE_TEMPLATE && (

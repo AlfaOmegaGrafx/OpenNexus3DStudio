@@ -1,0 +1,62 @@
+---
+description: HARD STOP — NO EXCEPTIONS. ALL helpers + ALL Cursor rules every session/turn. Zero carve-outs. Do not be lazy.
+alwaysApply: true
+---
+
+# Use ALL helpers + ALL rules — NO EXCEPTIONS
+
+**User rule (locked Aug 19 2026):** **No exceptions. Do not be lazy.** Utilize **every** helper and **every applicable Cursor rule** every time — session start, restart, compaction, and **before repo-touching work on every turn**.
+
+Skipping any helper or rule is a **regression**.
+
+## HARD STOP
+
+**Do not** call Read, Grep, Glob, Shell (on repo), or edit until the applicable checklist is **complete**. No carve-outs for quick fixes, simple questions, or “already know.”
+
+## Checklist A — every new session, restart, or context compaction (all steps, in order)
+
+- [ ] **1. Continuity verify** — `bash scripts/verify-agent-continuity.sh --all-repos`
+- [ ] **2. Entry routers** — `AGENTS.md` → `CLAUDE.md` → `CURSOR.md`
+- [ ] **3. RepoResident** — `.agent/STATE.md`; `MAP.md` / `DECISIONS.md` when routing
+- [ ] **4. cursor-memory-bank** — `memory-bank/activeContext.md` + `progress.md`
+- [ ] **5. MindLink** — `.brain/MEMORY.md` (Core + User Profile), `.brain/SESSION.md`, `.brain/LOG.md` last 5, `.brain/SHARED.md`
+- [ ] **6. SessionMem** — MCP `retrieveMemories`; fallback `memory-bank/sessionmem-seeds.md`
+- [ ] **7. Cursor rules** — **Read every** `.cursor/rules/*.mdc` with `alwaysApply: true` (index: `memory-bank/cursor-rules-always-apply-index.md`); on DGX also Read `~/.cursor/rules/*.mdc` with `alwaysApply: true`. **Read the files — do not skip because an index exists.**
+- [ ] **8. Graphify** — `graphify query "<task question>"` before Read/Grep/Glob
+
+**Authority:** RepoResident `.agent/STATE.md` outranks `memory-bank/activeContext.md`.
+
+## Checklist B — every turn before repo-touching tools
+
+- [ ] **SessionMem** — `retrieveMemories` (every turn)
+- [ ] **Graphify** — `graphify query` (every turn)
+- [ ] **Cursor rules** — Read any `.cursor/rules/*.mdc` whose `globs` match files you will touch; re-read alwaysApply rules if unsure
+- [ ] **RepoResident + memory-bank + MindLink** — re-read `STATE.md` + `activeContext.md` + `SESSION.md` if task area changed or after compaction
+
+After code edits: `graphify update . --no-cluster`.
+
+## Helpers — utilization (ongoing, no laziness)
+
+| Helper | Requirement |
+|--------|-------------|
+| **RepoResident** | STATE every session; workflows; update STATE at end |
+| **cursor-memory-bank** | activeContext every session; protected-state before locked features |
+| **MindLink** | Core + SESSION every session; write on change |
+| **SessionMem** | retrieveMemories every turn; update seeds after invariants |
+| **Cursor rules** | All alwaysApply rules every session; glob-matched rules every turn before edits |
+| **graphify** | Query every turn; update after edits |
+| **Remote log** | UI failures → `logs/remote-log.txt` |
+
+## Task-specific docs (also no exceptions)
+
+- Companion: `src/moat/companion/README.md`, `memory-bank/companion-iframe-not-r3f-merge.md`
+- UI chrome / Galaxy XR: `SCENE_CONTROLS_UI_BACKUP.md`
+- Debug: `memory-bank/debug-ops-workflow.md`
+
+## Remember this
+
+`.cursor/rules/remember-this-retention.mdc` — MD + all layers + rules + SessionMem + sync.
+
+Map: `memory-bank/agent-helpers-mandatory-startup.md`
+
+**DGX `/home/sifr` workspace:** user rule `~/.cursor/rules/agent-continuity-startup.mdc` must list the **same eight helpers** (RepoResident, memory-bank, MindLink, SessionMem, rules, graphify, …). MindLink + SessionMem MCPs are user-level in `~/.cursor/mcp.json`.

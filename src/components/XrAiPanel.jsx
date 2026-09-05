@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   buildXrHubEmbedUrl,
   getXrHubEmbedUrl,
   isXrVoicePublicDemo,
   OPEN_XR_AI_PANEL_EVENT,
+  consumeXrVoiceExpandRequest,
   useXrHubLiveEmbed,
 } from '../library/xrHubConfig.js';
 import './XrAiPanel.css';
@@ -43,21 +44,20 @@ export default function XrAiPanel({ isApiConnected, sceneManager }) {
   const liveEmbed = useXrHubLiveEmbed();
   const hubUrl = liveEmbed ? getXrHubEmbedUrl() : '';
   const hubIframeUrl = liveEmbed ? buildXrHubEmbedUrl(hubUrl) : '';
-  const [expanded, setExpanded] = useState(() => publicDemo);
+  const [expanded, setExpanded] = useState(
+    () => publicDemo || consumeXrVoiceExpandRequest(),
+  );
   const cardHeaderRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (consumeXrVoiceExpandRequest()) {
+      setExpanded(true);
+    }
+  }, []);
 
   useEffect(() => {
     const onOpen = () => {
       setExpanded(true);
-      if (cardHeaderRef.current) {
-        setTimeout(() => {
-          cardHeaderRef.current?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-            inline: 'nearest',
-          });
-        }, 0);
-      }
     };
     window.addEventListener(OPEN_XR_AI_PANEL_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_XR_AI_PANEL_EVENT, onOpen);
@@ -123,6 +123,8 @@ export default function XrAiPanel({ isApiConnected, sceneManager }) {
           </div>
         </div>
 
+        <ZeroShotDetectPanel sceneManager={sceneManager} disabled={publicDemo} />
+
         {!publicDemo && !isApiConnected && (
           <p className="xr-ai-panel-message xr-ai-panel-message-warn">
             Connect to DGX API below for task progress and auto-load.
@@ -144,7 +146,6 @@ export default function XrAiPanel({ isApiConnected, sceneManager }) {
             ) : (
               <XrVoiceDemoPreview />
             )}
-            <ZeroShotDetectPanel sceneManager={sceneManager} disabled={publicDemo} />
           </div>
         ) : (
           <p className="xr-ai-panel-message">

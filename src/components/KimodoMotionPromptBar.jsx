@@ -65,7 +65,7 @@ export default function KimodoMotionPromptBar({ onMotionPlayed, embedded = false
   const loadAnimation = async (motionPayload, displayName) => {
     const sm = sceneManager;
     if (!pickPrimaryAnimationVrm(sm, characterManager)?.humanoid) {
-      setError('Load a VRM in the viewport first.');
+      setError('Load an avatar in the viewport first.');
       return false;
     }
     if (!taskManager) {
@@ -111,7 +111,7 @@ export default function KimodoMotionPromptBar({ onMotionPlayed, embedded = false
     setNeedsManualLoad(false);
     const sm = sceneManager;
     if (!pickPrimaryAnimationVrm(sm, characterManager)?.humanoid) {
-      setError('Load a VRM in the viewport first.');
+      setError('Load an avatar in the viewport first.');
       return;
     }
     if (!taskManager) {
@@ -251,7 +251,7 @@ export default function KimodoMotionPromptBar({ onMotionPlayed, embedded = false
           title={
             error ||
             status ||
-            (hasAnimTarget ? 'Describe motion (Enter to generate)' : 'Load a VRM in the viewport first')
+            (hasAnimTarget ? 'Describe motion (Enter to generate)' : 'Load an avatar in the viewport first')
           }
         />
         <button
@@ -276,9 +276,9 @@ export default function KimodoMotionPromptBar({ onMotionPlayed, embedded = false
             !canLoadMotion
               ? 'Generate or complete a Kimodo motion first'
               : !hasAnimTarget
-                ? 'Load a VRM in the viewport first'
+                ? 'Load an avatar in the viewport first'
                 : needsManualLoad
-                  ? 'Animation did not start — load and play on the VRM'
+                  ? 'Animation did not start — load and play on the avatar'
                   : 'Load and play the latest Kimodo motion'
           }
         >

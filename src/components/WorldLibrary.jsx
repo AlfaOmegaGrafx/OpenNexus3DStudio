@@ -33,6 +33,8 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
   const {
     openSceneAssembler,
     openOmbGuidelines,
+    openSpaceTimeBrowser,
+    openSpaceTimeImmersive,
     publishWorld,
     config: spatialConfig,
     sceneAssemblerReady,
@@ -119,6 +121,38 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
       setError(err?.message || String(err));
     } finally {
       setBakingWorldId(null);
+    }
+  };
+
+  const handleOpenSpaceTimeBrowser = async () => {
+    try {
+      setError(null);
+      const result = await openSpaceTimeBrowser();
+      if (result.launched) {
+        alert(
+          `Space-Time Browser launched on DGX (native window on the Spark display — use Sunshine if you are on Surface).\n\nFabric: ${result.fabricUrl}`,
+        );
+      } else {
+        alert(
+          `${result.hint || 'Copy the deep link and launch on DGX.'}\n\n(Deep link copied to clipboard when permitted.)`,
+        );
+      }
+    } catch (err) {
+      console.error('[SpatialFabric] Space-Time Browser failed', err);
+      setError(err?.message || String(err));
+    }
+  };
+
+  const handleOpenSpaceTimeImmersive = () => {
+    try {
+      setError(null);
+      const result = openSpaceTimeImmersive();
+      alert(
+        `Space-Time XR URL copied for Galaxy XR.\n\nPaste on headset Chrome with ?nativeFaceRelay=1 or use Copy Galaxy URL on the page.\n\n${result.url}`,
+      );
+    } catch (err) {
+      console.error('[SpatialFabric] Space-Time XR failed', err);
+      setError(err?.message || String(err));
     }
   };
 
@@ -286,14 +320,34 @@ export default function WorldLibrary({ apiEndpoint = '', compact = false }) {
 
       <div className={styles.actionsRow}>
         {sceneAssemblerReady ? (
-          <button
-            type="button"
-            className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
-            title={`Open RP1 Scene Assembler at ${spatialConfig.msfPublicUrl}`}
-            onClick={() => void openSceneAssembler().catch((err) => alert(err.message))}
-          >
-            Scene Assembler
-          </button>
+          <>
+            <button
+              type="button"
+              className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
+              title={`Open RP1 Scene Assembler at ${spatialConfig.msfPublicUrl}`}
+              onClick={() => void openSceneAssembler().catch((err) => alert(err.message))}
+            >
+              Scene Assembler
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
+              data-testid="world-library-space-time-browser-btn"
+              title="Launch native Space-Time Browser on DGX (3D walk mode)"
+              onClick={() => void handleOpenSpaceTimeBrowser()}
+            >
+              Space-Time
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${styles.sceneAssemblerBtn}`}
+              data-testid="world-library-space-time-xr-btn"
+              title="Galaxy XR: immersive fabric walk + face relay (WebXR)"
+              onClick={handleOpenSpaceTimeImmersive}
+            >
+              Space-Time XR
+            </button>
+          </>
         ) : (
           <button
             type="button"

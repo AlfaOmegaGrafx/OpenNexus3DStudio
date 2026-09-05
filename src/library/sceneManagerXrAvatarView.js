@@ -98,6 +98,19 @@ export class SceneManagerXrAvatarView {
   }
 
   reset() {
+    // Persist whatever transform the user left in XR.
+    // Previously we restored transforms back to the pre-standoff saved values
+    // (often (0,0,0)), which overwrote user edits on XR exit.
+    const playerRootNow = this.sceneManager?.playerRoot;
+    const rig = this.sceneManager?.xrLocomotionRig;
+    if (playerRootNow) {
+      this._savedLocalPosition = playerRootNow.position.clone();
+    }
+    if (rig) {
+      this._savedRigPosition = rig.position.clone();
+      this._savedRigRotationY = rig.rotation.y;
+    }
+
     this._restorePlayerRootTransform();
     this._restoreRigTransform();
     const playerRoot = this.sceneManager?.playerRoot;
@@ -302,6 +315,8 @@ export class SceneManagerXrAvatarView {
       this._savedLocalPosition = playerRoot.position.clone();
     }
 
+    // World headset forward → parent-local, then yaw so the avatar faces that way.
+    // Place avatar in front of the headset for third-person entry.
     camera.getWorldDirection(_forward);
     _forward.y = 0;
     if (_forward.lengthSq() < 1e-6) {

@@ -477,7 +477,8 @@ export const SceneProvider = ({ children }) => {
   // Set render mode
   const updateRenderMode = (mode) => {
     if (sceneManagerRef.current) {
-      sceneManagerRef.current.setRenderMode(mode);
+      // Keep camera pose when switching solid/wireframe/skeleton/etc.
+      sceneManagerRef.current.setRenderMode(mode, { focus: false });
     }
   };
 

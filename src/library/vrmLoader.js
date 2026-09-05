@@ -147,6 +147,19 @@ export class VRMLoader {
       
       // Also attach GLTF data directly to the VRM object for easier access
       processedVRM.gltf = gltf;
+
+      // Pull marketplace Role from glTF extras → storage for Companion
+      try {
+        const { readAvatarRoleFromGltfJson, writeAvatarRoleToStorage } = await import('./avatarRole.js');
+        const role = readAvatarRoleFromGltfJson(gltf?.parser?.json);
+        if (role) {
+          processedVRM.userData.avatarRole = role;
+          writeAvatarRoleToStorage(role);
+          console.log('✅ OpenNexus Avatar Role loaded from VRM extras');
+        }
+      } catch (roleErr) {
+        console.warn('Avatar Role extras read skipped:', roleErr?.message || roleErr);
+      }
       
       // Debug: Log GLTF data attachment
       console.log('🔍 GLTF data attached to VRM userData:', gltf);

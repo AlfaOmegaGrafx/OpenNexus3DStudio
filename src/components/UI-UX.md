@@ -431,3 +431,14 @@ sceneManager.scene.traverse((object) => {
 5. **Optimize performance** for large models and complex scenes
 
 The enhanced SceneManager provides a solid foundation for professional 3D model visualization and manipulation in your OpenNexus3DStudio application!
+
+---
+
+## Companion UI
+
+Companion overlay UI contracts (Settings Role copy, Galaxy 2D chrome, immersive left-Y menu, walk-past face baseline) are **moat-local** and must not be pasted into tracked docs.
+
+**Full lock (gitignored):** `src/moat/companion/UI-UX-COMPANION.md`  
+**Public stub only:** `src/pages/CompanionPage.public.jsx` + `src/library/companion*.public.js`
+
+Never `git add src/moat/`. Sync moat with `bash scripts/sync-changes-to-pc.sh --include-src`.

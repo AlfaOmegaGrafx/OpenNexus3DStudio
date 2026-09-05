@@ -13,7 +13,7 @@ const VRMImport = ({ onVRMImported }) => {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.vrm')) {
-      alert('Please select a VRM file');
+      alert('Please select an avatar file');
       return;
     }
 
@@ -45,14 +45,14 @@ const VRMImport = ({ onVRMImported }) => {
           onVRMImported(vrm, file);
         }
         
-        alert('VRM model imported successfully!');
+        alert('Avatar imported successfully!');
       } else {
         console.warn('VRM validation issues:', validation.issues);
-        alert(`VRM imported with issues: ${validation.issues.join(', ')}`);
+        alert(`Avatar imported with issues: ${validation.issues.join(', ')}`);
       }
     } catch (error) {
-      console.error('VRM import failed:', error);
-      alert(`VRM import failed: ${error.message}`);
+      console.error('Avatar import failed:', error);
+      alert(`Avatar import failed: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -66,18 +66,18 @@ const VRMImport = ({ onVRMImported }) => {
     <div className="vrm-import">
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">VRM Import</h3>
+          <h3 className="card-title">Avatar Import</h3>
         </div>
         
         <div className="import-content">
           <div className="import-info mb-3">
             <p className="text-sm text-gray-400 mb-2">
-              Import VRM models for use in OpenNexus3DStudio
+              Import avatars for use in OpenNexus3DStudio
             </p>
             <div className="feature-list">
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
-                <span>VRM 0.0 and 1.0 support</span>
+                <span>Avatar format 0.0 and 1.0 support</span>
               </div>
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
@@ -89,7 +89,7 @@ const VRMImport = ({ onVRMImported }) => {
               </div>
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
-                <span>VRM material support</span>
+                <span>Avatar material support</span>
               </div>
             </div>
           </div>
@@ -111,17 +111,17 @@ const VRMImport = ({ onVRMImported }) => {
               {isLoading ? (
                 <>
                   <div className="spinner mr-2"></div>
-                  Loading VRM...
+                  Loading avatar…
                 </>
               ) : (
-                'Import VRM Model'
+                'Import avatar'
               )}
             </button>
           </div>
 
           {vrmMetadata && (
             <div className="vrm-metadata mt-3">
-              <h4 className="text-sm font-semibold mb-2">VRM Metadata:</h4>
+              <h4 className="text-sm font-semibold mb-2">Avatar metadata:</h4>
               <div className="metadata-grid">
                 <div className="metadata-item">
                   <span className="metadata-label">Title:</span>
@@ -150,7 +150,7 @@ const VRMImport = ({ onVRMImported }) => {
                   {validationResult.valid ? '✓' : '⚠'}
                 </span>
                 <span className="status-text">
-                  {validationResult.valid ? 'VRM is valid' : 'VRM has issues'}
+                  {validationResult.valid ? 'Avatar is valid' : 'Avatar has issues'}
                 </span>
               </div>
               

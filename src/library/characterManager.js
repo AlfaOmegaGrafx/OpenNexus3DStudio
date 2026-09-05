@@ -11,6 +11,7 @@ import { downloadGLB, downloadVRMWithAvatar } from "../library/download-utils"
 import { getNodesWithColliders, saveVRMCollidersToUserData, renameMorphTargets} from "./load-utils";
 import { cullHiddenMeshes, setTextureToChildMeshes, addChildAtFirst } from "./utils";
 import { LipSync } from "./lipsync";
+import { acquireSharedMicStream, releaseSharedMicStream } from "./sharedMicManager.js";
 import { LookAtManager } from "./lookatManager";
 import OverlayedTextureManager from "./OverlayTextureManager";
 import { ManifestDataManager } from "./manifestDataManager";
@@ -94,6 +95,7 @@ export class CharacterManager {
         parentModel.add(this.rootModel);
       }
       this.lipSync = null;
+      this._lipSyncMicHeld = false;
 
       this.lookAtManager = null;
       this.animationManager = new AnimationManager();
@@ -381,7 +383,13 @@ export class CharacterManager {
             }
 
             console.log('Manifest export options:', manifestOptions);
-            const finalOptions = { ...manifestOptions, ...exportOptions };
+            let finalOptions = { ...manifestOptions, ...exportOptions };
+            try {
+              const { mergeAvatarRoleIntoExportOptions } = await import('./avatarRole.js');
+              finalOptions = mergeAvatarRoleIntoExportOptions(finalOptions, exportOptions?.avatarRole);
+            } catch {
+              /* optional */
+            }
             finalOptions.screenshot = this._getPortaitScreenshotTexture(false, finalOptions);
 
             // Log the final export options
@@ -1452,22 +1460,17 @@ export class CharacterManager {
           console.warn('[CharacterManager] getUserMedia not available; lip sync inactive.');
           return;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-          video: false,
-        });
+        const stream = await acquireSharedMicStream();
+        this._lipSyncMicHeld = true;
         this.lipSync.start(stream);
       } catch (e) {
         console.warn('[CharacterManager] Microphone not available for lip sync:', e?.message || e);
       }
     }
 
-    /** Suspend trait-avatar mic lip-sync (webcam face tracking takes over). */
+    /** Suspend trait-avatar mic lip-sync visemes; mic stream stays open for XR / screen recording. */
     setLipSyncSuspended(suspended) {
+      // Visemes only — never stop tracks (Galaxy screen record needs the mic open).
       this.lipSync?.setSuspended(suspended);
     }
 
@@ -1511,6 +1514,10 @@ export class CharacterManager {
       if (this.manifestDataManager.isLipsyncTrait(traitID, collectionID)) {
         if (this.lipSync) {
           void this.lipSync.destroy();
+          if (this._lipSyncMicHeld) {
+            releaseSharedMicStream();
+            this._lipSyncMicHeld = false;
+          }
           this.lipSync = null;
         }
         this.lipSync = new LipSync(vrm);

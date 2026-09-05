@@ -1,0 +1,37 @@
+---
+description: R&D and FUTURE_RD candidates must pass MODEL_LICENSES commercial gate (OK/CONDITIONAL only)
+alwaysApply: true
+---
+
+# R&D commercial license gate (HARD)
+
+**Source of truth:** `3DAIGC-API/docs/MODEL_LICENSES.md` (OK / CONDITIONAL / BLOCKED / UNKNOWN).
+
+## Rule
+
+**Even R&D / parking-lot / “later spike” work must pass the commercial gate.**  
+Do **not** park, spike, or recommend stacks that are **BLOCKED** or **UNKNOWN** (treat UNKNOWN as BLOCKED until verified).
+
+Applies when evaluating GitHub/HF papers, “is this a fit?”, adding to gitignored `FUTURE_RD.md`, or scheduling a spike.
+
+## Required before fit verdict or FUTURE_RD entry
+
+1. Fly the gate on **code + weights + aux deps + datasets** (not code LICENSE alone).
+2. Assign **OK / CONDITIONAL / BLOCKED / UNKNOWN** per `MODEL_LICENSES.md` legend.
+3. Put **Commercial gate** on every `FUTURE_RD.md` entry.
+4. If **BLOCKED** or **UNKNOWN**: **scrap** — `wontfix` / rejected section; do not leave as active `parked` build path.
+5. **CONDITIONAL**: document constraints (territory, MAU, attribution, no SMPL-X, etc.) before parking.
+6. New production models: still add a row to `MODEL_LICENSES.md` + `models.yaml` / download script before merge.
+
+## Known hard blocks (examples — re-read the doc)
+
+- **SMPL-X** body NPZs / Kimodo-SMPLX family — **BLOCKED** (ship **Kimodo-SOMA-RP** only for motion).
+- NVIDIA PartField / PartPacker / FastMesh / PartUV — **BLOCKED**.
+- `briaai/RMBG-2.0` — **BLOCKED** (use BiRefNet).
+- Territory-excluded open weights (e.g. some community video licenses excluding US/EU/UK/KR for **local** weights) — treat as **BLOCKED** for DGX local unless a separate commercial grant is recorded.
+
+## Agent behavior
+
+- Lead fit answers with the gate table, then product fit.
+- Never say “fine for R&D even if non-commercial” for OpenNexus / 3DAIGC-API.
+- Do not name unreleased moat vendor speech/motion projects in **tracked** docs beyond what moat rules allow — gate still applies inside gitignored `FUTURE_RD.md` / `MONETIZATION_ROADMAP.md`.

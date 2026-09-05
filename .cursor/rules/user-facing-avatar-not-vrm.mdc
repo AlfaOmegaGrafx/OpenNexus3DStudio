@@ -1,0 +1,18 @@
+---
+description: User-facing copy says “avatar”, not “.vrm” / “VRM” (except format versions)
+globs: **/CompanionPage.jsx,**/VRMExport.jsx,**/VRMImport.jsx,**/KimodoMotionPromptBar.jsx,**/FileUpload.jsx,**/CombinedImport.jsx,**/chat/app/src/components/ui/settings/pages/model.tsx
+alwaysApply: false
+---
+
+# User-facing: avatar, not .vrm
+
+**Locked 2026-08-22.** In UI labels, buttons, alerts, and status text, say **avatar** — not “.vrm” or “VRM” as the product noun.
+
+| Do | Don’t (user-facing) |
+|----|---------------------|
+| Pick avatar | Pick .vrm file |
+| Avatar Export / Import | VRM Export / Import |
+| Load an avatar… | Load a VRM… |
+| Download avatar | Download VRM |
+
+**Keep technical:** `accept=".vrm"`, `endsWith('.vrm')`, filenames, APIs, and format version options **VRM 0.0 / VRM 1.0** (industry standard).

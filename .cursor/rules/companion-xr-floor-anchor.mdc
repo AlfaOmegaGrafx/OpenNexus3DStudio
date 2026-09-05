@@ -1,0 +1,20 @@
+---
+description: Companion XR local-floor — avatar and teleport stay on real floor (Y=0)
+globs: chat/app/src/lib/companion-xr-floor.ts,chat/app/src/components/xr/**/*.tsx,chat/app/src/components/vrm/galatea.tsx
+alwaysApply: false
+---
+
+# Companion XR floor anchor (HARD)
+
+User-confirmed working on Galaxy XR (2026-08-24). Do not regress.
+
+## Contract
+
+- WebXR **`local-floor`** (required by `@pmndrs/xr` unless `bounded: false`)
+- Scene locomotion / spawn / follow targets / teleport plane: **Y = 0** (`COMPANION_XR_FLOOR_Y`)
+- Never teleport or lift the player on XR session enter
+- Never `createXRStore({ bounded: false })` or `customSessionInit` without `local-floor`
+
+## Source of truth
+
+`chat/app/src/lib/companion-xr-floor.ts` — used by `companion-xr-store.ts`, `galatea.tsx`, `companion-xr-teleport.tsx`, `player.tsx`.

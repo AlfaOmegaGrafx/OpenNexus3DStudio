@@ -589,7 +589,8 @@
   transform: scale(1.05);
 }
 
-.opennexus-sidebar-icon.active {
+.opennexus-sidebar-icon.active,
+.sidebar-icon.active {
   background: #007acc;
   border-color: #007acc;
   color: white;
@@ -1133,6 +1134,9 @@
   position: relative;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* Bone Structure pin scrolls .bone-structure-content; do not let sidebar
+     scroll-anchoring jump the clicked row away from under the title. */
+  overflow-anchor: none;
 }
 
 .sidebar.sidebar-scroll-panel {
@@ -1733,25 +1737,28 @@ button,
 }
 
 .bone-structure-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   max-height: 350px;
   display: flex;
   flex-direction: column;
+  /* Keep programmatic pin-under-title from being undone by scroll anchoring. */
+  overflow-anchor: none;
 }
 
 /* Bone tree styling - vertical with horizontal expansion */
 .bone-tree {
-  font-size: 0.5rem;
-  line-height: 1.1;
+  font-size: 0.8rem;
+  line-height: 1.25;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
-  min-width: 280px;
+  min-width: 0;
   overflow: visible;
   flex: 1;
   min-height: 0;
@@ -1766,14 +1773,16 @@ button,
 
 .bone-tree-header {
   display: grid;
-  grid-template-columns: 4px 1fr 30px 40px 30px;
-  align-items: center;
-  gap: 0px;
-  font-size: 0.25rem;
-  padding: 0px;
-  white-space: nowrap;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 4px;
+  font-size: 0.8rem;
+  padding: 2px 0;
+  white-space: normal;
   overflow: visible;
-  min-height: 12px;
+  min-height: 28px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tree-expand-button {
@@ -1782,9 +1791,9 @@ button,
   color: #aaa;
   cursor: pointer;
   padding: 0;
-  font-size: 0.3rem;
-  width: 6px;
-  height: 6px;
+  font-size: 0.75rem;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1792,76 +1801,98 @@ button,
 }
 
 .tree-spacer {
-  width: 6px;
-  height: 6px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 
 .bone-name-container {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: flex-start;
+  gap: 2px;
   grid-column: 2;
   min-width: 0;
   overflow: visible;
+  text-align: left;
 }
 
-.bone-name {
-  font-size: 0.25rem;
-  font-weight: 500;
+.bone-structure-panel .bone-name {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: #fff;
   overflow: visible;
   white-space: nowrap;
-  line-height: 1.0;
+  line-height: 1.25;
   padding: 0;
-}
-
-.bone-type-badge {
-  background: #444;
-  color: #aaa;
-  padding: 0 1px;
-  border-radius: 0.5px;
-  font-size: 0.2rem;
+  margin: 0;
+  text-align: left;
   align-self: flex-start;
-  border: 0.5px solid #555;
-  line-height: 0.9;
 }
 
-.bone-info {
-  font-size: 0.2rem;
-  color: #888;
+.bone-structure-panel .bone-info {
+  display: block;
+  font-size: 0.7rem;
+  color: #bbb;
   padding: 0;
-  line-height: 1.0;
-  grid-column: 3;
-  text-align: center;
+  margin: 0;
+  line-height: 1.2;
+  text-align: left;
   overflow: visible;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
-.bone-position {
+.bone-transform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  text-align: left;
+  align-self: flex-start;
+}
+
+.bone-structure-panel .bone-position {
   margin: 0;
-  font-size: 0.4rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  grid-column: 4;
-  text-align: center;
+  text-align: left;
   overflow: visible;
   white-space: nowrap;
   padding: 0;
   color: #ff8c00;
-  max-width: 40px;
+  max-width: none;
 }
 
-.bone-rotation {
+.bone-structure-panel .bone-rotation {
   margin: 0;
-  font-size: 0.4rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  grid-column: 5;
-  text-align: center;
+  text-align: left;
   overflow: visible;
   white-space: nowrap;
   padding: 0;
   color: #ff8c00;
-  max-width: 30px;
+  max-width: none;
+}
+
+/* Humanoid under coordinates — same left edge as name / Info / coords. */
+.bone-structure-panel .bone-type-badge {
+  display: inline-block;
+  background: #444;
+  color: #ccc;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  border: 1px solid #555;
+  line-height: 1.2;
+  margin: 0;
+  text-align: left;
+  align-self: flex-start;
 }
 
 .bone-parent {
@@ -1923,37 +1954,43 @@ button,
 
 /* Removed duplicate sticky-header rule */
 
-/* Bone tree structure */
+/* Bone tree structure — scroll lives on .bone-structure-content only */
 .bone-tree {
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .bone-tree-node {
   margin-bottom: 4px;
 }
 
-.bone-tree-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Canonical bone row layout is above (.bone-structure-panel grid + name-meta).
+   Keep readable type — do not shrink expand/control chrome here. */
+.bone-structure-panel .bone-tree-header {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 4px;
 }
 
-.tree-expand-button {
+.bone-structure-panel .tree-expand-button {
   background: none;
   border: none;
   color: #aaa;
   cursor: pointer;
-  padding: 2px 4px;
-  font-size: 0.8rem;
+  padding: 0;
+  font-size: 0.75rem;
+  width: 16px;
+  height: 16px;
 }
 
-.tree-expand-button:hover {
+.bone-structure-panel .tree-expand-button:hover {
   color: #fff;
 }
 
-.tree-spacer {
+.bone-structure-panel .tree-spacer {
   width: 16px;
+  height: 16px;
   display: inline-block;
 }
 
@@ -2077,7 +2114,7 @@ button,
 }
 
 .bone-structure-content {
-  padding: 1rem;
+  padding: 0 1rem 1rem;
 }
 
 .no-bones {

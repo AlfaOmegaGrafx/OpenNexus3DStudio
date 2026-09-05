@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Remote log first (Surface + DGX)
 
-Before changing code for **viewport, VRM upload, rig/bone alignment, orientation (180° flip), or load failures**, read runtime evidence when it exists.
+Before changing code for **viewport, VRM upload, rig/bone alignment, orientation (180° flip), load failures, or Space-Time XR (`/spacetime-xr`)**, read runtime evidence when it exists. For Space-Time XR / Galaxy, also follow `spacetime-xr-evidence-before-fix.mdc` (pull RemoteLog + ADB before edits).
 
 ## Where logs live
 

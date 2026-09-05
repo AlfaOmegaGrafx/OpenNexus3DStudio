@@ -50,27 +50,17 @@ Follow **`no-guess-use-data.mdc`** and **`remote-log-first.mdc`**: remote logs, 
 
 User intent may be **one word**, **one sentence**, a **screenshot**, or **implied** (“where is X?”, “still?”, “you didn't sync”). Do **not** require exact phrases like `debug`. If the arc of the conversation is “something should work and doesn't” → run **`terse-debug-ops.mdc`** and **`memory-bank/debug-ops-workflow.md`**: infer → logs → fix → verify → sync — same session.
 
-## Memory on session start (mandatory)
+## Memory + rules on session start (mandatory — NO EXCEPTIONS)
 
-**First turn every session** — run continuity verify, then load memory (do not wait for the user):
+**Checklist A (8 steps)** every session/restart/compaction. **Checklist B** every turn. Includes **Read all alwaysApply `.cursor/rules/*.mdc`** (+ `~/.cursor/rules/` on DGX). Do not be lazy.
 
 ```bash
 bash scripts/verify-agent-continuity.sh --all-repos
 ```
 
-Hooks: `.cursor/hooks.json` `sessionStart` / `workspaceOpen` (+ `~/.cursor/hooks.json` on DGX). Rule: `.cursor/rules/agent-continuity-startup.mdc`.
+Rule: `.cursor/rules/agent-read-first-startup.mdc` · Rules index: `memory-bank/cursor-rules-always-apply-index.md`
 
-**MindLink** — before other work in this repo:
-
-1. Read `.brain/MEMORY.md` (**Core** + **User Profile**)
-2. Read `.brain/SESSION.md` and last 5 entries in `.brain/LOG.md`
-3. If MindLink MCP is enabled: use `mindlink_read_memory()` / `mindlink_session_update()` when writing memory
-
-**RepoResident:** `.agent/STATE.md` + `CLAUDE.md`. Then `memory-bank/activeContext.md` when present.
-
-**Code tasks:** follow `.cursor/rules/solid-skills.mdc` and `.agents/skills/solid/` (project rules override strict TDD).
-
-When user says **remember this**: follow `.cursor/rules/remember-this-retention.mdc` **and** promote durable facts to `.brain/MEMORY.md`.
+When user says **remember this**: `.cursor/rules/remember-this-retention.mdc`
 
 ## Surface git from DGX
 

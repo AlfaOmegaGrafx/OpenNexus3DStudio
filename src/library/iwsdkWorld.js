@@ -9,6 +9,7 @@ import {
   DistanceGrabbable,
   MovementMode,
   OneHandGrabbable,
+  ColorSchemeType,
 } from '@iwsdk/core';
 import { BoxGeometry, Mesh, MeshStandardMaterial } from 'three';
 import {
@@ -16,6 +17,7 @@ import {
   clearHeadsetInputCache,
   patchXrInputManagerForHeadsets,
 } from './iwsdkXrEnhancements.js';
+import { attachIwsdkDynamicPhysics } from './iwsdkPhysics.js';
 import { clearIwsdkWorldContent } from './iwsdkWorldPackage.js';
 
 /**
@@ -60,7 +62,12 @@ export async function createIwsdkWorld(container, options = {}) {
       grabbing: {
         useHandPinchForGrab: true,
       },
-      spatialUI: true,
+      // Havok in a worker (0.5.x default when enabled) — props settle after grab.
+      physics: true,
+      spatialUI: {
+        kit: 'horizon',
+        preferredColorScheme: ColorSchemeType.Dark,
+      },
     },
     render: {
       defaultLighting: true,
@@ -87,6 +94,7 @@ export async function createIwsdkWorld(container, options = {}) {
  * Blue cube:
  * - Distance (ray + trigger/pinch): white dot at range
  * - Proximity (walk up + grip squeeze): OneHandGrabbable volume
+ * - Physics: falls/settles when released
  *
  * @param {import('@iwsdk/core').World} world
  */
@@ -111,6 +119,10 @@ function addDemoInteractables(world) {
   cubeEntity.addComponent(OneHandGrabbable, {
     rotate: true,
     translate: true,
+  });
+  attachIwsdkDynamicPhysics(cubeEntity, {
+    restitution: 0.35,
+    density: 0.7,
   });
 }
 

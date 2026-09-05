@@ -110,7 +110,7 @@ export async function exportAvatarPipelineVrm({
 
 /**
  * @param {string} apiEndpoint
- * @param {string} templateVrmUrl - optional direct URL to template_ict.vrm on API (operator-local)
+ * @param {string} templateVrmUrl - optional direct URL to humanoid template VRM on API
  */
 export function resolveTemplateVrmAssetUrl(apiEndpoint, templateVrmUrl = '') {
   if (templateVrmUrl && /^https?:\/\//i.test(templateVrmUrl)) return templateVrmUrl;

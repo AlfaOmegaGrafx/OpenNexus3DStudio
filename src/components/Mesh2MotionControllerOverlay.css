@@ -1,0 +1,168 @@
+.m2m-overlay {
+  position: absolute;
+  top: 12px;
+  right: max(72px, env(safe-area-inset-right, 0px));
+  z-index: 30;
+  width: 168px;
+  /* Root does not capture hits — only interactive children (Galaxy XR). */
+  pointer-events: none;
+  /* Surface uses CSS var; Galaxy gets inline scale from applyViewportOverlayScale. */
+  transform: scale(var(--viewport-ui-scale, 1));
+  transform-origin: top right;
+  max-width: calc(100% - 12px);
+  background: rgba(12, 14, 20, 0.42);
+  color: #e8edf5;
+  border: 1px solid rgba(160, 170, 190, 0.22);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+/* Headset / Galaxy: compact but readable (not tiny). */
+.m2m-overlay[data-headset-ui='1'],
+html[data-headset-ui='1'] .m2m-overlay {
+  width: 152px;
+  max-width: 36vw;
+}
+
+/* Galaxy home-space: short viewport + coarse pointer (desktop UA spoof). */
+@media (max-height: 560px) and (pointer: coarse) {
+  .m2m-overlay {
+    width: 152px;
+    max-width: 36vw;
+  }
+}
+
+.m2m-overlay > * {
+  pointer-events: auto;
+}
+
+.m2m-overlay.collapsed {
+  width: 128px;
+}
+
+.m2m-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.m2m-header strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+}
+
+.m2m-header button,
+.m2m-toolbar button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  background: rgba(60, 72, 95, 0.72);
+  color: #f2f6ff;
+  border: 1px solid rgba(170, 185, 210, 0.3);
+  border-radius: 5px;
+  padding: 2px 5px;
+  cursor: pointer;
+  font-size: 0.66rem;
+}
+
+.m2m-header button:disabled,
+.m2m-toolbar button:disabled,
+.m2m-axis-row button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.m2m-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.m2m-toolbar button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.m2m-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.m2m-field label {
+  font-size: 0.7rem;
+  color: #b8c3d8;
+}
+
+.m2m-field select {
+  width: 100%;
+  background: rgba(21, 24, 31, 0.72);
+  color: #e8edf5;
+  border: 1px solid rgba(138, 153, 180, 0.35);
+  border-radius: 5px;
+  padding: 2px 4px;
+  min-width: 0;
+  font-size: 0.7rem;
+}
+
+.m2m-target-name {
+  font-size: 0.68rem;
+  color: #c8d4ea;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m2m-hint {
+  font-size: 0.62rem;
+  color: #9fb0cc;
+  line-height: 1.2;
+}
+
+.m2m-axis-row {
+  display: grid;
+  grid-template-columns: 12px 22px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 3px;
+}
+
+.m2m-axis-row .axis-label {
+  font-size: 0.68rem;
+  color: #9fb0cc;
+}
+
+.m2m-axis-row button {
+  background: rgba(60, 72, 95, 0.72);
+  color: #f2f6ff;
+  border: 1px solid rgba(170, 185, 210, 0.3);
+  border-radius: 5px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.m2m-axis-row input {
+  width: 100%;
+  background: rgba(21, 24, 31, 0.72);
+  color: #e8edf5;
+  border: 1px solid rgba(138, 153, 180, 0.35);
+  border-radius: 5px;
+  padding: 2px 4px;
+  font-size: 0.68rem;
+  min-width: 0;
+}
+
+.m2m-axis-row input.m2m-axis-active {
+  border-color: rgba(120, 190, 255, 0.65);
+  box-shadow: 0 0 0 1px rgba(80, 150, 230, 0.28);
+}

@@ -48,7 +48,7 @@
     "update-roadmap": "node scripts/update-roadmap-date.js"
   },
   "dependencies": {
-    "@iwsdk/core": "^0.4.2",
+    "@iwsdk/core": "^0.5.3",
     "@mediapipe/holistic": "^0.5.1675471629",
     "@pixiv/three-vrm": "^3.4.4",
     "@solana/web3.js": "^1.98.4",
@@ -87,9 +87,9 @@
     "zustand": "^3.7.2"
   },
   "devDependencies": {
-    "@iwsdk/cli": "^0.4.2",
-    "@iwsdk/reference": "^0.4.2",
-    "@iwsdk/vite-plugin-dev": "^0.4.2",
+    "@iwsdk/cli": "^0.5.3",
+    "@iwsdk/reference": "^0.5.3",
+    "@iwsdk/vite-plugin-dev": "^0.5.3",
     "@playwright/test": "^1.58.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",

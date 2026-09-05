@@ -151,7 +151,7 @@ const Universal3DViewer = ({
               className="control-button"
               disabled={!sceneContext?.currentModel}
             >
-              Export VRM
+              Export avatar
             </button>
             <button 
               onClick={() => sceneContext?.exportModel?.('glb')}

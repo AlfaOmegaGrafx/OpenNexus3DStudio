@@ -1,0 +1,56 @@
+<!--
+  Head-locked status HUD for OpenNexus /xr (IWSDK lab).
+  Horizon kit: Panel, Divider. Keep copy ASCII-safe for default atlases.
+-->
+<style>
+  .panel-root {
+    flex-direction: column;
+    width: 320px;
+  }
+
+  .panel-content {
+    align-items: center;
+    flex-direction: column;
+    padding-top: 14px;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-bottom: 16px;
+  }
+
+  .heading {
+    height: 36px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 24px;
+    color: #272727;
+  }
+
+  .heading:dark {
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .line {
+    color: #272727;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18px;
+    width: 100%;
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  .line:dark {
+    color: rgba(255, 255, 255, 0.85);
+  }
+</style>
+<Panel class="panel-root">
+  <div class="panel-content">
+    <div class="heading">OpenNexus XR Lab</div>
+    <Divider></Divider>
+    <div class="line">Grab: aim + trigger, or walk up + grip</div>
+    <div class="line">Drop props: they settle with physics</div>
+    <div class="line">Walk: thumbstick / teleport on floor</div>
+    <div class="line">Exit: red panel, Menu/B, or Escape</div>
+  </div>
+</Panel>

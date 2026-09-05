@@ -1,0 +1,12 @@
+---
+description: User-facing Live Speech motion vs internal moat naming
+alwaysApply: true
+---
+
+# Live Speech motion naming (OpenNexus + Companion)
+
+See also: `~/.cursor/rules/live-speech-motion-naming.mdc`.
+
+- **Users / tracked docs / agent chat:** **Live Speech motion** only.
+- **Internal:** Live Speech motion backend + moat overlay paths (`src/moat/`, `scripts/staging-*/`, gitignored `FUTURE_RD.md`).
+- Tracked `docs/progress.md` and `docs/FUTURE_RD.md` stub must not name internal motion adapters; full audit in gitignored moat docs.

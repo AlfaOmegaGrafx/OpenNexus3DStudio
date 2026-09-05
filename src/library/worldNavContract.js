@@ -141,6 +141,22 @@ export function createLabelNavGoal(label, extra = {}) {
 }
 
 /**
+ * Follow the XR user at standoff distance (~1 m).
+ * @param {Partial<NavGoal>} [extra]
+ * @returns {NavGoal}
+ */
+export function createFollowNavGoal(extra = {}) {
+  return {
+    id: `nav-${Date.now()}`,
+    kind: 'follow',
+    toleranceM: 1,
+    source: 'companion',
+    issuedAt: Date.now(),
+    ...extra,
+  }
+}
+
+/**
  * @param {Window} source
  * @param {WorldNavEnvelope} envelope
  */

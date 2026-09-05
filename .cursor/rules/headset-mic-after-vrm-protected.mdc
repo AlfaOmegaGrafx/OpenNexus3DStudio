@@ -1,0 +1,21 @@
+---
+description: Mic after VRM — user restored auto mic (2026-08-20 evening)
+alwaysApply: true
+---
+
+# Headset mic after VRM
+
+**User update (2026-08-20 evening):** restore auto lip-sync mic after VRM load (including headset). Do not re-add the “skip mic on headset” hard block unless the user asks again.
+
+**User update (2026-08-25 rt5):** screen-record / Live Speech uses **AEC + NS + AGC on**. Raw → avatar self-talk. Keep `VARF2.pt` independent of capture.
+
+## Current behavior
+
+- VRM load → `_attachSceneLipSyncMicrophone` / CharacterManager lip-sync **may** call `getUserMedia` via `acquireSharedMicStream()`
+- No headset hard-block in `sharedMicManager.js`
+- Screen-record capture: **WebRTC first** (AEC/NS/AGC on) — see `studio-mic-screen-record.mdc` / `micConstraints.js`. Do not default raw.
+
+## Related
+
+If Galaxy controllers die again after VRM, collect remote-log + adb evidence before changing mic policy.
+If the avatar self-talks, check for a raw-mic regression — do not “fix” by releasing the mic.

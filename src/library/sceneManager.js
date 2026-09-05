@@ -37,6 +37,7 @@ import {
   uiToEffectiveLightIntensity,
 } from './viewportLighting.js';
 import { countModelRenderStats } from './viewportModelStats.js';
+import { loadQuadObjFromSource } from './quadObjTopology.js';
 import {
   getLastNativeFaceSource,
   getNativeFaceWeightsIfFresh,
@@ -50,6 +51,7 @@ import {
   unlockFaceRecordingAudioPlayback,
   resetFaceRecordingAudioXrUnlock,
 } from './nativeFaceRecordingAudio.js';
+import { acquireSharedMicStream, releaseSharedMicStream } from './sharedMicManager.js';
 import { sharedHDRManager } from './sharedHDRManager.js';
 import { inferModelFileExtensionFromSource } from './taskModelUrl.js';
 import { get3daigcAuthHeaders } from './taskManager.js';
@@ -70,6 +72,9 @@ import {
   setWorldEnvironmentLayerVisible,
 } from './worldSceneLoader.js';
 import { createSceneManagerXrInteraction } from './sceneManagerXrInteraction.js';
+import { createSceneManagerMesh2MotionAdjuster } from './sceneManagerMesh2MotionAdjuster.js';
+import { computeBoneFocusCamera } from './boneFocusCamera.js';
+
 import {
   XR_HAND_TRACKING_FEATURE,
   isXrInputVisualObject,
@@ -108,6 +113,7 @@ import {
 } from './rigBoneUtils.js';
 import { validateAigcRigContract } from './aigcRigContract.js';
 import {
+  applyVrm0SceneForwardFix,
   isBlenderExportedGltf,
   isDgxApiExportedGltf,
   isPreservedOrientationGltf,
@@ -188,6 +194,8 @@ export class SceneManager {
       endY: 0,
       boxElement: null
     };
+    /** Mesh2Motion-style TransformControls + pick/undo (Adjuster). */
+    this.mesh2MotionAdjuster = null;
     
     // Store camera state for XR mode (spawn from desktop; exit applies last XR view)
     this.preXRCameraPosition = null;
@@ -238,6 +246,7 @@ export class SceneManager {
     /** Mic-driven lip sync for the loaded studio VRM (see {@link _attachSceneLipSyncMicrophone}). */
     this.sceneLipSync = null;
     this._sceneLipSyncStream = null;
+    this._sceneLipSyncMicHeld = false;
     
     // XR-related properties
     this.vrSceneWrapper = null; // Wrapper group for VR/AR scene offset
@@ -1340,6 +1349,11 @@ export class SceneManager {
 
     try {
       this.sceneHostElement = container;
+      // Skeleton / Adjuster pick use `container` + `raycaster` (legacy names).
+      this.container = container;
+      if (!this.raycaster) {
+        this.raycaster = new THREE.Raycaster();
+      }
 
       const {
         width = container.clientWidth,
@@ -1581,6 +1595,12 @@ export class SceneManager {
       this.setupWebViewSurvivalHooks();
 
       this.isInitialized = true;
+      this.mesh2MotionAdjuster = createSceneManagerMesh2MotionAdjuster(this);
+      try {
+        this.mesh2MotionAdjuster.ensureInitialized();
+      } catch (adjusterErr) {
+        console.warn('Mesh2Motion adjuster init skipped:', adjusterErr?.message || adjusterErr);
+      }
       try {
         ensureSparkRenderer(this);
         console.log('✅ SparkRenderer attached for Gaussian splat support');
@@ -1827,10 +1847,18 @@ export class SceneManager {
 
   /**
    * Stop mic capture and tear down {@link sceneLipSync} (safe to call when idle).
+   * @param {boolean} [releaseMic=true]
    */
-  async _disposeSceneLipSync() {
-    if (this._sceneLipSyncStream) {
-      this._sceneLipSyncStream.getTracks().forEach((t) => t.stop());
+  async _disposeSceneLipSync(releaseMic = true) {
+    if (this._lipSyncMicGestureHandler) {
+      window.removeEventListener('pointerup', this._lipSyncMicGestureHandler, true);
+      window.removeEventListener('keydown', this._lipSyncMicGestureHandler, true);
+      this._lipSyncMicGestureHandler = null;
+      this._lipSyncMicGestureBound = false;
+    }
+    if (releaseMic && this._sceneLipSyncMicHeld) {
+      releaseSharedMicStream();
+      this._sceneLipSyncMicHeld = false;
       this._sceneLipSyncStream = null;
     }
     if (this.sceneLipSync) {
@@ -1843,7 +1871,7 @@ export class SceneManager {
     }
   }
 
-  /** Suspend mic lip-sync on the loaded studio VRM (webcam face tracking takes over). */
+  /** Suspend mic lip-sync visemes (webcam face tracking takes over); mic stays open. */
   setSceneLipSyncSuspended(suspended) {
     this.sceneLipSync?.setSuspended(suspended);
   }
@@ -1853,26 +1881,27 @@ export class SceneManager {
    */
   async _attachSceneLipSyncMicrophone() {
     if (!this.currentVRM?.expressionManager) return;
-    await this._disposeSceneLipSync();
+    await this._disposeSceneLipSync(false);
     this.sceneLipSync = new LipSync(this.currentVRM);
+    await this._startSceneLipSyncFromMic();
+  }
+
+  async _startSceneLipSyncFromMic() {
+    if (!this.sceneLipSync || !this.currentVRM?.expressionManager) return;
     try {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         console.warn('[SceneManager] getUserMedia not available; lip sync disabled.');
         return;
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-        video: false,
-      });
-      this._sceneLipSyncStream = stream;
-      this.sceneLipSync.start(stream);
+      if (!this._sceneLipSyncStream) {
+        const stream = await acquireSharedMicStream();
+        this._sceneLipSyncStream = stream;
+        this._sceneLipSyncMicHeld = true;
+      }
+      this.sceneLipSync.start(this._sceneLipSyncStream);
     } catch (e) {
       console.warn('[SceneManager] Microphone unavailable for lip sync:', e?.message || e);
-      await this._disposeSceneLipSync();
+      await this._disposeSceneLipSync(true);
     }
   }
 
@@ -2108,7 +2137,11 @@ export class SceneManager {
           model = await this.loadGLTF(source);
           break;
         case 'obj':
-          model = await this.loadOBJ(source);
+          if (options.quadTopology) {
+            model = await loadQuadObjFromSource(source);
+          } else {
+            model = await this.loadOBJ(source);
+          }
           break;
         case 'fbx':
           model = await this.loadFBX(source);
@@ -2186,6 +2219,11 @@ export class SceneManager {
 
       if (fromAigc) {
         model.userData.fromAigc = true;
+      }
+      // Rigged GLB from DGX (template_wrap) often exports scene forward +Z; rotate root
+      // once so the viewport camera (+Z) sees the chest, not the back.
+      if (fromAigc && !isVrm && modelHasSkinnedMesh(model)) {
+        applyVrm0SceneForwardFix(model, 'AIGC rigged GLB scene yaw');
       }
       if (options.avatarFromImage) {
         model.userData.avatarFromImage = true;
@@ -4409,6 +4447,12 @@ export class SceneManager {
    * Handle mouse click for skeleton selection
    */
   handleSkeletonClick(event) {
+    // Adjuster owns single-click pick (bone gizmo + object pick) — Mesh2Motion pattern.
+    // Keep bounding-box multi-select on double-click / drag handlers.
+    if (this.mesh2MotionAdjuster) {
+      return;
+    }
+
     if (!this.boneHelpers || this.boneHelpers.length === 0) {
       console.log('No bone helpers available for selection');
       return;
@@ -4721,88 +4765,129 @@ export class SceneManager {
   }
 
   /**
-   * Highlight bone by name (called from bone hierarchy panel)
+   * Highlight bone by name (called from bone hierarchy panel / Adjuster).
+   * Always frames the gizmo in the free viewport for any selected bone.
    */
   highlightBone(boneName) {
     console.log('Highlighting bone:', boneName);
     
     if (!boneName) {
       this.deselectBone();
+      this.mesh2MotionAdjuster?.detach({ restoreWorld: true, focus: false });
       return;
     }
     
-    // Ensure we're in skeleton mode
+    // Ensure we're in skeleton mode (zoomToBone handles camera)
     if (this.renderMode !== 'skeleton') {
       console.log('Switching to skeleton mode for bone highlighting');
-      this.setRenderMode('skeleton');
+      this.setRenderMode('skeleton', { focus: false });
     }
     
-    // Find the bone helper
-    const helper = this.boneHelpers.find(h => h.userData.boneName === boneName);
+    const helper = this.boneHelpers?.find(h => h.userData.boneName === boneName);
+    const boneFromHelper = helper?.userData?.originalBone;
+    let bone = boneFromHelper;
+    if (!bone?.isBone) {
+      const root = this.currentModel ?? this._resolveExpressionVRM()?.scene;
+      if (root) {
+        root.traverse((node) => {
+          if (!bone && node.isBone && node.name === boneName) bone = node;
+        });
+      }
+    }
+
     if (helper) {
       console.log('Found bone helper, zooming and selecting');
-      // Zoom to the bone
       this.zoomToBone(helper);
-      
-      // Select the bone
       this.selectBone(boneName);
-    } else {
-      console.warn('Bone helper not found for highlighting:', boneName);
+      if (bone && this.mesh2MotionAdjuster) {
+        // Camera already moved by zoomToBone — do not focusOnModel / re-focus.
+        this.mesh2MotionAdjuster.attach(bone, 'bone', { focus: false, space: 'auto' });
+      }
+      return;
+    }
+
+    // No helper sphere (viz not ready) — still attach gizmo and center camera.
+    console.warn('Bone helper not found for highlighting, focusing bone directly:', boneName);
+    if (bone && this.mesh2MotionAdjuster) {
+      this.selectedBone = boneName;
+      this.mesh2MotionAdjuster.attach(bone, 'bone', { focus: true, space: 'auto' });
+      this.emit('boneSelected', { boneName, helper: null, bone });
     }
   }
 
   /**
-   * Zoom camera to a specific bone with smooth animation
+   * Keep bone helper spheres on the live bones (bind helpers lag during animation).
+   */
+  _syncBoneHelperWorldPositions() {
+    if (!this.boneHelpers?.length) return;
+    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene ?? null;
+    const worldPos = new THREE.Vector3();
+    for (const helper of this.boneHelpers) {
+      const bone = helper.userData?.originalBone;
+      if (!bone?.isBone) continue;
+      getBoneDisplayWorldPosition(bone, modelRoot, worldPos);
+      this._worldToModelLocal(modelRoot, worldPos, helper.position);
+    }
+  }
+
+  /**
+   * Zoom camera so the selected bone is centered in the free viewport
+   * (between side panels). Preserves current orbit direction — no world-+Z yank
+   * that left the gizmo off to the side (see user image 2 desired framing).
    */
   zoomToBone(boneHelper) {
     if (!this.camera || !this.controls || !boneHelper) return;
-    
-    const bonePosition = boneHelper.position.clone();
-    
-    // Calculate distance for good viewing angle
-    const distance = 0.5; // Adjust this value for closer/farther zoom
-    
-    // Set camera position relative to bone
-    const cameraOffset = new THREE.Vector3(0, 0.2, distance);
-    const targetCameraPosition = bonePosition.clone().add(cameraOffset);
-    const targetLookAt = bonePosition.clone();
-    
-    // Store starting positions for animation
+
+    this._syncBoneHelperWorldPositions();
+
+    const bonePosition = new THREE.Vector3();
+    const liveBone = boneHelper.userData?.originalBone;
+    const modelRoot = this.currentModel ?? this._resolveExpressionVRM()?.scene ?? null;
+    if (liveBone?.isBone) {
+      liveBone.updateWorldMatrix?.(true, false);
+      liveBone.getWorldPosition(bonePosition);
+    } else {
+      boneHelper.getWorldPosition(bonePosition);
+    }
+
+    if (this.mesh2MotionAdjuster) {
+      this.mesh2MotionAdjuster._zoomToken = (this.mesh2MotionAdjuster._zoomToken || 0) + 1;
+    }
+
+    const boneName = boneHelper.userData?.boneName || liveBone?.name || boneHelper.name || '';
+    const canvas = this.renderer?.domElement || null;
+    const { endCam, endTarget } = computeBoneFocusCamera({
+      camera: this.camera,
+      controlsTarget: this.controls.target,
+      boneWorld: bonePosition,
+      boneName,
+      canvas,
+    });
+
     const startCameraPosition = this.camera.position.clone();
     const startLookAt = this.controls.target ? this.controls.target.clone() : new THREE.Vector3();
-    
-    // Animation parameters
-    const duration = 1000; // 1 second animation
+
+    const duration = 550;
     const startTime = performance.now();
-    
-    // Animation function
+    const token = (this._boneZoomToken = (this._boneZoomToken || 0) + 1);
+
     const animate = (currentTime) => {
+      if (token !== this._boneZoomToken) return;
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // Smooth easing function (ease-out)
       const easeOut = 1 - Math.pow(1 - progress, 3);
-      
-      // Interpolate camera position
-      this.camera.position.lerpVectors(startCameraPosition, targetCameraPosition, easeOut);
-      
-      // Interpolate look-at target
+
+      this.camera.position.lerpVectors(startCameraPosition, endCam, easeOut);
       if (this.controls.target) {
-        this.controls.target.lerpVectors(startLookAt, targetLookAt, easeOut);
+        this.controls.target.lerpVectors(startLookAt, endTarget, easeOut);
       }
-      
-      // Update controls
       this.controls.update();
-      
-      // Continue animation if not complete
+
       if (progress < 1) {
         requestAnimationFrame(animate);
-      } else {
-        console.log('Animated zoom to bone:', boneHelper.userData.boneName);
       }
     };
-    
-    // Start animation
+
     requestAnimationFrame(animate);
   }
 
@@ -5500,20 +5585,21 @@ export class SceneManager {
 
 
   /**
-   * Set render mode with auto-focus
+   * Set render mode. Camera stays put unless `{ focus: true }` is passed explicitly.
    * @param {string} mode - Render mode (solid, wireframe, skeleton, partColorize, rendered)
+   * @param {{ focus?: boolean }} [options]
    */
-  setRenderMode(mode) {
+  setRenderMode(mode, options = {}) {
     this.renderMode = mode;
     this.updateRenderMode(mode);
-    
-    // Auto-focus on model when changing render modes for better viewing
-    if (this.currentModel) {
+
+    // Never auto-reset the orbit on render-mode switches (header / Adjuster / bone pick).
+    if (options.focus === true && this.currentModel) {
       setTimeout(() => {
         this.focusOnModel();
-      }, 100); // Small delay to ensure render mode is applied first
+      }, 100);
     }
-    
+
     this.emit('renderModeChanged', { mode });
   }
 
@@ -5756,6 +5842,50 @@ export class SceneManager {
   }
 
   /**
+   * Quad retopo overlays: show true quad edges (not triangulated diagonals).
+   */
+  _applyQuadTopologyRenderMode(root, mode) {
+    if (!root?.userData?.hasQuadTopology) return;
+
+    root.traverse((child) => {
+      if (child.userData?.isQuadWireframeOverlay && child.material) {
+        switch (mode) {
+          case 'wireframe':
+          case 'skeleton':
+            child.visible = true;
+            child.material.color.setHex(0x00d4ff);
+            child.material.opacity = 1;
+            break;
+          case 'solid':
+          case 'rendered':
+            child.visible = true;
+            child.material.color.setHex(0x141414);
+            child.material.opacity = 0.92;
+            break;
+          default:
+            child.visible = mode !== 'partColorize';
+            break;
+        }
+        child.material.needsUpdate = true;
+        return;
+      }
+
+      if (!child.isMesh || child.userData?.isQuadWireframeOverlay) return;
+      if (!child.userData?.isQuadTopologySolid) return;
+
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) {
+        if (!m) continue;
+        if (mode === 'wireframe' || mode === 'skeleton') {
+          m.wireframe = false;
+          m.transparent = true;
+          m.opacity = mode === 'skeleton' ? 0.06 : 0.12;
+        }
+      }
+    });
+  }
+
+  /**
    * Update model materials based on render mode
    */
   updateRenderMode(mode) {
@@ -5825,6 +5955,17 @@ export class SceneManager {
         }
         case 'wireframe': {
           this.exitDiagnosticViewOnMesh(child);
+          if (child.userData?.isQuadTopologySolid) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            for (const m of mats) {
+              if (!m) continue;
+              m.wireframe = false;
+              m.transparent = true;
+              m.opacity = 0.12;
+              if (child.userData.originalColor && m.color) m.color.copy(child.userData.originalColor);
+            }
+            break;
+          }
           const mats = Array.isArray(child.material) ? child.material : [child.material];
           for (const m of mats) {
             if (!m) continue;
@@ -5881,6 +6022,7 @@ export class SceneManager {
 
     roots.forEach((root) => {
       root.traverse((child) => applyModeToMesh(child));
+      this._applyQuadTopologyRenderMode(root, mode);
     });
 
     if (mode === 'skeleton') {
@@ -6369,6 +6511,8 @@ export class SceneManager {
   clearModel() {
     void this._disposeSceneLipSync();
     this.currentVRM = null;
+    this.mesh2MotionAdjuster?.detach({ restoreWorld: false, focus: false });
+    this.mesh2MotionAdjuster?.history?.clear?.();
     if (this.currentModel) {
       if (this.currentModel.userData?.isGaussianSplat || this.currentSplat) {
         disposeSplatMesh(this.currentSplat || this.currentModel);
@@ -6411,6 +6555,10 @@ export class SceneManager {
       
       if (this.controls) {
         this.controls.update();
+      }
+
+      if (this.renderMode === 'skeleton' && this.boneHelpers?.length) {
+        this._syncBoneHelperWorldPositions();
       }
 
       // Native APK / WebView: Jetpack XR face → nativeFaceBridge (no WebXR session).

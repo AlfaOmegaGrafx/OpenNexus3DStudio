@@ -5,6 +5,7 @@ import App from './App.jsx'
 import './App.css'
 
 const IwsdkImmersive = React.lazy(() => import('./pages/IwsdkImmersive.jsx'))
+const SpaceTimeImmersive = React.lazy(() => import('./pages/SpaceTimeImmersive.jsx'))
 const StudioPage = React.lazy(() => import('./pages/StudioPage.jsx'))
 const CompanionPage = React.lazy(() => import('./pages/CompanionPage.jsx'))
 import { initRemoteLogClient } from './library/remoteLogClient.js'
@@ -33,7 +34,9 @@ try {
   if (
     import.meta.env.DEV &&
     typeof window !== 'undefined' &&
-    (window.location.pathname.startsWith('/xr') || nativeFaceRelayOn)
+    (window.location.pathname.startsWith('/xr') ||
+      window.location.pathname.startsWith('/spacetime-xr') ||
+      nativeFaceRelayOn)
   ) {
     try {
       localStorage.setItem('remoteLogEnabled', '1')
@@ -80,6 +83,14 @@ const appTree = (
           element={
             <Suspense fallback={<div style={{ padding: 16, color: '#ccc' }}>Loading XR Lab…</div>}>
               <IwsdkImmersive />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/spacetime-xr"
+          element={
+            <Suspense fallback={<div style={{ padding: 16, color: '#ccc' }}>Loading Space-Time XR…</div>}>
+              <SpaceTimeImmersive />
             </Suspense>
           }
         />

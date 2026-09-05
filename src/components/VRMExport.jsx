@@ -56,7 +56,7 @@ const VRMExport = () => {
       vrmExportDbg('📋 VRM Metadata found:', vrmMeta);
       vrmExportDbg('🔍 VRM Object structure:', sceneManager.currentVRM);
       vrmExportDbg('🔍 VRM Scene:', sceneManager.currentVRM.scene);
-      vrmExportDbg('🔍 VRM Thumbnail field:', vrmMeta.thumbnail);
+      vrmExportDbg('🔍 Avatar thumbnail field:', vrmMeta.thumbnail);
       vrmExportDbg('🔍 All VRM Meta fields:', Object.keys(vrmMeta));
       vrmExportDbg('🔍 VRM Meta values:', Object.values(vrmMeta));
       vrmExportDbg('🔍 VRM Meta entries:', Object.entries(vrmMeta));
@@ -1556,13 +1556,13 @@ const VRMExport = () => {
   }, [sceneManager?.currentVRM]);
 
   const handleExport = async () => {
-    vrmExportDbg('🚀 VRM Export - Starting export process...');
+    vrmExportDbg('🚀 Avatar Export - Starting export process...');
     // OPTIMIZED: Use characterManager.downloadVRM() which uses the optimized atlas path
     // This ensures texture atlas is enabled and uses VRMExporterv0 for compatibility
     
     const modelToExport = sceneManager?.currentVRM?.scene || currentModel;
     
-    vrmExportDbg('🔄 VRM Export Debug:', {
+    vrmExportDbg('🔄 Avatar Export Debug:', {
       hasSceneManager: !!sceneManager,
       hasCharacterManager: !!characterManager,
       hasCurrentVRM: !!sceneManager?.currentVRM,
@@ -1574,7 +1574,7 @@ const VRMExport = () => {
     });
     
     if (!modelToExport) {
-      console.error('❌ VRM Export - No model to export');
+      console.error('❌ Avatar Export - No model to export');
       alert('No model to export');
       return;
     }
@@ -1600,10 +1600,10 @@ const VRMExport = () => {
           useTextureAtlas: true,  // OPTIMIZED: Enable atlas in fallback
           atlasSize: 2048  // OPTIMIZED: Use optimized atlas size
         });
-        alert(`VRM model exported successfully as ${result.filename}`);
+        alert(`Avatar exported successfully as ${result.filename}`);
       } catch (error) {
         console.error('VRM export failed:', error);
-        alert(`VRM export failed: ${error.message}`);
+        alert(`Avatar export failed: ${error.message}`);
       } finally {
         setIsExporting(false);
       }
@@ -1653,7 +1653,7 @@ const VRMExport = () => {
         screenshotFOV: 75
       };
       
-      vrmExportDbg('🔄 VRM Export - Shader type:', exportOptions.shaderType, {
+      vrmExportDbg('🔄 Avatar Export - Shader type:', exportOptions.shaderType, {
         useStandardShader,
         exportMtoonAtlas: exportOptions_optimized.exportMtoonAtlas,
         exportStdAtlas: exportOptions_optimized.exportStdAtlas,
@@ -1884,15 +1884,15 @@ const VRMExport = () => {
         imageHeight: exportOptions_optimized.screenshot?.image?.height
       });
       
-      vrmExportDbg('🚀 VRM Export - Calling downloadVRMWithAvatar...');
+      vrmExportDbg('🚀 Avatar Export - Calling downloadVRMWithAvatar...');
       await downloadVRMWithAvatar(vrmModel, avatarToUse, filenameWithoutExt, exportOptions_optimized);
-      vrmExportDbg('✅ VRM Export - downloadVRMWithAvatar completed successfully');
+      vrmExportDbg('✅ Avatar Export - downloadVRMWithAvatar completed successfully');
       
       // Show success message
-      alert(`VRM model exported successfully as ${exportOptions.filename}\n✅ Texture atlas enabled\n✅ Optimized file size`);
+      alert(`Avatar exported successfully as ${exportOptions.filename}\n✅ Texture atlas enabled\n✅ Optimized file size`);
     } catch (error) {
       console.error('VRM export failed:', error);
-      alert(`VRM export failed: ${error.message}`);
+      alert(`Avatar export failed: ${error.message}`);
     } finally {
       setIsExporting(false);
     }
@@ -1975,11 +1975,11 @@ const VRMExport = () => {
               }
             }}
             className="expand-icon-button"
-            title={isExpanded ? "Collapse VRM Export" : "Expand VRM Export"}
+            title={isExpanded ? "Collapse Avatar Export" : "Expand Avatar Export"}
           >
             {isExpanded ? '▼' : '▶'}
           </button>
-          <h3 className="card-title">VRM Export</h3>
+          <h3 className="card-title">Avatar Export</h3>
         </div>
         
         {isExpanded && (
@@ -1988,7 +1988,7 @@ const VRMExport = () => {
             <div className="no-model">
               <p>No model loaded</p>
               <p className="text-sm text-gray-400">
-                Load a model first to export it as VRM
+                Load a model first to export it as an avatar
               </p>
             </div>
           ) : (
@@ -2001,12 +2001,12 @@ const VRMExport = () => {
                   onChange={handleFilenameChange}
                   onKeyDown={handleFilenameKeyDown}
                   className="input w-full"
-                  placeholder="export.vrm"
+                  placeholder="my-avatar"
                 />
               </div>
 
               <div className="option-group">
-                <label className="block mb-1">VRM Version:</label>
+                <label className="block mb-1">Avatar format:</label>
                 <select
                   value={exportOptions.vrmVersion}
                   onChange={(e) => handleOptionChange('vrmVersion', e.target.value)}
@@ -2126,7 +2126,7 @@ const VRMExport = () => {
                 <div className="vrm-metadata-section">
                   {vrmExportDbg('🔍 VRM Metadata Debug:', vrmMetadata)}
                   {vrmExportDbg('🔍 VRM Textures Debug:', vrmMetadata.textures)}
-                  <h4 className="text-lg font-semibold mb-3 text-blue-600">📋 VRM Metadata (from imported VRM)</h4>
+                  <h4 className="text-lg font-semibold mb-3 text-blue-600">📋 Avatar metadata (from imported avatar)</h4>
                   <div className="metadata-grid">
                     <div className="metadata-item">
                       <label className="metadata-label">Title:</label>
@@ -2141,7 +2141,7 @@ const VRMExport = () => {
                       <span className="metadata-value">{vrmMetadata.version}</span>
                     </div>
                     <div className="metadata-item">
-                      <label className="metadata-label">VRM Version:</label>
+                      <label className="metadata-label">Avatar format:</label>
                       <span className="metadata-value">{vrmMetadata.metaVersion}</span>
                     </div>
                     {vrmMetadata.contactInformation && (
@@ -2204,17 +2204,17 @@ const VRMExport = () => {
                     )}
                   </div>
 
-                  {/* VRM Thumbnail/Preview Image Display */}
+                  {/* Avatar thumbnail/Preview Image Display */}
                   {vrmExportDbg('🔍 Checking thumbnail display - vrmMetadata.thumbnail:', vrmMetadata.thumbnail)}
                   {vrmExportDbg('🔍 Thumbnail exists:', !!vrmMetadata.thumbnail)}
                   {vrmExportDbg('🔍 Thumbnail type:', typeof vrmMetadata.thumbnail)}
                   {vrmMetadata.thumbnail && (
                     <div style={{ marginTop: '20px', padding: '16px', background: '#2a2a2a', borderRadius: '8px', border: '1px solid #444' }}>
-                      <h5 className="text-md font-semibold mb-2 text-purple-600">🖼️ VRM Thumbnail/Preview</h5>
+                      <h5 className="text-md font-semibold mb-2 text-purple-600">🖼️ Avatar thumbnail/Preview</h5>
                       <div style={{ position: 'relative', width: '100%', maxWidth: '300px', margin: '0 auto' }}>
                         <img 
                           src={vrmMetadata.thumbnail} 
-                          alt="VRM Thumbnail"
+                          alt="Avatar thumbnail"
                           style={{ width: '100%', height: 'auto', borderRadius: '8px', border: '2px solid #555', objectFit: 'cover' }}
                           onError={(e) => {
                             vrmExportDbg('❌ Failed to load VRM thumbnail:', vrmMetadata.thumbnail);
@@ -2232,15 +2232,15 @@ const VRMExport = () => {
                         />
                         <div style={{ display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '200px', background: '#2a2a2a', border: '2px dashed #555', borderRadius: '8px' }}>
                           <div style={{ fontSize: '48px', marginBottom: '16px', color: '#888' }}>🖼️</div>
-                          <div style={{ fontSize: '14px', color: '#888', textAlign: 'center' }}>VRM Thumbnail</div>
+                          <div style={{ fontSize: '14px', color: '#888', textAlign: 'center' }}>Avatar thumbnail</div>
                         </div>
                       </div>
                     </div>
                   )}
                   {!vrmMetadata.thumbnail && (
                     <div style={{ marginTop: '20px', padding: '16px', background: '#2a2a2a', borderRadius: '8px', border: '1px solid #444' }}>
-                      <h5 className="text-md font-semibold mb-2 text-gray-400">🖼️ No VRM Thumbnail Found</h5>
-                      <p style={{ color: '#888', fontSize: '14px' }}>No thumbnail image was found in the VRM metadata.</p>
+                      <h5 className="text-md font-semibold mb-2 text-gray-400">🖼️ No Avatar thumbnail Found</h5>
+                      <p style={{ color: '#888', fontSize: '14px' }}>No thumbnail image was found in the avatar metadata.</p>
                     </div>
                   )}
 
@@ -2300,7 +2300,7 @@ const VRMExport = () => {
                   {vrmMetadata.texture !== -1 && (
                     <div className="texture-index-info">
                       <div className="metadata-item">
-                        <label className="metadata-label">VRM Texture Index:</label>
+                        <label className="metadata-label">Avatar texture index:</label>
                         <span className="metadata-value">{vrmMetadata.texture}</span>
                       </div>
                     </div>
@@ -2320,7 +2320,7 @@ const VRMExport = () => {
                       Exporting VRM...
                     </>
                   ) : (
-                    'Export VRM'
+                    'Export avatar'
                   )}
                 </button>
               </div>

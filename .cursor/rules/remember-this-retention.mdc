@@ -13,6 +13,8 @@ Follow `.cursor/rules/lock-it-in.mdc`: **protect + verify + `git commit`** on DG
 
 ## Required workflow (do all steps — do not only reply in chat)
 
+0. **NO EXCEPTIONS / do not be lazy:** `agent-read-first-startup.mdc` — Checklist A (8 incl. Read all alwaysApply Cursor rules); Checklist B every turn.
+
 1. **Markdown (source of truth)**  
    - Create or update a topic file under `memory-bank/` (decisions, protected states) or `docs/` (user-facing guides).  
    - Use a clear filename, e.g. `memory-bank/vrm-upload-protected-state.md`.

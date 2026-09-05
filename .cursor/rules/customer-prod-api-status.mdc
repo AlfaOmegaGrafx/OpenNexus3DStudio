@@ -1,0 +1,15 @@
+---
+description: Customer production — API Status panel is ops/dev, not end-user UI
+alwaysApply: true
+---
+
+# Customer production: API Status
+
+When building **customer-facing production** (not local/dev, not the public Vercel marketing demo):
+
+- **End customers do not need the API Status sidebar panel** for normal use. The API URL is configured at deploy time (`VITE_API_ENDPOINT` / hosting env).
+- **Public Vercel demo** already hides it with `VITE_PUBLIC_DEMO=1` (`showApiStatusPanel()` in `src/library/runtimeUi.js`).
+- **Customer product builds:** hide or tuck API Status (ops/admin only). Do not present reconnect / endpoint / troubleshooting as primary end-user UI unless the user explicitly asks for that product decision.
+- **Keep** API Status for local `npm run dev` and self-hosted operator workflows. “Change Endpoint” stays local-dev only.
+
+Source: user direction 2026-08-21 (sidebar / production discussion).

@@ -79,7 +79,11 @@ sync_is_dgx_owned_path() {
 
   rel="${rel//\\//}"
 
-  if [[ "$rel" =~ ^(graphify-out|\.env|uploads/|MONETIZATION_ROADMAP\.md) ]]; then
+  if [[ "$rel" =~ ^(graphify-out|\.env|uploads/|MONETIZATION_ROADMAP\.md|\.brain/|\.sessionmem-team/|scripts/staging-ardy/|scripts/tmp-) ]]; then
+    return 1
+  fi
+  # Secrets / local MCP — never scp to Surface as part of change sync
+  if [[ "$rel" =~ ^\.cursor/mcp\.json$ ]]; then
     return 1
   fi
 
@@ -87,7 +91,7 @@ sync_is_dgx_owned_path() {
     return 0
   fi
   # Gitignored companion overlay still syncs to Surface (not via GitHub).
-  if [[ "$include_src" -eq 1 && "$rel" =~ ^scripts/(companion-|start-companion) ]]; then
+  if [[ "$include_src" -eq 1 && "$rel" =~ ^scripts/(companion-|start-companion|ensure-companion|sync-companion) ]]; then
     return 0
   fi
   if [[ "$rel" =~ ^src/ ]]; then
@@ -98,7 +102,7 @@ sync_is_dgx_owned_path() {
   if [[ "$rel" =~ ^public/worlds/ ]]; then return 0; fi
 
   case "$rel" in
-    README.md|package.json|vite.config.js|vercel.json|index.html|.env.example|.env.production.example)
+    README.md|package.json|package-lock.json|vite.config.js|vercel.json|index.html|.env.example|.env.production.example)
       return 0
       ;;
   esac
@@ -130,7 +134,7 @@ sync_is_dgx_owned_path() {
       verify-public-build-env.mjs|pre-commit-block-secrets.sh|verify_krea2_text_to_3d_pipeline.sh)
         return 0
         ;;
-      companion-chat-proxy.mjs|companion-surface-proxy.mjs|ensure-dev-certs.mjs|start-companion-chat.sh|start-companion-surface-proxy.ps1|start-companion-surface-proxy.sh|grounding-dino-proxy.mjs)
+      companion-chat-proxy.mjs|companion-surface-proxy.mjs|ensure-dev-certs.mjs|start-companion-chat.sh|start-companion-chat-surface.ps1|start-companion-surface-proxy.ps1|start-companion-surface-proxy.sh|ensure-companion-stack-dgx.sh|sync-companion-to-surface.sh|grounding-dino-proxy.mjs)
         return 0
         ;;
       *)
@@ -197,7 +201,10 @@ sync_local_overlay_paths() {
   local root="$1"
   if [[ -d "${root}/src/moat" ]]; then
     find "${root}/src/moat" -type f -printf '%P\n' | while IFS= read -r rel; do
-      [[ -n "$rel" ]] && printf 'src/moat/%s\n' "$rel"
+      [[ -z "$rel" ]] && continue
+      # Agent graph cache — local-only; never sync (Vite watch noise + moat hygiene).
+      [[ "$rel" == graphify-out/* ]] && continue
+      printf 'src/moat/%s\n' "$rel"
     done
   fi
   local name
@@ -205,8 +212,11 @@ sync_local_overlay_paths() {
     companion-chat-proxy.mjs \
     companion-surface-proxy.mjs \
     start-companion-chat.sh \
+    start-companion-chat-surface.ps1 \
     start-companion-surface-proxy.ps1 \
-    start-companion-surface-proxy.sh
+    start-companion-surface-proxy.sh \
+    ensure-companion-stack-dgx.sh \
+    sync-companion-to-surface.sh
   do
     [[ -f "${root}/scripts/${name}" ]] && printf 'scripts/%s\n' "$name"
   done

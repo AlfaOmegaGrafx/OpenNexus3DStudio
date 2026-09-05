@@ -8,7 +8,7 @@ export default function CompanionPage() {
       <Link to="/" style={{ color: '#8ec5ff' }}>← Viewport</Link>
       <h1 style={{ marginTop: '1rem' }}>Companion</h1>
       <p style={{ maxWidth: '36rem', color: '#8b97ab' }}>
-        Voice companion for your VRM is part of the local Studio build. The public demo does not
+        Voice companion for your avatar is part of the local Studio build. The public demo does not
         embed a live chat runtime.
       </p>
     </div>

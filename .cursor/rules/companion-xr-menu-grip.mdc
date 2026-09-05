@@ -1,0 +1,21 @@
+---
+description: HARD — Companion XR left-Y Settings menu rigid grip + −45° pitch (rt14)
+globs: "**/companion-xr-menu*.ts,**/companion-xr-opennexus-menu.tsx"
+alwaysApply: false
+---
+
+# Companion XR Settings menu (HARDENED 2026-08-25)
+
+User confirmed **perfect**. Do not regress.
+
+Overlay policy lives in chat: `chat/app/src/lib/companion-xr-menu-policy.ts`  
+(OpenNexus Studio native menu: `src/library/sceneManagerXrMenu.js` — same grip + `PANEL_PITCH_UP`.)
+
+## Locked
+
+1. Rigid left-grip attach (world pos + quat)
+2. Local pitch **−π/4**
+3. Offset `{ x:0, y:-0.18, z:-0.36 }`
+4. Never `controller.add(menu)`; never horizontal-aim upright rebuild
+
+Build pin when locked: iframe `build=20260825-rt14`.

@@ -135,7 +135,7 @@ function LoadPanel({ onNavigate }) {
       <div className={styles.supportedFormats}>
         <h3>Supported Formats</h3>
         <ul>
-          <li>VRM (.vrm)</li>
+          <li>Avatar</li>
           <li>GLB (.glb)</li>
           <li>GLTF (.gltf)</li>
           <li>FBX (.fbx)</li>

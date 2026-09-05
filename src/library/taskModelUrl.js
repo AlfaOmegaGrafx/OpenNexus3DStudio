@@ -567,6 +567,52 @@ export function getTaskResultFileExtension(result, options = {}) {
   return pickFromObject(result) || pickFromObject(result.result);
 }
 
+const QUAD_REMESH_MODEL_IDS = new Set([
+  'autoremesher_retopology',
+  'instant_meshes_retopology',
+]);
+
+/**
+ * True when a completed job payload is a quad remesh (OBJ with quad topology).
+ * @param {object|null|undefined} taskResult
+ * @param {object|null|undefined} [task]
+ */
+export function isQuadRetopoTaskResult(taskResult, task = null) {
+  const nested =
+    taskResult?.result && typeof taskResult.result === 'object' ? taskResult.result : null;
+  const outputFormat =
+    taskResult?.retopology_info?.output_format ||
+    nested?.retopology_info?.output_format ||
+    taskResult?.retopology_info?.requested_output_format ||
+    nested?.retopology_info?.requested_output_format ||
+    task?.options?.output_format;
+  if (outputFormat && outputFormat !== 'obj') {
+    return false;
+  }
+  const polyType =
+    taskResult?.retopology_info?.poly_type ||
+    nested?.retopology_info?.poly_type ||
+    taskResult?.poly_type ||
+    nested?.poly_type ||
+    task?.options?.poly_type;
+  if (polyType === 'tri') return false;
+  if (polyType === 'quad') return true;
+
+  const modelId =
+    taskResult?.model_preference ||
+    nested?.model_preference ||
+    taskResult?.inputs?.model_preference ||
+    nested?.inputs?.model_preference ||
+    task?.options?.model_preference;
+  if (typeof modelId === 'string' && QUAD_REMESH_MODEL_IDS.has(modelId)) return true;
+
+  const ext = getTaskResultFileExtension(taskResult, { preferMesh: true });
+  if (ext === 'obj' && (task?.type === 'mesh-retopology' || taskResult?.feature === 'mesh_retopology')) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Infer loader extension from URL pathname (handles hostnames like dgx-spark.local).
  * @param {string} source
@@ -593,7 +639,11 @@ export function inferModelFileExtensionFromSource(source) {
       const params = new URL(source, base).searchParams;
       if (params.get('asset') === 'fbx') return 'fbx';
       if (params.get('asset') === 'manifest') return 'json';
-      return 'glb';
+      if (params.get('asset') === 'vrm') return 'vrm';
+      // Bare /download has no suffix — callers must pass format via
+      // getTaskResultFileExtension (format/output_vrm_path). Do not guess glb
+      // here; that forced template_wrap VRMs into the GLB loader (no humanoid).
+      return '';
     }
 
     const dot = pathname.lastIndexOf('.');

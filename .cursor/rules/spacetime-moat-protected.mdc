@@ -1,36 +1,27 @@
 ---
-description: Space-Time moat — what is OSS vs proprietary; never commit or push moat assets
+description: Fully proprietary — no OSS pushes; product IP stays local
 alwaysApply: true
 ---
 
-# Space-Time moat (protected)
+# Space-Time protected — proprietary mode
 
-Read `memory-bank/spacetime-moat-strategy.md` before monetization, x402, passport API, NFC production, or investor-facing work.
+**Locked (2026-08-26):** Morph-head / Body+Cloth product path is **not** open-repo work. Stay local. No public OSS replacement story. User-facing proprietary app comes later.
 
-## Moat summary
+## Do not push
 
-| Open (GitHub) | Proprietary (never push) |
-|---------------|---------------------------|
-| Client `src/` (rebrand required for forks; public companion stubs only) | `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `Pitch Deck/`, `src/moat/` |
-| Public overview `docs/SPACETIME_MOAT_OVERVIEW.md` | `memory-bank/` (OpenNexus **and** 3DAIGC-API — full strategy / ops) |
-| Public stubs `docs/FUTURE_RD.md`, `3DAIGC-API/docs/MESH_WRAP_ROADMAP.md` | Full `FUTURE_RD.md` / `3DAIGC-API/MESH_WRAP_ROADMAP.md` (repo-root, gitignored) |
-| Mock `/verify` UI + API **draft** docs | Live passport serial DB, NFC SUN signing keys |
-| `.env.example` placeholders | `.env`, Thirdweb/x402 facilitator secrets |
-| Shipped public docs (`docs/progress.md` = **public-safe only**) | Unreleased speech / interactive-motion / creature-companion strategy, SKUs, timed waves; parked R&D (e.g. age-aware body) |
-| — | `backups/` (UI chrome good-state snapshots — local restore only) |
+1. **Do not** `git push` OpenNexus3DStudio or 3DAIGC-API to GitHub (or any public remote) unless the user **explicitly** orders a specific push in that turn.
+2. **Never** `git add` / commit / push: `src/moat/`, `3DAIGC-API/assets/moat/`, `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md` (API root), `Pitch Deck/`, `memory-bank/`, `.brain/`, `.sessionmem-team/`, `backups/`, companion proxy scripts, `.env`, `.cursor/mcp.json`, secrets, `scripts/staging-*/`, `scripts/tmp-*`.
+3. **Never** invent a public stand-in for the wrap template. **Never** name vendors, kit repos, or internal template filenames in tracked public docs or chat replies.
 
-**Moat layers:** (1) trademark/official drops, (2) OpenNexus+3DAIGC-API integration+SLA, (3) hosted x402/API/registry, (4) wallet+phygital asset graph, (5) ecosystem mindshare, (6) §11 personalization + companion handoff, (7) unreleased speech, interactive motion, and creature companion tracks.
+See also: `.cursor/rules/secrets-moat-memory-protection.mdc` (full memory/secrets table).
 
 ## Agent rules
 
-1. **Never** `git add` / commit / push: `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md` (API root), `Pitch Deck/`, `memory-bank/` (either repo), `backups/`, `src/moat/`, companion/speech proxy scripts, `.env`, facilitator keys, passport production data, unreleased creature moat assets/modules.
-2. **Never** paste roadmap pricing, ARR, unreleased speech/motion/creature strategy, or parked R&D verdicts into tracked files — use `docs/SPACETIME_MOAT_OVERVIEW.md` for public-safe wording; keep `docs/progress.md` free of those names until launch. Tracked stubs may **point** at moat paths only. Do **not** name unreleased vendor speech/motion projects in tracked rules or docs.
-3. **DGX sync:** push moat docs via `sync-to-dgx.ps1` / `sync-changes-to-pc.sh` (scp), not git.
-4. Implement billing/registry as **hosted services** with env secrets; client stays OSS.
-5. Forks must remove Space-Time branding (README Legal & Trademark).
+1. Default new product IP to gitignored local paths. Sync DGX ↔ Surface via `sync-changes-to-pc.sh` / scp — **not** git remotes.
+2. Public product copy for photo→avatar: **TRELLIS to VRM** (task: Avatar from Image). Do not describe internal wrap/vendor stack.
+3. License gate still applies (`MODEL_LICENSES.md` / R&D gate) before shipping commercial features.
+4. Forks / old OSS remotes are frozen for this track; do not expand them with unreleased work.
 
-## Revenue mechanisms (internal detail in memory-bank only)
+## Revenue / strategy
 
-- **x402:** primary; quote before DGX job queue; §6.1 SKU map in local roadmap.
-- **NFT commissions:** marketplace GMV; 3d-anvil primary 0% — Spacetime earns bundles/registry/hosted secondary.
-- **§11 personalized AI:** DataConnect digest → API context + companion handoff; Pro tier unlock; not PII sale.
+Internal detail only: `memory-bank/`, `MONETIZATION_ROADMAP.md` — never paste into tracked public docs.

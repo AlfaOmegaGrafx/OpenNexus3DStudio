@@ -1,0 +1,29 @@
+---
+description: Companion Settings panel-2D (Surface + Galaxy flat) — locked chrome and close inset
+globs: chat/app/src/lib/companion-settings-2d-policy.ts,chat/app/src/components/ui/settings/**/*
+alwaysApply: false
+---
+
+# Companion Settings — both panel-2D menus (HARD)
+
+User-locked 2026-08-24. Checkpoint `20260825-rt18` (see gitignored `src/moat/companion/UI-UX-COMPANION.md`).
+
+## Contract
+
+| Context | Behavior |
+|---------|----------|
+| **Surface PC embed** | fit=1, fixed 400 frame, muted chrome, close X `positionRight=24` |
+| **Galaxy XR 2D panel** | same chrome; `headset2dSettingsFit` only — never immersive fit |
+| **Galaxy flat + sidebar open** | clamp content — no H-scroll / Notifications crush |
+| **Immersive VR/MR menu** | fit=1 always; `immersiveLayout` path — do not apply iframe fit |
+
+## Forbidden
+
+- `transformScale` on the settings dialog (breaks uikit)
+- Moving close X right of inset 24 (hangs outside providers border)
+- Changing Surface fixed frame “to fix Galaxy”
+- Using Galaxy iframe fit inside Enter VR/MR
+
+## Source of truth
+
+`chat/app/src/lib/companion-settings-2d-policy.ts`

@@ -307,7 +307,19 @@ export function connectWallet(network, walletType = null) {
             }
           }
 
-          // Default to MetaMask/Ethereum wallet
+          // Default: MetaMask via Thirdweb (same path as Load / enterprise wallet stack)
+          try {
+            const { connectWithThirdweb } = await import('./thirdwebWalletConnect.js');
+            const session = await connectWithThirdweb({
+              walletKind: 'metamask',
+              network: network.toLowerCase(),
+            });
+            return resolve(session.address);
+          } catch (twErr) {
+            console.warn('Thirdweb MetaMask connect failed, falling back to window.ethereum:', twErr);
+          }
+
+          // Fallback: injected ethereum
           if (!window.ethereum) {
             return reject(new Error('Ethereum wallet is not available.'));
           }

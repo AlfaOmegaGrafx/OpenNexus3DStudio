@@ -331,13 +331,27 @@ const MULTIVIEW_CONSISTENCY_FRAGMENT =
 
 /** Neck-down body: leave open collar for head stitch / template_wrap. */
 const HEADLESS_BODY_FRAGMENT =
-  'neck-down full body only, no head, no face, no hair, head omitted, ' +
-  'open neck with blank collar region for head attachment, ' +
+  'neck-down full body ONLY from collarbones to feet, ' +
+  'NO HEAD whatsoever, no skull, no face, no hair, no ears, head completely omitted and cropped away, ' +
+  'open neck stump with blank flat collar region for attaching a separate 3D head, ' +
   'bare skin mannequin body with NO clothing NO fabric NO garments NO outfit NO shoes, ' +
-  'humanoid template proportions, clean neck stump, ' +
-  'strict T-pose with arms extended horizontally to the sides at shoulder height, NOT arms down, NOT A-pose, ' +
+  'humanoid template proportions, clean neck stump ending at the shoulders, ' +
+  'strict T-pose: BOTH arms fully extended horizontally straight out to the left and right at shoulder height, ' +
+  'hands far from the torso, palms down, NOT crossed arms, NOT folded arms, NOT arms in front of chest, ' +
+  'NOT arms down, NOT A-pose, NOT hands on hips, ' +
   'legs in a wide open stance with feet wider than shoulder-width, ' +
   'clear air gap between the thighs calves and knees, left and right legs must not touch';
+
+/** Extra positive cues for models that ignore short bans (also mirrored in negative prompt). */
+const HEADLESS_BODY_ANTI_FRAGMENT =
+  'avoid: head, face, hair, crossed arms, folded arms, hugging pose, arms across chest, ' +
+  'A-pose, arms at sides, clothing, outfit, shoes';
+
+/** Krea / diffusers negative_prompt for neck-open Body+Cloth bodies. */
+export const HEADLESS_BODY_NEGATIVE_PROMPT =
+  'head, face, skull, hair, ears, eyes, nose, mouth, lips, chin, jaw, neck up, portrait, bust, ' +
+  'crossed arms, folded arms, arms across chest, hugging pose, hands on hips, A-pose, arms at sides, ' +
+  'clothing, outfit, fabric, garments, shoes, boots, hat, helmet, accessories';
 
 /**
  * Body+Cloth Krea subject: physique comes from the character concept; clothing is fan-out only.
@@ -844,6 +858,7 @@ export function buildTextToImagePrompt(basePrompt, options, extra = {}) {
     }
   } else if (opts.headless_body) {
     parts.push(HEADLESS_BODY_FRAGMENT);
+    parts.push(HEADLESS_BODY_ANTI_FRAGMENT);
     parts.push(TPOSE_HAND_ORIENTATION_FRAGMENT);
     parts.push(
       wornLegStanceFragment({
@@ -895,6 +910,19 @@ export function buildTextToImagePrompt(basePrompt, options, extra = {}) {
   }
 
   return parts.join(', ');
+}
+
+/**
+ * Optional negative prompt for Krea when headless_body is set (passed via model_parameters).
+ * @param {object|null|undefined} options
+ * @returns {string}
+ */
+export function buildTextToImageNegativePrompt(options) {
+  const opts = normalizeTextToImagePromptOptions(options);
+  if (opts.headless_body) {
+    return HEADLESS_BODY_NEGATIVE_PROMPT;
+  }
+  return '';
 }
 
 /**

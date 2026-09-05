@@ -221,7 +221,7 @@ const CharacterPreview3D = ({ model, className = "", cameraAngle = "3/4" }) => {
           fontSize: '12px',
           textAlign: 'center'
         }}>
-          {isConverting ? 'Converting VRM to GLB...' : 'Loading preview...'}
+          {isConverting ? 'Converting avatar to GLB…' : 'Loading preview...'}
         </div>
       )}
     </div>

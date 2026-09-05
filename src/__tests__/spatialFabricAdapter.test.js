@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildMetaverseBrowserUrl,
   buildSceneAssemblerOpenUrl,
+  buildSpaceTimeBrowserDeepLink,
+  buildSpaceTimeBrowserFabricUrl,
+  buildSpaceTimeImmersivePageUrl,
+  normalizeSpaceTimeFabricUrl,
+  resolveBrowserReachableFabricUrl,
   canPublishTaskToSpatialFabric,
   deriveSceneAssemblerRootFromMsfUrl,
   formatSpatialFabricApiError,
@@ -99,6 +104,69 @@ describe('spatialFabricAdapter', () => {
     const tier = validateOmbTier({ triangles: 1000, textureMaxDimension: 64 });
     expect(tier.recommendedTier).toBeGreaterThanOrEqual(1);
     expect(tier.label).toBeTruthy();
+  });
+
+  it('buildSpaceTimeBrowserDeepLink encodes fabric URL', () => {
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', 'https://host.test/fabric/sneeze.msf');
+    const fabric = buildSpaceTimeBrowserFabricUrl({});
+    expect(fabric).toContain('sneeze.msf');
+    expect(fabric).toContain('root=1');
+    const link = buildSpaceTimeBrowserDeepLink(fabric);
+    expect(link).toMatch(/^spacetime:\/\/fabric\?url=/);
+  });
+
+  it('buildSpaceTimeImmersivePageUrl includes nativeFaceRelay and fabricUrl', () => {
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', 'https://host.test:8453/fabric/sneeze.msf');
+    const url = buildSpaceTimeImmersivePageUrl({}, { origin: 'https://surface.test:3000' });
+    expect(url).toContain('/spacetime-xr?');
+    expect(url).toContain('nativeFaceRelay=1');
+    expect(url).toContain('fabricUrl=');
+    expect(url).toContain('sneeze.msf');
+  });
+
+  it('resolveBrowserReachableFabricUrl rewrites Tailscale fabric to Surface MSF proxy', () => {
+    const fabric = resolveBrowserReachableFabricUrl(
+      'https://dgx-spark.tail6121eb.ts.net:8443/fabric/sneeze.msf?root=1',
+      {},
+      { publicBase: 'https://10.0.0.32:8453' },
+    );
+    expect(fabric).toBe('https://10.0.0.32:8453/fabric/sneeze.msf?root=1');
+  });
+
+  it('buildSpaceTimeImmersivePageUrl rewrites API Tailscale fabric to env MSF proxy', () => {
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', 'https://10.0.0.32:8453');
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', '');
+    const url = buildSpaceTimeImmersivePageUrl(
+      { fabric_msf_url: 'https://dgx-spark.tail6121eb.ts.net:8443/fabric/sneeze.msf?root=1' },
+      { origin: 'https://10.0.0.32:3000' },
+    );
+    expect(url).toContain(encodeURIComponent('https://10.0.0.32:8453/fabric/sneeze.msf?root=1'));
+  });
+
+  it('buildSpaceTimeBrowserFabricUrl defaults to sneeze.msf from public base', () => {
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', '');
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', '');
+    const fabric = buildSpaceTimeBrowserFabricUrl({
+      public_base_url: 'https://host.test:8443',
+    });
+    expect(fabric).toBe('https://host.test:8443/fabric/sneeze.msf?root=1');
+  });
+
+  it('buildSpaceTimeBrowserFabricUrl rewrites legacy sample.msf to sneeze.msf', () => {
+    vi.stubEnv('VITE_RP1_FABRIC_MSF_URL', '');
+    vi.stubEnv('VITE_MSF_PUBLIC_URL', '');
+    const fabric = buildSpaceTimeBrowserFabricUrl({
+      fabricMsfUrl: 'https://dgx.test/fabric/sample.msf',
+    });
+    expect(fabric).toBe('https://dgx.test/fabric/sneeze.msf?root=1');
+  });
+
+  it('normalizeSpaceTimeFabricUrl preserves explicit root', () => {
+    const fabric = normalizeSpaceTimeFabricUrl(
+      'https://dgx.test/fabric/sneeze.msf?root=3',
+      { rootIx: 1 },
+    );
+    expect(fabric).toBe('https://dgx.test/fabric/sneeze.msf?root=3');
   });
 
   it('buildMetaverseBrowserUrl falls back to OMB guidelines when MSF URL unset', () => {

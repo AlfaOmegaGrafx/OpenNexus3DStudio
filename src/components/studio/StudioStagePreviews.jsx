@@ -162,6 +162,39 @@ export default function StudioStagePreviews({
           <header className="studio-stage-preview-header">
             <h2>Auto Rig</h2>
             <span>Bone view of rigged mesh</span>
+            <button
+              type="button"
+              className="studio-btn ghost studio-rerun-btn"
+              disabled={running || !rigUrl}
+              onClick={() => {
+                const jobId = rigNode?.data?.jobId || null;
+                const format =
+                  rigNode?.data?.format ||
+                  (/\.vrm(\?|#|$)/i.test(String(rigUrl)) ? 'vrm' : undefined);
+                window.dispatchEvent(
+                  new CustomEvent('loadModelFromUrl', {
+                    detail: {
+                      result: {
+                        job_id: jobId,
+                        feature: 'auto_rig',
+                        format: format || 'vrm',
+                        mesh_url: rigUrl,
+                        output_mesh_path: rigUrl,
+                        rig_info: {
+                          rig_mode: rigNode?.data?.rigMode || 'template_wrap',
+                          generation_method: 'humanoid_vrm_template',
+                        },
+                      },
+                      taskId: jobId ? `job_${jobId}` : null,
+                      source: 'studio-stage-open-viewport',
+                    },
+                  }),
+                );
+              }}
+              title="Load this VRM into the main OpenNexus 3D viewport (required for motion)"
+            >
+              Open in viewport
+            </button>
             {onRerunStage ? (
               <button
                 type="button"

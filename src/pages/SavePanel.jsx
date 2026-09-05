@@ -89,7 +89,7 @@ function SavePanel({ onNavigate }) {
             onChange={(e) => setSaveFormat(e.target.value)}
             className={styles.formatSelect}
           >
-            <option value="vrm">VRM</option>
+            <option value="vrm">Avatar</option>
             <option value="glb">GLB</option>
           </select>
         </div>

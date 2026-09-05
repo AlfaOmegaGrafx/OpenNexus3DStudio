@@ -26,6 +26,7 @@ import {
   PIPELINE_MESH_DECIMATION_MAX,
   PIPELINE_MESH_SIMPLIFY_DEFAULT,
   getPipelineSafeMeshGenerationDefaults,
+  isQuadRemeshModel,
 } from '../library/aiModelsCatalog.js';
 import {
   AUTO_RIG_MODES,
@@ -238,6 +239,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     publishJob,
     config: spatialConfig,
     sceneAssemblerReady,
+    openSpaceTimeBrowser,
+    openSpaceTimeImmersive,
   } = useSpatialFabric(apiEndpoint);
   const fileInputRef = useRef(null);
   const objectNameInputRef = useRef(null);
@@ -386,7 +389,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     } else if (newTaskType === 'mesh-retopology') {
       setTaskOptions((prev) => ({
         ...prev,
-        output_format: 'glb',
+        output_format: isQuadRemeshModel(prev.model_preference ?? newTaskModel) ? 'obj' : 'glb',
         target_face_count: prev.target_face_count ?? PIPELINE_MESH_DECIMATION_TARGET,
         model_parameters: {
           ...(prev.model_parameters || {}),
@@ -711,7 +714,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     }
     if (newTaskType === 'avatar-from-image' && !newTaskImage) {
-      alert('⚠️ Avatar from Image requires a photo (mesh + template avatar rig).');
+      alert('⚠️ Avatar from Image requires a photo (TRELLIS to VRM).');
       return;
     }
     if (isArc2AvatarTaskType(newTaskType)) {
@@ -762,7 +765,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     let prompt =
       newTaskPrompt.trim() ||
       (newTaskType === 'avatar-from-image'
-        ? 'Generate avatar from image (mesh + ICT template rig)'
+        ? 'Generate avatar from image (TRELLIS to VRM)'
           : newTaskType === 'image-to-world'
             ? objectName
             : newTaskType === 'environment-scan'
@@ -820,7 +823,12 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       options.num_parts = Number(taskOptions.num_parts) || 8;
     }
     if (newTaskType === 'mesh-retopology') {
-      options.output_format = taskOptions.output_format || 'glb';
+      options.output_format =
+        taskOptions.output_format ||
+        (isQuadRemeshModel(newTaskModel) ? 'obj' : 'glb');
+      if (isQuadRemeshModel(newTaskModel) && options.output_format === 'obj') {
+        options.poly_type = 'quad';
+      }
       const faceTarget =
         Number(taskOptions.target_face_count) ||
         Number(taskOptions.model_parameters?.target_face_count) ||
@@ -1391,6 +1399,38 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     } catch (err) {
       console.error('[SpatialFabric] Open Scene Assembler failed', err);
+      alert(err?.message || String(err));
+    }
+  };
+
+  const handleOpenSpaceTimeBrowser = async (event) => {
+    event?.stopPropagation?.();
+    try {
+      const result = await openSpaceTimeBrowser();
+      if (result.launched) {
+        alert(
+          `Space-Time Browser launched on DGX (native window on the Spark display — use Sunshine if you are on Surface).\n\nFabric: ${result.fabricUrl}`,
+        );
+      } else {
+        alert(
+          `${result.hint || 'Copy the deep link and launch on DGX.'}\n\n(Deep link copied to clipboard when permitted.)`,
+        );
+      }
+    } catch (err) {
+      console.error('[SpatialFabric] Space-Time Browser failed', err);
+      alert(err?.message || String(err));
+    }
+  };
+
+  const handleOpenSpaceTimeImmersive = (event) => {
+    event?.stopPropagation?.();
+    try {
+      const result = openSpaceTimeImmersive();
+      alert(
+        `Space-Time XR URL copied for Galaxy XR (Chrome + face relay).\n\nPaste on headset or open:\n${result.url}`,
+      );
+    } catch (err) {
+      console.error('[SpatialFabric] Space-Time XR failed', err);
       alert(err?.message || String(err));
     }
   };
@@ -2013,6 +2053,26 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               >
                 {sceneAssemblerReady ? 'Assembler' : 'OMB guide'}
               </button>
+              {sceneAssemblerReady ? (
+                <button
+                  className="btn btn-secondary"
+                  data-testid="task-manager-space-time-browser-btn"
+                  onClick={(event) => void handleOpenSpaceTimeBrowser(event)}
+                  title="Launch native Space-Time Browser on DGX (3D walk mode)"
+                >
+                  Space-Time
+                </button>
+              ) : null}
+              {sceneAssemblerReady ? (
+                <button
+                  className="btn btn-secondary"
+                  data-testid="task-manager-space-time-xr-btn"
+                  onClick={handleOpenSpaceTimeImmersive}
+                  title="Galaxy XR: immersive fabric walk + face relay in Chrome WebXR"
+                >
+                  Space-Time XR
+                </button>
+              ) : null}
             </div>
 
         {spatialConfig?.msfPublicUrl ? (
@@ -2138,7 +2198,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               </a>{' '}
               Workflows use DGX-verified defaults: TRELLIS.2 for image→3D;{' '}
               <strong>SkinTokens</strong> for <em>Auto Rigging → full rig</em>;{' '}
-              <strong>UniRig</strong> for <em>Avatar from Image → template avatar</em> (not SkinTokens).
+              <strong>UniRig</strong> for <em>Avatar from Image → TRELLIS to VRM</em> (not SkinTokens).
               {isApiConnected
                 ? ' Models list updates from the API when connected.'
                 : canBrowseCatalog
@@ -2476,7 +2536,14 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       if (newTaskType === 'auto-rigging') {
                         handleAutoRigModelChange(e.target.value);
                       } else {
-                        setNewTaskModel(e.target.value);
+                        const modelId = e.target.value;
+                        setNewTaskModel(modelId);
+                        if (newTaskType === 'mesh-retopology' && isQuadRemeshModel(modelId)) {
+                          setTaskOptions((prev) => ({
+                            ...prev,
+                            output_format: prev.output_format || 'obj',
+                          }));
+                        }
                       }
                     }}
                     className="input w-full"
@@ -2501,7 +2568,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               {newTaskType === 'mesh-retopology' && (
                 <div className="mb-1.5">
                   <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem', color: '#ccc' }}>
-                    Target triangles (decimate / face budget)
+                    {isQuadRemeshModel(newTaskModel)
+                      ? 'Target quads (AutoRemesher / Instant Meshes)'
+                      : 'Target triangles (decimate / face budget)'}
                   </label>
                   <input
                     type="number"
@@ -2529,9 +2598,19 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     style={{ padding: '0.375rem', fontSize: '0.65rem' }}
                   />
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Default {PIPELINE_MESH_DECIMATION_TARGET.toLocaleString()} triangles (API cap).
-                    Use <strong>Mesh Decimate</strong> for characters — Instant Meshes leaves holes and
-                    strips textures.
+                    {isQuadRemeshModel(newTaskModel) ? (
+                      <>
+                        Default <strong>OBJ</strong> (quad wireframe in viewport). Choose{' '}
+                        <strong>GLB</strong> under Advanced if you want a triangulated viewport mesh
+                        (more holes on quad remesh). Textures are not preserved.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Mesh Decimate</strong> — per-shell reduction (fixes finger/arm holes on AIGC).
+                        Set output to <strong>GLB</strong> under Advanced. Default budget{' '}
+                        {PIPELINE_MESH_DECIMATION_TARGET.toLocaleString()} triangles.
+                      </>
+                    )}
                   </p>
                 </div>
               )}
@@ -2879,7 +2958,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     Also generate Gaussian splat preview (TripoSplat → Spark.js)
                   </label>
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Pipeline: photo → TRELLIS mesh → template avatar wrap. Optional splat loads
+                    Pipeline: TRELLIS to VRM. Optional splat loads
                     in parallel when ready.
                   </p>
                 </div>

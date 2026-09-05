@@ -71,7 +71,7 @@ const SaveSimple = ({ onNavigate }) => {
               checked={downloadOptions.downloadVRM}
               onChange={() => handleOptionChange('downloadVRM')}
             />
-            Download VRM
+            Download avatar
           </label>
           <label className={styles.checkboxLabel}>
             <input 
@@ -79,7 +79,7 @@ const SaveSimple = ({ onNavigate }) => {
               checked={downloadOptions.downloadVRMPreview}
               onChange={() => handleOptionChange('downloadVRMPreview')}
             />
-            Download VRM Preview
+            Download avatar preview
           </label>
           <label className={styles.checkboxLabel}>
             <input 

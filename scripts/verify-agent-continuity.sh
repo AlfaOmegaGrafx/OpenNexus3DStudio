@@ -139,6 +139,54 @@ check_sessionmem_cli() {
   fi
 }
 
+ensure_companion_stack() {
+  note ""
+  note "=== Companion stack (Surface UI + DGX PersonaPlex) ==="
+  note "  Companion UI prefers Surface :5173; DGX :5173 is fallback. Git commits do not start these."
+
+  local ensure="${ROOT}/scripts/ensure-companion-stack-dgx.sh"
+  if [[ ! -f "$ensure" ]]; then
+    fail "scripts/ensure-companion-stack-dgx.sh missing"
+    return
+  fi
+
+  set +e
+  OUT="$(bash "$ensure" 2>&1)"
+  RC=$?
+  set -e
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && note "  $line"
+  done <<<"$OUT"
+
+  local surface_host="${SURFACE_LAN_IP:-10.0.0.32}"
+  local surface_chat=""
+  surface_chat="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 "http://${surface_host}:5173/" 2>/dev/null || echo 000)"
+  local surface_proxy=""
+  surface_proxy="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 "https://${surface_host}:8464/?embed=1" 2>/dev/null || echo 000)"
+
+  if ss -ltn 2>/dev/null | grep -qE ':5173[[:space:]]'; then
+    ok "Companion fallback listening on DGX :5173"
+  elif [[ "$surface_chat" == "200" || "$surface_proxy" == "200" ]]; then
+    ok "Companion UI reachable on Surface (5173 or proxy 8464)"
+  else
+    warn "Companion not on DGX :5173 and Surface :5173/:8464 not reachable yet"
+  fi
+
+  if ss -ltn 2>/dev/null | grep -qE ':8455[[:space:]]'; then
+    ok "PersonaPlex WSS proxy on :8455"
+  else
+    warn "PersonaPlex WSS proxy not on :8455"
+  fi
+
+  if ss -ltn 2>/dev/null | grep -qE ':8998[[:space:]]'; then
+    ok "PersonaPlex moshi.server on :8998"
+  elif [[ "$RC" -ne 0 ]]; then
+    warn "PersonaPlex :8998 still starting (first boot downloads HF weights)"
+  else
+    warn "PersonaPlex :8998 not listening yet"
+  fi
+}
+
 check_user_hooks() {
   note ""
   note "=== User Cursor hooks (~/.cursor) ==="
@@ -171,6 +219,19 @@ if [[ "$ALL_REPOS" -eq 1 ]]; then
   done
   check_user_hooks
   check_sessionmem_cli
+  ensure_companion_stack
+  note ""
+  note "=== Companion navbar invariants ==="
+  if [[ -x "${ROOT}/scripts/verify-companion-navbar.sh" ]] \
+    || [[ -f "${ROOT}/scripts/verify-companion-navbar.sh" ]]; then
+    if bash "${ROOT}/scripts/verify-companion-navbar.sh"; then
+      ok "companion navbar floating-chips + Stage Suspense"
+    else
+      fail "companion navbar invariants (see companion-navbar-floating-chips.mdc)"
+    fi
+  else
+    warn "scripts/verify-companion-navbar.sh missing"
+  fi
 fi
 
 note ""

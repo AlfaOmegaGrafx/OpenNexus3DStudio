@@ -31,6 +31,7 @@ import {
   PIPELINE_MESH_SIMPLIFY_DEFAULT,
   clampPipelineDecimationTarget,
   getPipelineSafeMeshGenerationDefaults,
+  isQuadRemeshModel,
 } from './aiModelsCatalog.js';
 import {
   buildTaskDisplayName,
@@ -548,10 +549,15 @@ export class TaskManager {
           task.type === 'environment-scan' ||
           task.type === 'text-to-image' ||
           task.type === 'image-edit' ||
-          task.type === 'text-to-motion'
+          task.type === 'text-to-motion' ||
+          task.type === 'auto-rigging'
             ? {
-                // Env-scan Phase A/B + bake regularly exceeds 10–20 min.
-                maxAttempts: task.type === 'environment-scan' ? 1200 : 600,
+                maxAttempts:
+                  task.type === 'environment-scan'
+                    ? 1200
+                    : task.type === 'auto-rigging'
+                      ? 900
+                      : 600,
                 pollInterval: 3000,
               }
             : {};
@@ -1556,13 +1562,17 @@ export class TaskManager {
   async executeMeshRetopology(options, modelData = null) {
     const endpoint = `${this.apiEndpoint}/api/v1/mesh-retopology/retopologize-mesh`;
     const modelPreference = options?.model_preference ?? 'trimesh_decimate';
-    // Remeshers (Instant Meshes / AutoRemesher) rebuild topology → holes + no textures on AIGC characters.
-    // Trimesh decimate collapses triangles in place — best for poly budget before auto-rig.
+    const quadRemesh = isQuadRemeshModel(modelPreference);
+    const outputFormat =
+      options?.output_format ?? (quadRemesh ? 'obj' : 'glb');
     const body = await this.buildMeshJobBody(modelData, {
-      output_format: options?.output_format ?? 'glb',
+      output_format: outputFormat,
       model_preference: modelPreference,
       model_parameters: options?.model_parameters,
     });
+    if (quadRemesh && outputFormat === 'obj') {
+      body.poly_type = 'quad';
+    }
     if (options?.target_vertex_count != null) {
       body.target_vertex_count = options.target_vertex_count;
     }
@@ -2924,9 +2934,15 @@ export class TaskManager {
         task.type === 'image-to-splat' ||
         task.type === 'avatar-from-image' ||
         task.type === 'image-to-world' ||
-        task.type === 'environment-scan'
+        task.type === 'environment-scan' ||
+        task.type === 'auto-rigging'
           ? {
-              maxAttempts: task.type === 'environment-scan' ? 1200 : 600,
+              maxAttempts:
+                task.type === 'environment-scan'
+                  ? 1200
+                  : task.type === 'auto-rigging'
+                    ? 900
+                    : 600,
               pollInterval: 3000,
             }
           : {};

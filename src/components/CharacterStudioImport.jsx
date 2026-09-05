@@ -70,7 +70,7 @@ const OpenNexus3DStudioImport = ({ onModelImported }) => {
             <div className="feature-list">
               <div className="feature-item">
                 <span className="feature-icon">✓</span>
-                <span>VRM compatibility conversion</span>
+                <span>Avatar compatibility conversion</span>
               </div>
               <div className="feature-item">
                 <span className="feature-icon">✓</span>

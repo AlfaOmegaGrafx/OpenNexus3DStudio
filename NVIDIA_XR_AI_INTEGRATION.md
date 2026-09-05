@@ -120,7 +120,7 @@ VLM backend: `model_backend: nim` uses hosted NVIDIA NIM (`NGC_API_KEY`); `local
 | XR input | Voice + passthrough camera via xr-ai hub | WebXR controllers, World Library, VRM viewport |
 | 3D generation | MCP → 3DAIGC-API | Task Manager REST → same API |
 | Output | Job files on DGX `outputs/` | Download + viewport load + RP1 publish |
-| Companion | In-hub VLM agent | moeChat / AIRI handoff (roadmap §11) |
+| Companion | In-hub VLM agent | Companion / AIRI handoff (roadmap §11) |
 
 ## Related docs
 

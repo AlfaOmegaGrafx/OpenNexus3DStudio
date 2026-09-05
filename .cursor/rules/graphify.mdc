@@ -19,3 +19,16 @@ Only use Read/Grep/Glob directly when:
 - If `graphify-out/wiki/index.md` exists, navigate it instead of reading raw files
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when query/path/explain do not surface enough context
 - After modifying code files, run `graphify update .` to keep the graph current (AST-only, no API cost)
+
+## PersonaPlex / Companion (partly gitignored)
+
+Moat (`src/moat/companion/`), `scripts/companion-*.mjs`, and moeChat `app/src/personaplex/` are gitignored but indexed via `.graphifyignore` negation rules.
+
+**After moat or PersonaPlex client edits on DGX:** `bash scripts/refresh-graphify-dgx.sh` (also updates `~/chat` and writes `graphify-out/personaplex-merged-graph.json`).
+
+**Queries:**
+- OpenNexus proxy + bridge: `graphify query "PersonaPlex companion proxy 8464"`
+- moeChat runtime: `cd ~/chat && graphify query "session-runtime handshake"`
+- Cross-repo: `graphify query "…" --graph graphify-out/personaplex-merged-graph.json`
+
+See `memory-bank/personaplex-graphify-ops.md`.

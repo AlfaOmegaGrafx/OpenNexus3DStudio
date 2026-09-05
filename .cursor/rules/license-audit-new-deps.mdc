@@ -1,0 +1,41 @@
+---
+description: License-audit every new repo/dep before add; reject AGPL/BLOCKED; keep OSS hygiene
+alwaysApply: true
+---
+
+# License audit — new repos & dependencies (HARD)
+
+**Not legal advice.** Goal: stay compliant for hygiene; do not grow copyleft or non-commercial weight risk.
+
+## When this applies
+
+Before adding **any** of:
+
+- GitHub/GitLab clone, submodule, or `thirdparty/` vendor tree  
+- npm / pnpm / pip / cargo / HF weight / dataset  
+- New API model route or R&D candidate (also fly `rd-commercial-license-gate.mdc` / `MODEL_LICENSES.md`)
+
+## Required steps (agent)
+
+1. Read upstream **LICENSE** / SPDX + weight terms (code LICENSE alone is not enough for models).  
+2. Classify **OK | CONDITIONAL | BLOCKED | UNKNOWN** (UNKNOWN = treat as BLOCKED until cleared).  
+3. **Reject for product/runtime** unless counsel has an isolation plan:
+   - **AGPL**, **SSPL**, Commons Clause, personal/non-commercial-only, NVIDIA R&D/source non-commercial  
+   - **GPL** into SPA/bundle shared with proprietary or MIT client (prefer replace)  
+4. Prefer **MIT / Apache-2.0 / BSD / ISC**.  
+5. Update tracked hygiene docs:
+   - OpenNexus: `docs/LICENSE_COMPLIANCE.md` findings + `bash scripts/audit-licenses.sh`  
+   - Models: `3DAIGC-API/docs/MODEL_LICENSES.md`  
+6. Tell the user the classification **before** merging or wiring production paths.
+
+## Existing flags (do not reintroduce)
+
+See `OpenNexus3DStudio/docs/LICENSE_COMPLIANCE.md`:
+
+- **RESOLVED:** chat AGPL `@lenml/char-card-reader` → MIT Avatar Role (`opennexus.avatar_role`)
+- **RESOLVED:** OpenNexus GPL `@web3-react` → Thirdweb (`thirdwebWalletConnect.js`: MetaMask + smart + in-app); GSAP removed
+- **P2:** LGPL sharp/rpc-websockets notices; pmndrs Custom LICENSE — review before shipping forks
+
+## Moat vs OSS
+
+New **proprietary** Space-Time product work that is not already on a public remote → **moat** (`src/moat/`, gitignored roadmaps / memory-bank). Do not dump unreleased IP into tracked public `src/` “for convenience.” OSS shell stays attribution-clean; moat stays unpublished. Public **Avatar Role** schema (`docs/AVATAR_ROLE.md`) is intentional OSS for marketplace portability.

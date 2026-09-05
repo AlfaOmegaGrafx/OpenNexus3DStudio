@@ -1313,6 +1313,7 @@ export function buildBoneStructureTree(threeBones) {
     const name = bone.name || 'Unnamed Bone';
     boneMap.set(name, {
       name,
+      nodeName: name,
       type: 'Bone',
       position: bone.position,
       rotation: bone.rotation,
