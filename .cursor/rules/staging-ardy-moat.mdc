@@ -1,0 +1,14 @@
+---
+description: Staging scripts + Live Speech motion adapters are moat — never commit
+alwaysApply: true
+---
+
+# Staging / Live Speech motion moat
+
+| Moat (gitignored) | Public |
+|-------------------|--------|
+| `scripts/staging-ardy/`, `scripts/staging-arc2avatar/` | none |
+| API `adapters/ardy_adapter.py`, `assets/moat/adapters/`, `assets/moat/staging/` | Live Speech motion route (no engine brand in copy) |
+| chat `app/src/personaplex/*ardy*`, `moat-motion-runtime.ts` | `app/src/lib/moat-motion-runtime.public.ts` |
+
+Never force-push FishWoWater remotes. Product term: **Live Speech motion**.
