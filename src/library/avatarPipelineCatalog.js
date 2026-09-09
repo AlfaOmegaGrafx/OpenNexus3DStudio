@@ -24,23 +24,23 @@ export const HEAD_TRACK_OPTIONS = Object.freeze([
   {
     id: HEAD_TRACK.MESHMONK,
     label: 'Ethnicity + Likeness',
-    title: 'Template morph head: GNM ethnicity + face likeness face likeness (XR blendshapes)',
+    title: 'Template morph head with ethnicity prior and face likeness (XR blendshapes)',
   },
   {
     id: HEAD_TRACK.ARC2AVATAR,
     label: '3DGSavatar',
-    title: 'Photoreal FLAME 3DGS head splat from selfie (attach to Head bone; needs face photo)',
+    title: 'Photoreal head splat from selfie (attach to Head bone; needs face photo)',
   },
   {
     id: HEAD_TRACK.BOTH,
     label: 'Both',
-    title: 'Likeness on template head + Arc2Avatar splat overlay',
+    title: 'Likeness on template head + 3DGSavatar splat overlay',
   },
   {
     id: HEAD_TRACK.NONE,
     label: 'None',
     title:
-      'Skip Likeness / 3DGSavatar — keep the generated mesh head (e.g. voxel / Minecraft). Body+Cloth uses template bones-only, no face wrap.',
+      'Skip Likeness / 3DGSavatar — keep the generated mesh head (e.g. voxel / Minecraft). Body+Cloth uses template bones-only.',
   },
 ]);
 
