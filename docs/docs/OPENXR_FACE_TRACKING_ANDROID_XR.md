@@ -58,7 +58,7 @@ Older drafts or slides sometimes mention different function names; **trust the K
 |------|----------------|---------|------------|-------------------------|
 | WebXR | Chrome immersive session | Optional `expression-tracking` | `XRFrame.expressions` | [`src/library/xrExpressionTrackingDriver.js`](../src/library/xrExpressionTrackingDriver.js) → `applyXRFrameExpressionsToVRMS` via [`sceneManager.applyFaceExpressionWeights`](../src/library/sceneManager.js) |
 | Native bridge | Android XR host (OpenXR) | `XR_ANDROID_face_tracking` | Serialized weights or `openxrParameters[]` | Native app → `window.__openNexus3dStudioNativeFace.push()` → [`src/library/nativeFaceBridge.js`](../src/library/nativeFaceBridge.js) → same `applyFaceExpressionWeights` |
-| Creature / SkinTokens | Same XR / webcam weights | No VRM morphs | `jaw_drop`, `eyes_closed_*` only | [`src/library/creatureFaceRetarget.js`](../src/library/creatureFaceRetarget.js) — jaw/chin/eye bones when present; smile/brow ignored. MeshMonk `template_wrap` is **humanoid-only**. |
+| Creature / SkinTokens | Same XR / webcam weights | No VRM morphs | `jaw_drop`, `eyes_closed_*` only | [`src/library/creatureFaceRetarget.js`](../src/library/creatureFaceRetarget.js) — jaw/chin/eye bones when present; smile/brow ignored. `template_wrap` is **humanoid-only**. |
 
 **Index → key mapping in repo:** [`src/library/openxrFaceParameterMap.js`](../src/library/openxrFaceParameterMap.js) (`OPENXR_ANDROID_FACE_PARAMETER_WEBXR_KEYS`, `openxrFloatParametersToWebXRRecord`).
 

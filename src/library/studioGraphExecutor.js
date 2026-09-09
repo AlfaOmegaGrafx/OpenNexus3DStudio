@@ -46,6 +46,7 @@ import {
   headTrackIsNone,
   normalizeHeadTrack,
 } from './avatarPipelineCatalog.js';
+import { buildTemplateWrapClientOptions } from './templateWrapParams.js';
 import {
   buildAppearanceComponentAutoRigOptions,
   buildAppearanceGarmentSubjectPrompt,
@@ -793,53 +794,26 @@ export async function runStudioPipeline(project, deps, opts = {}) {
         }
         if (rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) {
           const promptOpts = getTextToImagePromptOptions(current);
-          const gender = promptOpts?.character_gender || '';
-          const ethnicity = promptOpts?.character_ethnicity || '';
-          const wrapHeadTrack = normalizeHeadTrack(promptOpts?.head_track);
-          // Voxel / non-humanoid heads: skip face wrap engines; keep generated mesh head.
-          if (headTrackIsNone(wrapHeadTrack)) {
-            options.rig_mode = AUTO_RIG_MODES.TEMPLATE;
-            options.model_parameters = {
-              ...(options.model_parameters || {}),
-              head_track: HEAD_TRACK.NONE,
-              gnm_identity: false,
-              gnm_bake_expressions: false,
-              face_likeness: false,
-              likeness_alpha: 0,
-            };
+          const wrapClient = buildTemplateWrapClientOptions({
+            promptOpts,
+            template,
+            current,
+            faceSelfieFile,
+          });
+          if (wrapClient.rigMode) {
+            options.rig_mode = wrapClient.rigMode;
+          }
+          options.model_parameters = {
+            ...(options.model_parameters || {}),
+            ...(wrapClient.model_parameters || {}),
+          };
+          if (wrapClient.likeness_image_file) {
+            options.likeness_image_file = wrapClient.likeness_image_file;
+          }
+          if (wrapClient.statusSuffix) {
             onStatus?.(
-              `Auto-rigging ${objectName} with ${TEMPLATE_RIG_MODEL_ID} (template bones-only — head track none)…`,
+              `Auto-rigging ${objectName} with ${TEMPLATE_RIG_MODEL_ID} (${wrapClient.statusSuffix})…`,
             );
-          } else {
-            const useMeshMonk = headTrackUsesMeshMonk(wrapHeadTrack);
-            const likenessSource = String(promptOpts?.likeness_source || 'auto').toLowerCase();
-            const resolvedLikeness =
-              likenessSource === 'selfie' && !faceSelfieFile ? 'auto' : likenessSource;
-            const composableBody =
-              current.templateId === 'krea_composable_avatar_body' ||
-              template?.id === 'krea_composable_avatar_body';
-            const expectHeadless = composableBody || Boolean(promptOpts?.headless_body);
-            options.model_parameters = {
-              ...(options.model_parameters || {}),
-              // Same humanoid wrap track — engine chosen via head_track chips.
-              head_track: wrapHeadTrack,
-              // Body+Cloth → neck-open scale hint (Blender overrides if mesh still has a head).
-              expect_headless_body: expectHeadless ? true : undefined,
-              /* moat */ gnm_identity: false,
-              /* moat */ gnm_bake_expressions: false,
-              /* moat */ face_likeness: false,
-              /* likeness tuning: moat */ likeness_alpha: 0,
-              likeness_source: useMeshMonk ? resolvedLikeness : 'body_roi',
-              ...(gender ? { character_gender: gender } : {}),
-              ...(ethnicity ? { character_ethnicity: ethnicity } : {}),
-            };
-            // Same Face selfie upload as Arc2Avatar — MeshMonk can use it as likeness source.
-            if (useMeshMonk && faceSelfieFile) {
-              options.likeness_image_file = faceSelfieFile;
-              if (resolvedLikeness === 'auto' || resolvedLikeness === 'selfie') {
-                options.model_parameters.likeness_source = resolvedLikeness;
-              }
-            }
           }
         }
         if (rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT) {

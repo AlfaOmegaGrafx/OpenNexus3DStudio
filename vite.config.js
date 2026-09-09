@@ -715,6 +715,10 @@ function companionMoatResolvePlugin() {
       'src/library/companionBridge.public.js',
       'src/moat/companion/companionBridge.js',
     ],
+    'src/library/templateWrapParams.js': [
+      'src/library/templateWrapParams.public.js',
+      'src/moat/wrap/buildWrapModelParameters.js',
+    ],
   }
 
   return {
@@ -724,7 +728,7 @@ function companionMoatResolvePlugin() {
       if (!importer || !source.startsWith('.')) return null
       const abs = path.normalize(path.resolve(path.dirname(importer), source))
       const root = path.resolve(__dirname)
-      const moatRoot = path.join(root, 'src/moat/companion')
+      const moatRoot = path.join(root, 'src/moat')
       // Already inside moat overlay — never bounce back through library stubs (Windows resolve loops).
       if (abs.startsWith(moatRoot)) return null
       const rel = path.relative(root, abs).replace(/\\/g, '/')
@@ -996,6 +1000,37 @@ export default defineConfig(async ({ command, mode }) => {
     env.CHOKIDAR_USEPOLLING === 'true'
   const proxyTarget = (env.DEV_API_PROXY_TARGET || '').trim().replace(/\/$/, '')
   const dgxLan = String(env.VITE_DGX_LAN_IP || env.DGX_LAN_IP || '10.0.0.158').trim()
+  const presenceTarget = (
+    env.VITE_PRESENCE_PROXY_TARGET
+    || env.PRESENCE_SPARK_URL
+    || `http://${dgxLan}:8470`
+  ).replace(/\/$/, '')
+  const presenceViteProxy =
+    command === 'serve'
+      ? {
+          '/__presence': {
+            target: presenceTarget,
+            changeOrigin: true,
+            secure: false,
+            ws: true,
+            // Keep subpaths: /__presence → /presence, /__presence/avatar/:id → /presence/avatar/:id
+            rewrite: (p) => p.replace(/^\/__presence/, '/presence'),
+            configure: (proxy) => {
+              proxy.on('error', (err, _req, res) => {
+                console.error('[vite] Presence proxy error:', err?.message || err)
+                if (res && !res.headersSent && typeof res.writeHead === 'function') {
+                  try {
+                    res.writeHead(502, { 'Content-Type': 'text/plain' })
+                    res.end('Presence unreachable')
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              })
+            },
+          },
+        }
+      : {}
   const voiceUploadTarget = (
     env.PERSONAPLEX_VOICE_UPLOAD_URL
     || `http://${dgxLan}:${env.PERSONAPLEX_VOICE_UPLOAD_PORT || 8999}`
@@ -1003,6 +1038,7 @@ export default defineConfig(async ({ command, mode }) => {
   const personaplexVoiceProxy =
     command === 'serve'
       ? {
+          ...presenceViteProxy,
           '/__personaplex_voices': {
             target: voiceUploadTarget,
             changeOrigin: true,
@@ -1076,6 +1112,7 @@ export default defineConfig(async ({ command, mode }) => {
       console.log(`[vite] API dev proxy: ${DEV_DGX_PROXY_PREFIX} → ${proxyTarget}`)
     }
     console.log(`[vite] PersonaPlex voice upload proxy: /__personaplex_voices → ${voiceUploadTarget}`)
+    console.log(`[vite] Presence WS proxy: /__presence → ${presenceTarget}/presence`)
   }
   if (command === 'serve' && useWatchPolling) {
     console.log('[vite] File watch: polling mode (VITE_USE_POLLING / CHOKIDAR_USEPOLLING)')

@@ -64,7 +64,7 @@ export const DEFAULT_TEXT_TO_IMAGE_PROMPT_OPTIONS = {
    */
   head_track: HEAD_TRACK.MESHMONK,
   /**
-   * MeshMonk likeness mesh source:
+   * Likeness mesh source:
    * auto (selfie if uploaded, else body ROI) | selfie | body_roi
    */
   likeness_source: 'auto',
@@ -79,7 +79,7 @@ export const DEFAULT_TEXT_TO_IMAGE_PROMPT_OPTIONS = {
   all_orthographic_views: false,
 };
 
-/** MeshMonk face_likeness source (selfie MediaPipe vs AIGC body head crop). */
+/** Likeness mesh source (selfie vs body head crop). */
 export const LIKENESS_SOURCE_OPTIONS = Object.freeze([
   {
     id: 'auto',

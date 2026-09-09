@@ -1,0 +1,19 @@
+---
+description: Wrap / Body+Cloth heuristics are moat — never commit algorithm detail
+alwaysApply: true
+---
+
+# Mesh wrap moat (OpenNexus3DStudio)
+
+| Moat (gitignored) | Public |
+|-------------------|--------|
+| `src/moat/wrap/**` | `src/library/templateWrapParams.public.js` + thin `templateWrapParams.js` |
+| Root `FUTURE_RD.md`, `PATENT_PROVISIONAL*.md` | `docs/FUTURE_RD.md` stub |
+| API `assets/moat/wrap/**` (3DAIGC-API) | API thin loaders / stubs |
+
+## Rules
+
+1. Never commit wrap correspondence / stitch / likeness-tuning detail into tracked Studio docs or catalogs.
+2. User-facing chips: Ethnicity / Likeness / 3DGSavatar — not engine brand names in UI.
+3. Sync moat via `sync-changes-to-pc.sh --include-src`.
+4. History purge of wrap secrets requires explicit user order + force-push to `origin` / `opennexus` only (never `open3dstudio` upstream).

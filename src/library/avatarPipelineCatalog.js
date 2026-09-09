@@ -2,17 +2,15 @@
  * Avatar pipeline constants — mesh generation → template VRM rig → viewport.
  * Backend: 3DAIGC-API `rig_mode: "template"` + `humanoid_template_id` (UniRig).
  *
- * Humanoid head track (Body+Cloth / template_wrap) — one track, engine choice:
- *   meshmonk | arc2avatar | both
- * (GNM ethnicity + face likeness likeness vs Arc2Avatar FLAME 3DGS splat).
+ * Humanoid head track (Body+Cloth / template_wrap): meshmonk | arc2avatar | both.
  * See docs/AVATAR_PIPELINE.md.
  */
 
 /**
- * Head / face engine on the humanoid wrap track (same task as Ethnicity + Likeness).
- * - meshmonk: template morph head + GNM identity + face likeness face_likeness
- * - arc2avatar: template_wrap body + Arc2Avatar head splat on Head bone
- * - both: Likeness warp + Arc2Avatar splat overlay
+ * Head / face engine on the humanoid wrap track.
+ * - meshmonk: Ethnicity + Likeness on template morph head
+ * - arc2avatar: head splat on Head bone
+ * - both: Likeness + head splat overlay
  * - none: no face engines (voxel / non-humanoid heads; Body+Cloth falls back to template bones-only)
  */
 export const HEAD_TRACK = Object.freeze({
@@ -91,7 +89,7 @@ export const AUTO_RIG_MODES = {
   FULL: 'full',
   SKIN: 'skin',
   TEMPLATE: 'template',
-  /** Phase 5 head stitch: keep morph head + AIGC body. */
+  /** Body+Cloth: morph head + generated body. */
   TEMPLATE_WRAP: 'template_wrap',
   APPEARANCE_COMPONENT: 'appearance_component',
   CREATURE_TEMPLATE: 'creature_template',
@@ -116,7 +114,7 @@ export const ARC2AVATAR_FEATURE = 'arc2avatar_head';
 export const ARC2AVATAR_TASK_TYPE = 'avatar-head-arc2avatar';
 
 /**
- * Task sidebar discovery entry for full Body+Cloth head track (Ethnicity + Likeness + selfie).
+ * Task sidebar discovery entry for Body+Cloth head track.
  * Does not queue an API job — opens Studio with the composable body template.
  */
 export const BODY_CLOTH_STUDIO_TASK_TYPE = 'avatar-body-cloth-studio';
@@ -124,7 +122,7 @@ export const BODY_CLOTH_STUDIO_TASK_TYPE = 'avatar-body-cloth-studio';
 /** Studio template id for Body+Cloth / template_wrap head track. */
 export const BODY_CLOTH_STUDIO_TEMPLATE_ID = 'krea_composable_avatar_body';
 
-/** Deep link opened from Task Manager Body+Cloth entry (default head track = MeshMonk). */
+/** Deep link from Task Manager Body+Cloth (default head track = Likeness). */
 export const BODY_CLOTH_STUDIO_PATH = `/studio?template=${BODY_CLOTH_STUDIO_TEMPLATE_ID}`;
 
 /**
@@ -182,7 +180,7 @@ export function isTemplateRigMode(rigMode, modelPreference) {
 }
 
 /**
- * Phase 5 head stitch: template morph head + AIGC body.
+ * template_wrap: morph head + generated body.
  * @param {string} [rigMode]
  * @param {string} [modelPreference]
  */

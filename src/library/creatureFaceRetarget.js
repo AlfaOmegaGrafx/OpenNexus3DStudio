@@ -1,7 +1,7 @@
 /**
  * Creature / SkinTokens face retarget — OpenXR / webcam expression weights → bones.
  *
- * MeshMonk / template_wrap is humanoid-only. Non-humanoid rigs (Eagle Knight SkinTokens,
+ * template_wrap is humanoid-only. Non-humanoid rigs (Eagle Knight SkinTokens,
  * Mesh2Motion creature_template fox, etc.) have no ARKit morphs; this driver maps a small
  * subset of channels onto jaw/chin/eye bones when present, otherwise no-ops with one log.
  *
