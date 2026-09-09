@@ -630,7 +630,7 @@ function StudioPageInner() {
           setStatusById((prev) => ({
             ...prev,
             [wsId]: composable
-              ? 'Body+Cloth complete — open in viewport; Arc2Avatar head attaches when SDS finishes'
+              ? 'Body+Cloth complete — open in viewport; 3DGSavatar head attaches when SDS finishes'
               : 'Pipeline complete',
           }));
         }
@@ -938,7 +938,7 @@ function StudioPageInner() {
                 disabled={running}
               />
               <span className="studio-field-hint">
-                One close-up selfie for Likeness, optional Arc2Avatar on the Head bone,
+                One close-up selfie for Likeness, optional 3DGSavatar on the Head bone,
                 and body skin tone for the neck-open Krea mannequin. Choose engines in Image options →
                 Head track. The body image is a bare mannequin — outfit lines below become Appearance slots.
               </span>
@@ -1051,7 +1051,7 @@ function StudioPageInner() {
               <strong>Body+Cloth head track:</strong> Image options → Head track chooses{' '}
               <em>Ethnicity + Likeness</em>, <em>3DGSavatar</em>, <em>Both</em>, or <em>None</em>{' '}
               (keep generated mesh head — e.g. voxel) on the same{' '}
-              <code>template_wrap</code> path. Body from text prompt; selfie only for Arc2Avatar.
+              <code>template_wrap</code> path. Body from text prompt; selfie only for 3DGSavatar.
               Clothing → Appearance slots.
             </>
           ) : isMultiview ? (
