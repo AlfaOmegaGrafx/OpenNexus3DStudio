@@ -17,7 +17,7 @@ export const TEXT_TO_IMAGE_VIEW_OPTIONS = [
   { id: 'bottom', label: 'Bottom view' },
 ];
 
-/** Orthographic turnaround used for Studio → TRELLIS multiview (primary = front). */
+/** Orthographic turnaround used for Studio → Pixal3D multi-view (primary = front). */
 export const STUDIO_ORTHOGRAPHIC_VIEW_IDS = Object.freeze([
   'front',
   'back',
@@ -64,7 +64,7 @@ export const DEFAULT_TEXT_TO_IMAGE_PROMPT_OPTIONS = {
    */
   head_track: HEAD_TRACK.MESHMONK,
   /**
-   * Likeness mesh source:
+   * MeshMonk likeness mesh source:
    * auto (selfie if uploaded, else body ROI) | selfie | body_roi
    */
   likeness_source: 'auto',
@@ -79,22 +79,22 @@ export const DEFAULT_TEXT_TO_IMAGE_PROMPT_OPTIONS = {
   all_orthographic_views: false,
 };
 
-/** Likeness mesh source (selfie vs body head crop). */
+/** MeshMonk face_likeness source (selfie MediaPipe vs AIGC body head crop). */
 export const LIKENESS_SOURCE_OPTIONS = Object.freeze([
   {
     id: 'auto',
     label: 'Auto',
-    title: 'Use selfie for MeshMonk when uploaded; otherwise crop body mesh head ROI',
+    title: 'Use selfie for Likeness when uploaded; otherwise crop body mesh head ROI',
   },
   {
     id: 'selfie',
     label: 'Selfie',
-    title: 'MediaPipe face mesh from the Face selfie upload (same photo as Arc2Avatar)',
+    title: 'Face mesh from the Face selfie upload (same photo as 3DGSavatar)',
   },
   {
     id: 'body_roi',
     label: 'Body ROI',
-    title: 'Crop top of the TRELLIS body mesh (weak on neck-open Body+Cloth)',
+    title: 'Crop top of the body mesh (weak on neck-open Body+Cloth)',
   },
 ]);
 
@@ -111,12 +111,15 @@ export const TEXT_TO_IMAGE_GENDER_OPTIONS = Object.freeze([
   { id: 'female', label: 'Female' },
 ]);
 
-/** GNM ethnicity classes (prompt bias + template_wrap IdentitySampler). */
+/**
+ * GNM IdentitySampler ethnicity classes (API ids unchanged).
+ * Chip labels use region-style wording (African / European / Asian / Middle Eastern).
+ */
 export const TEXT_TO_IMAGE_ETHNICITY_OPTIONS = Object.freeze([
   { id: '', label: 'Any' },
   { id: 'asian', label: 'Asian' },
-  { id: 'black', label: 'Black' },
-  { id: 'white', label: 'White' },
+  { id: 'black', label: 'African' },
+  { id: 'white', label: 'European' },
   { id: 'middle_eastern', label: 'Middle Eastern' },
 ]);
 
@@ -168,7 +171,7 @@ export const STUDIO_MESH_READY_TEXT_TO_IMAGE_OPTIONS = {
 };
 
 /**
- * Defaults for orthographic turnaround → TRELLIS multiview (6 views, shared seed).
+ * Defaults for orthographic turnaround → Pixal3D multi-view (6 views, shared seed).
  */
 export const STUDIO_MULTIVIEW_TEXT_TO_IMAGE_OPTIONS = {
   remove_background: true,
@@ -215,6 +218,24 @@ export const STUDIO_HEADLESS_BODY_TEXT_TO_IMAGE_OPTIONS = {
   tail_clear: false,
   standing_pose: false,
   headless_body: true,
+  isolated_garment: false,
+  camera_view: 'front',
+  all_orthographic_views: false,
+};
+
+/**
+ * Body+Cloth "Generated image" preview — fully clothed T-pose figure (not for mesh).
+ */
+export const STUDIO_GARBED_BODY_TEXT_TO_IMAGE_OPTIONS = {
+  remove_background: true,
+  full_body: true,
+  t_pose: true,
+  a_pose: false,
+  creature_rig_ready: false,
+  head_forward: false,
+  tail_clear: false,
+  standing_pose: false,
+  headless_body: false,
   isolated_garment: false,
   camera_view: 'front',
   all_orthographic_views: false,
@@ -432,8 +453,8 @@ const MANNEQUIN_GENDER_FRAGMENTS = Object.freeze({
 
 const ETHNICITY_FRAGMENTS = Object.freeze({
   asian: 'East Asian or Southeast Asian facial features',
-  black: 'Black or African facial features',
-  white: 'White or Caucasian facial features',
+  black: 'African facial features',
+  white: 'European facial features',
   middle_eastern: 'Middle Eastern facial features',
 });
 

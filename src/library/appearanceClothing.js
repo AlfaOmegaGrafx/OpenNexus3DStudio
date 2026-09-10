@@ -886,17 +886,335 @@ export function buildAppearanceGarmentSubjectPrompt(opts = {}) {
   return parts.join(', ');
 }
 
-/** Default Studio Body+Cloth clothing lines (one per common Appearance slot). */
+/**
+ * Subject prompt for Body+Cloth "Generated image" preview: fully clothed figure
+ * with every listed accessory visible (preview only — not used for body mesh).
+ *
+ * @param {{
+ *   subjectPrompt?: string,
+ *   accessories?: Array<{ label?: string, appearance_slot?: string }>,
+ *   clothingText?: string,
+ * }} [opts]
+ * @returns {string}
+ */
+export function buildGarbedBodySubjectPrompt(opts = {}) {
+  const subject = String(opts.subjectPrompt || '').trim() || 'humanoid character';
+  const accessories = Array.isArray(opts.accessories)
+    ? opts.accessories
+    : parseClothingAccessoryLines(opts.clothingText || '');
+  const outfitParts = accessories
+    .map((a) => {
+      const label = String(a?.label || '').trim();
+      if (!label) return '';
+      const slot = normalizeAppearanceSlot(a?.appearance_slot) || '';
+      return slot ? `${label} (${slot})` : label;
+    })
+    .filter(Boolean);
+  const outfit =
+    outfitParts.length > 0
+      ? `wearing a complete outfit with all garments fully visible: ${outfitParts.join(', ')}`
+      : 'wearing a complete coordinated outfit, all clothing layers fully visible';
+  return [
+    subject,
+    'full body adult humanoid',
+    outfit,
+    'fully dressed and garbed',
+    'every accessory clearly visible on the body',
+    'no nude or bare mannequin',
+    'clean studio lighting',
+  ].join(', ');
+}
+
+/** Default Studio Body+Cloth clothing lines (promptable slots + Head segments). */
 export const DEFAULT_STUDIO_CLOTHING_LINES = Object.freeze([
+  'Head: baseball cap',
+  'Head: aviator sunglasses',
+  'Head: stud earrings on both ears',
+  'Neck: thin silver chain',
   'Chest: navy techwear hoodie',
+  'Waist: black utility belt',
   'Legs: charcoal tapered joggers',
   'Shoes: white leather sneakers',
-  'Waist: black utility belt',
-  'Neck: thin silver chain',
 ]);
 
 export const DEFAULT_STUDIO_CLOTHING_TEXT = DEFAULT_STUDIO_CLOTHING_LINES.join('\n');
 
+/** Human labels for accessory segments in the clothing editor. */
+export const ACCESSORY_SEGMENT_LABELS = Object.freeze({
+  [ACCESSORY_SEGMENT.HAT]: 'Hat / Cap',
+  [ACCESSORY_SEGMENT.HELMET]: 'Helmet',
+  [ACCESSORY_SEGMENT.EYEWEAR]: 'Sunglasses',
+  [ACCESSORY_SEGMENT.EARRINGS]: 'Earrings',
+  [ACCESSORY_SEGMENT.MASK]: 'Mask',
+  [ACCESSORY_SEGMENT.CROWN]: 'Crown',
+  [ACCESSORY_SEGMENT.COVERING_GLOVES]: 'Heavy gloves',
+  [ACCESSORY_SEGMENT.LIGHT_GLOVES]: 'Gloves',
+  [ACCESSORY_SEGMENT.WRISTWEAR]: 'Wristwear',
+  [ACCESSORY_SEGMENT.SCARF]: 'Scarf',
+  [ACCESSORY_SEGMENT.NECKLACE]: 'Necklace',
+  [ACCESSORY_SEGMENT.COLLAR]: 'Collar',
+});
+
+/**
+ * Fixed promptable rows for Body+Cloth clothing editor (no textarea scroll).
+ * Head is three rows so hat + eyewear + earrings can coexist.
+ */
+export const CLOTHING_EDITOR_BLUEPRINT = Object.freeze([
+  {
+    key: 'head_hat',
+    slot: 'Head',
+    segment: ACCESSORY_SEGMENT.HAT,
+    labelPlaceholder: 'baseball cap',
+  },
+  {
+    key: 'head_eyewear',
+    slot: 'Head',
+    segment: ACCESSORY_SEGMENT.EYEWEAR,
+    labelPlaceholder: 'aviator sunglasses',
+  },
+  {
+    key: 'head_earrings',
+    slot: 'Head',
+    segment: ACCESSORY_SEGMENT.EARRINGS,
+    labelPlaceholder: 'stud earrings on both ears',
+  },
+  {
+    key: 'neck',
+    slot: 'Neck',
+    segment: ACCESSORY_SEGMENT.NECKLACE,
+    labelPlaceholder: 'thin silver chain',
+    segmentChoices: [
+      ACCESSORY_SEGMENT.NECKLACE,
+      ACCESSORY_SEGMENT.SCARF,
+      ACCESSORY_SEGMENT.COLLAR,
+    ],
+  },
+  {
+    key: 'chest',
+    slot: 'Chest',
+    segment: null,
+    labelPlaceholder: 'navy techwear hoodie',
+  },
+  {
+    key: 'waist',
+    slot: 'Waist',
+    segment: null,
+    labelPlaceholder: 'black utility belt',
+  },
+  {
+    key: 'legs',
+    slot: 'Legs',
+    segment: null,
+    labelPlaceholder: 'charcoal tapered joggers',
+  },
+  {
+    key: 'shoes',
+    slot: 'Shoes',
+    segment: null,
+    labelPlaceholder: 'white leather sneakers',
+  },
+  {
+    key: 'hands',
+    slot: 'Hands',
+    segment: ACCESSORY_SEGMENT.WRISTWEAR,
+    labelPlaceholder: 'leather bracelet',
+    segmentChoices: [
+      ACCESSORY_SEGMENT.WRISTWEAR,
+      ACCESSORY_SEGMENT.LIGHT_GLOVES,
+      ACCESSORY_SEGMENT.COVERING_GLOVES,
+    ],
+  },
+]);
+
+/**
+ * Segment choices shown in the subcategory dropdown for a slot.
+ * @param {string} slot
+ * @returns {{ value: string, label: string }[]}
+ */
+export function clothingEditorSegmentOptions(slot) {
+  const s = normalizeAppearanceSlot(slot);
+  if (s === 'Head') {
+    return [
+      ACCESSORY_SEGMENT.HAT,
+      ACCESSORY_SEGMENT.EYEWEAR,
+      ACCESSORY_SEGMENT.EARRINGS,
+      ACCESSORY_SEGMENT.HELMET,
+      ACCESSORY_SEGMENT.MASK,
+      ACCESSORY_SEGMENT.CROWN,
+    ].map((value) => ({
+      value,
+      label: ACCESSORY_SEGMENT_LABELS[value] || value,
+    }));
+  }
+  if (s === 'Hands') {
+    return [
+      ACCESSORY_SEGMENT.WRISTWEAR,
+      ACCESSORY_SEGMENT.LIGHT_GLOVES,
+      ACCESSORY_SEGMENT.COVERING_GLOVES,
+    ].map((value) => ({
+      value,
+      label: ACCESSORY_SEGMENT_LABELS[value] || value,
+    }));
+  }
+  if (s === 'Neck') {
+    return [
+      ACCESSORY_SEGMENT.NECKLACE,
+      ACCESSORY_SEGMENT.SCARF,
+      ACCESSORY_SEGMENT.COLLAR,
+    ].map((value) => ({
+      value,
+      label: ACCESSORY_SEGMENT_LABELS[value] || value,
+    }));
+  }
+  return [];
+}
+
+/**
+ * Encode slot + optional segment for a single parenthetical picker
+ * (e.g. Head (Hat / Cap) instead of two wide dropdowns).
+ * @param {string} slot
+ * @param {string|null|undefined} segment
+ */
+export function clothingEditorSlotChoiceKey(slot, segment = null) {
+  const s = normalizeAppearanceSlot(slot) || slot || 'Chest';
+  return segment ? `${s}|${segment}` : `${s}|`;
+}
+
+/**
+ * @param {string} key
+ * @returns {{ slot: string, segment: string|null }}
+ */
+export function parseClothingEditorSlotChoiceKey(key) {
+  const raw = String(key || '');
+  const pipe = raw.indexOf('|');
+  if (pipe < 0) {
+    const slot = normalizeAppearanceSlot(raw) || raw || 'Chest';
+    return { slot, segment: null };
+  }
+  const slot = normalizeAppearanceSlot(raw.slice(0, pipe)) || raw.slice(0, pipe) || 'Chest';
+  const segment = raw.slice(pipe + 1) || null;
+  return { slot, segment };
+}
+
+/**
+ * Human label: `Head (Hat / Cap)`, `Chest`, `Neck (Necklace)`.
+ * @param {string} slot
+ * @param {string|null|undefined} segment
+ */
+export function formatClothingEditorSlotLabel(slot, segment = null) {
+  const s = normalizeAppearanceSlot(slot) || slot || 'Chest';
+  if (!segment) return s;
+  const sub = ACCESSORY_SEGMENT_LABELS[segment] || segment;
+  return `${s} (${sub})`;
+}
+
+/**
+ * Flat picker options for the compact clothing row (parenthetical subcategories).
+ * @returns {{ value: string, label: string }[]}
+ */
+export function clothingEditorSlotChoiceOptions() {
+  /** @type {{ value: string, label: string }[]} */
+  const opts = [];
+  for (const slot of APPEARANCE_SLOTS) {
+    const segs = clothingEditorSegmentOptions(slot);
+    if (segs.length) {
+      for (const seg of segs) {
+        opts.push({
+          value: clothingEditorSlotChoiceKey(slot, seg.value),
+          label: formatClothingEditorSlotLabel(slot, seg.value),
+        });
+      }
+    } else {
+      opts.push({
+        value: clothingEditorSlotChoiceKey(slot, null),
+        label: formatClothingEditorSlotLabel(slot, null),
+      });
+    }
+  }
+  return opts;
+}
+
+/**
+ * Merge parsed accessories onto the editor blueprint (keeps empty Head rows visible).
+ * @param {Array<{ label?: string, appearance_slot?: string, accessory_segment?: string, cut?: string }>} accessories
+ * @returns {Array<{
+ *   key: string,
+ *   slot: string,
+ *   segment: string|null,
+ *   label: string,
+ *   cut: string|null,
+ *   labelPlaceholder?: string,
+ * }>}
+ */
+export function mergeAccessoriesIntoClothingEditorRows(accessories = []) {
+  const pool = Array.isArray(accessories) ? [...accessories] : [];
+  const takeMatch = (slot, segment, anyOnSlot = false) => {
+    const idx = pool.findIndex((a) => {
+      const aSlot = normalizeAppearanceSlot(a?.appearance_slot) || '';
+      if (aSlot !== slot) return false;
+      if (anyOnSlot || !segment) return true;
+      const aSeg =
+        a?.accessory_segment || classifyAccessorySegment(slot, a?.label) || null;
+      return aSeg === segment;
+    });
+    if (idx < 0) return null;
+    return pool.splice(idx, 1)[0];
+  };
+
+  const rows = CLOTHING_EDITOR_BLUEPRINT.map((bp) => {
+    const anyOnSlot = Boolean(bp.segmentChoices?.length) && !['Head'].includes(bp.slot);
+    const match = takeMatch(bp.slot, bp.segment, anyOnSlot);
+    return {
+      key: bp.key,
+      slot: bp.slot,
+      segment: match
+        ? match.accessory_segment ||
+          classifyAccessorySegment(bp.slot, match.label) ||
+          bp.segment
+        : bp.segment,
+      label: match?.label || '',
+      cut: match?.cut || null,
+      labelPlaceholder: bp.labelPlaceholder,
+    };
+  });
+
+  // Extra accessories that did not map onto the blueprint.
+  pool.forEach((acc, i) => {
+    const slot = normalizeAppearanceSlot(acc?.appearance_slot) || 'Chest';
+    rows.push({
+      key: `extra_${i}_${acc?.object_name || 'item'}`,
+      slot,
+      segment:
+        acc?.accessory_segment ||
+        classifyAccessorySegment(slot, acc?.label) ||
+        null,
+      label: acc?.label || '',
+      cut: acc?.cut || null,
+      labelPlaceholder: '',
+    });
+  });
+
+  return rows;
+}
+
+/**
+ * Serialize editor rows back to clothing text lines.
+ * @param {Array<{ slot?: string, segment?: string|null, label?: string, cut?: string|null }>} rows
+ * @returns {string}
+ */
+export function clothingEditorRowsToText(rows = []) {
+  const lines = [];
+  for (const row of rows) {
+    const label = String(row?.label || '').trim();
+    if (!label) continue;
+    const slot = normalizeAppearanceSlot(row?.slot) || 'Chest';
+    const cut = normalizeGarmentCutToken(row?.cut);
+    const cutSuffix =
+      cut && (slot === 'Legs' || slot === 'Chest') ? ` (${cut})` : '';
+    lines.push(`${slot}: ${label}${cutSuffix}`);
+  }
+  return lines.join('\n');
+}
 /** Default / cross-style fallbacks when a style pool omits a slot. */
 export const STUDIO_CLOTHING_ITEM_POOL = Object.freeze({
   Body: [

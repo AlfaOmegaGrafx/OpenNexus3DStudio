@@ -2,16 +2,23 @@
  * Avatar pipeline constants — mesh generation → template VRM rig → viewport.
  * Backend: 3DAIGC-API `rig_mode: "template"` + `humanoid_template_id` (UniRig).
  *
- * Humanoid head track (Body+Cloth / template_wrap): meshmonk | arc2avatar | both.
+ * Humanoid head track (Body+Cloth / template_wrap) — one track, engine choice:
+ *   meshmonk | arc2avatar | both
+ * (GNM ethnicity + MeshMonk/RBF likeness vs Arc2Avatar FLAME 3DGS splat).
  * See docs/AVATAR_PIPELINE.md.
  */
 
 /**
- * Head / face engine on the humanoid wrap track.
- * - meshmonk: Ethnicity + Likeness on template morph head
- * - arc2avatar: head splat on Head bone
- * - both: Likeness + head splat overlay
+ * Head / face engine on the humanoid wrap track (same task as GNM + MeshMonk).
+ * - meshmonk: template morph head + GNM identity + MeshMonk/RBF face_likeness
+ * - arc2avatar: template_wrap body + Arc2Avatar head splat on Head bone
+ * - both: MeshMonk/GNM warp + Arc2Avatar splat overlay
  * - none: no face engines (voxel / non-humanoid heads; Body+Cloth falls back to template bones-only)
+ *
+ * User-facing one-word names (API ids stay meshmonk / arc2avatar / gnm):
+ * - GNM → Ethnicity (IdentitySampler ethnicity prior — not biometric “identity”)
+ * - MeshMonk → Likeness
+ * - Arc2Avatar → 3DGSavatar
  */
 export const HEAD_TRACK = Object.freeze({
   MESHMONK: 'meshmonk',
@@ -20,29 +27,49 @@ export const HEAD_TRACK = Object.freeze({
   NONE: 'none',
 });
 
+/** User-facing engine names — never show GNM / MeshMonk / Arc2Avatar in UI chips. */
+export const HEAD_ENGINE_UI = Object.freeze({
+  gnm: 'Ethnicity',
+  meshmonk: 'Likeness',
+  arc2avatar: '3DGSavatar',
+});
+
 export const HEAD_TRACK_OPTIONS = Object.freeze([
   {
     id: HEAD_TRACK.MESHMONK,
-    label: 'Ethnicity + Likeness',
-    title: 'Template morph head with ethnicity prior and face likeness (XR blendshapes)',
+    label: `${HEAD_ENGINE_UI.gnm} + ${HEAD_ENGINE_UI.meshmonk}`,
+    title:
+      'Template morph head: Ethnicity prior + Likeness face match (XR blendshapes)',
   },
   {
     id: HEAD_TRACK.ARC2AVATAR,
-    label: '3DGSavatar',
-    title: 'Photoreal head splat from selfie (attach to Head bone; needs face photo)',
+    label: HEAD_ENGINE_UI.arc2avatar,
+    title:
+      'Photoreal 3D Gaussian head from selfie (attach to Head bone; needs face photo)',
   },
   {
     id: HEAD_TRACK.BOTH,
     label: 'Both',
-    title: 'Likeness on template head + 3DGSavatar splat overlay',
+    title: `Ethnicity + Likeness on template head + ${HEAD_ENGINE_UI.arc2avatar} overlay`,
   },
   {
     id: HEAD_TRACK.NONE,
     label: 'None',
     title:
-      'Skip Likeness / 3DGSavatar — keep the generated mesh head (e.g. voxel / Minecraft). Body+Cloth uses template bones-only.',
+      'Skip Ethnicity / Likeness / 3DGSavatar — keep the generated mesh head (e.g. voxel / Minecraft). Body+Cloth uses template bones-only, no face wrap.',
   },
 ]);
+
+/** @param {string} [headTrack] */
+export function headTrackUserLabel(headTrack) {
+  const t = normalizeHeadTrack(headTrack);
+  if (t === HEAD_TRACK.ARC2AVATAR) return HEAD_ENGINE_UI.arc2avatar;
+  if (t === HEAD_TRACK.BOTH) {
+    return `Both (${HEAD_ENGINE_UI.meshmonk} + ${HEAD_ENGINE_UI.arc2avatar})`;
+  }
+  if (t === HEAD_TRACK.NONE) return 'None';
+  return `${HEAD_ENGINE_UI.gnm} + ${HEAD_ENGINE_UI.meshmonk}`;
+}
 
 export function normalizeHeadTrack(value) {
   const id = String(value || '').trim().toLowerCase();
@@ -89,7 +116,7 @@ export const AUTO_RIG_MODES = {
   FULL: 'full',
   SKIN: 'skin',
   TEMPLATE: 'template',
-  /** Body+Cloth: morph head + generated body. */
+  /** Phase 5 head stitch: keep morph head + AIGC body. */
   TEMPLATE_WRAP: 'template_wrap',
   APPEARANCE_COMPONENT: 'appearance_component',
   CREATURE_TEMPLATE: 'creature_template',
@@ -114,7 +141,7 @@ export const ARC2AVATAR_FEATURE = 'arc2avatar_head';
 export const ARC2AVATAR_TASK_TYPE = 'avatar-head-arc2avatar';
 
 /**
- * Task sidebar discovery entry for Body+Cloth head track.
+ * Task sidebar discovery entry for full Body+Cloth head track (GNM + MeshMonk + selfie).
  * Does not queue an API job — opens Studio with the composable body template.
  */
 export const BODY_CLOTH_STUDIO_TASK_TYPE = 'avatar-body-cloth-studio';
@@ -122,7 +149,7 @@ export const BODY_CLOTH_STUDIO_TASK_TYPE = 'avatar-body-cloth-studio';
 /** Studio template id for Body+Cloth / template_wrap head track. */
 export const BODY_CLOTH_STUDIO_TEMPLATE_ID = 'krea_composable_avatar_body';
 
-/** Deep link from Task Manager Body+Cloth (default head track = Likeness). */
+/** Deep link opened from Task Manager Body+Cloth entry (default head track = MeshMonk). */
 export const BODY_CLOTH_STUDIO_PATH = `/studio?template=${BODY_CLOTH_STUDIO_TEMPLATE_ID}`;
 
 /**
@@ -180,7 +207,7 @@ export function isTemplateRigMode(rigMode, modelPreference) {
 }
 
 /**
- * template_wrap: morph head + generated body.
+ * Phase 5 head stitch: template morph head + AIGC body.
  * @param {string} [rigMode]
  * @param {string} [modelPreference]
  */

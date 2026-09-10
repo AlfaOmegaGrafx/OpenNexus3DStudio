@@ -7,6 +7,7 @@ import {
   setPromptText,
   setEditPrompt,
   setClothingText,
+  setClothingEditPrompt,
 } from '../library/studioGraph.js';
 import { runStudioPipeline, fetchImageAsFile } from '../library/studioGraphExecutor.js';
 
@@ -132,7 +133,7 @@ describe('studioGraphExecutor', () => {
     expect(createAndStartTask.mock.calls[1][0].type).toBe('image-to-3d');
     expect(createAndStartTask.mock.calls[1][0].options.use_multiview_mesh).toBeFalsy();
     expect(next.nodes.find((n) => n.kind === 'image_to_3d').data.modelPreference).toBe(
-      'trellis2_image_to_textured_mesh',
+      'pixal3d_image_to_textured_mesh',
     );
     vi.unstubAllGlobals();
   });
@@ -197,7 +198,7 @@ describe('studioGraphExecutor', () => {
 
     const meshCall = createAndStartTask.mock.calls.find((c) => c[0].type === 'image-to-3d');
     expect(meshCall[0].options.use_multiview_mesh).toBe(true);
-    expect(meshCall[0].options.model_preference).toBe('trellis_image_to_textured_mesh');
+    expect(meshCall[0].options.model_preference).toBe('pixal3d_image_to_textured_mesh');
     expect(meshCall[0].options.reference_image_files).toHaveLength(5);
     expect(meshCall[0].imageFile).toBeInstanceOf(File);
 
@@ -361,6 +362,11 @@ describe('studioGraphExecutor', () => {
     const rigCalls = createAndStartTask.mock.calls.filter((c) => c[0].type === 'auto-rigging');
     expect(rigCalls.length).toBe(2);
     expect(rigCalls.every((c) => !c[1])).toBe(true);
+    const meshCalls = createAndStartTask.mock.calls.filter((c) => c[0].type === 'image-to-3d');
+    expect(meshCalls.length).toBeGreaterThanOrEqual(2);
+    expect(meshCalls.every((c) => c[0].options.model_preference === 'pixal3d_image_to_textured_mesh')).toBe(
+      true,
+    );
     expect(next.nodes.find((n) => n.kind === 'appearance_clothing').status).toBe('completed');
     vi.unstubAllGlobals();
   });
@@ -435,6 +441,183 @@ describe('studioGraphExecutor', () => {
     expect(results.some((r) => r.traitUrl && String(r.objectName || '').includes('hoodie'))).toBe(
       true,
     );
+    vi.unstubAllGlobals();
+  });
+
+  it('Body+Cloth creates clothed preview while mesh still uses nude image', async () => {
+    let project = createKreaComposableAvatarBodyTemplate({
+      prompt: 'athletic runner',
+      projectName: 'GarbedPreview',
+      clothingText: 'Chest: navy hoodie',
+    });
+    project = setPromptText(project, 'athletic runner');
+    project = setClothingText(project, 'Chest: navy hoodie');
+
+    let seq = 0;
+    const createAndStartTask = vi.fn(async (taskData) => {
+      seq += 1;
+      const id = `${taskData.type}-${seq}`;
+      if (taskData.type === 'text-to-image') {
+        return {
+          job_id: id,
+          feature: 'text_to_image',
+          status: 'completed',
+          image_url: `/api/v1/system/jobs/${id}/download`,
+        };
+      }
+      if (taskData.type === 'image-to-3d') {
+        return {
+          job_id: id,
+          feature: 'image_to_textured_mesh',
+          mesh_url: `/api/v1/system/jobs/${id}/download`,
+          status: 'completed',
+        };
+      }
+      return {
+        job_id: id,
+        feature: 'auto_rig',
+        mesh_url: `/api/v1/system/jobs/${id}/download`,
+        status: 'completed',
+      };
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => ({
+        ok: true,
+        blob: async () =>
+          new Blob([String(url)], {
+            type: String(url).includes('.glb') ? 'model/gltf-binary' : 'image/png',
+          }),
+      })),
+    );
+
+    const next = await runStudioPipeline(
+      project,
+      {
+        createAndStartTask,
+        listTasks: () => [],
+        apiEndpoint: 'http://127.0.0.1:7842',
+      },
+      { skipArc2AvatarHead: true, until: 'image_to_3d' },
+    );
+
+    const imageNode = next.nodes.find((n) => n.kind === 'text_to_image');
+    expect(imageNode.status).toBe('completed');
+    expect(imageNode.data.imageUrl).toBeTruthy();
+    expect(imageNode.data.garbedImageUrl).toBeTruthy();
+    expect(imageNode.data.garbedImageUrl).not.toBe(imageNode.data.imageUrl);
+
+    const textCalls = createAndStartTask.mock.calls.filter((c) => c[0].type === 'text-to-image');
+    expect(textCalls.length).toBeGreaterThanOrEqual(2);
+    const nudeJob = String(imageNode.data.jobId || '');
+    const bodyMeshCall = createAndStartTask.mock.calls.find((c) => c[0].type === 'image-to-3d');
+    expect(bodyMeshCall).toBeTruthy();
+    // Mesh input file is fetched from nude imageUrl (job download path).
+    expect(nudeJob).toBeTruthy();
+    expect(String(imageNode.data.imageUrl)).toContain(nudeJob);
+    vi.unstubAllGlobals();
+  });
+
+  it('clothing force-rerun with editPrompt runs Mage Edit then remesh', async () => {
+    let project = createKreaComposableAvatarBodyTemplate({
+      prompt: 'runner',
+      projectName: 'MageCloth',
+      clothingText: 'Chest: navy hoodie',
+    });
+    project = setPromptText(project, 'runner');
+    project = setClothingText(project, 'Chest: navy hoodie');
+    project = setClothingEditPrompt(project, 0, 'cleaner silhouette, white background');
+
+    const clothingNode = project.nodes.find((n) => n.kind === 'appearance_clothing');
+    project = {
+      ...project,
+      nodes: project.nodes.map((n) =>
+        n.id === clothingNode.id
+          ? {
+              ...n,
+              status: 'completed',
+              data: {
+                ...n.data,
+                results: [
+                  {
+                    label: 'navy hoodie',
+                    appearance_slot: 'Chest',
+                    objectName: 'navy_hoodie_magecloth_garment',
+                    imageUrl: '/api/v1/system/jobs/garment-img/download',
+                    imageJobId: 'garment-img',
+                    meshUrl: '/api/v1/system/jobs/garment-mesh/download',
+                    meshJobId: 'garment-mesh',
+                    traitUrl: '/api/v1/system/jobs/garment-rig/download',
+                    jobId: 'garment-rig',
+                  },
+                ],
+              },
+            }
+          : n,
+      ),
+    };
+
+    let seq = 0;
+    const createAndStartTask = vi.fn(async (taskData) => {
+      seq += 1;
+      const id = `${taskData.type}-${seq}`;
+      if (taskData.type === 'image-edit') {
+        return {
+          job_id: id,
+          feature: 'image_edit',
+          status: 'completed',
+          image_url: `/api/v1/system/jobs/${id}/download`,
+        };
+      }
+      if (taskData.type === 'image-to-3d') {
+        return {
+          job_id: id,
+          feature: 'image_to_textured_mesh',
+          mesh_url: `/api/v1/system/jobs/${id}/download`,
+          status: 'completed',
+        };
+      }
+      return {
+        job_id: id,
+        feature: 'auto_rig',
+        mesh_url: `/api/v1/system/jobs/${id}/download`,
+        status: 'completed',
+      };
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        blob: async () => new Blob(['png'], { type: 'image/png' }),
+      })),
+    );
+
+    const next = await runStudioPipeline(
+      project,
+      {
+        createAndStartTask,
+        listTasks: () => [],
+        apiEndpoint: 'http://127.0.0.1:7842',
+      },
+      {
+        skipKinds: ['text_to_image', 'image_to_3d', 'auto_rigging'],
+        clothingIndexes: [0],
+        forceClothingIndexes: [0],
+        skipArc2AvatarHead: true,
+      },
+    );
+
+    const types = createAndStartTask.mock.calls.map((c) => c[0].type);
+    expect(types[0]).toBe('image-edit');
+    expect(createAndStartTask.mock.calls[0][0].prompt).toMatch(/cleaner silhouette/i);
+    expect(types).toContain('image-to-3d');
+    expect(types).toContain('auto-rigging');
+    expect(types.filter((t) => t === 'text-to-image')).toHaveLength(0);
+    const results = next.nodes.find((n) => n.kind === 'appearance_clothing')?.data?.results || [];
+    expect(results[0]?.imageUrl).toBeTruthy();
+    expect(results[0]?.traitUrl).toBeTruthy();
     vi.unstubAllGlobals();
   });
 });

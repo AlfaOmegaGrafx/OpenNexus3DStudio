@@ -21,6 +21,7 @@ import {
   resolveGarmentCut,
 } from './appearanceClothing.js';
 import { slugifyObjectName } from './objectNameUtils.js';
+import { buildStudioObjectName } from './studioOutputId.js';
 import {
   formatTaskDurationMs,
   formatTaskTimestamp,
@@ -31,7 +32,7 @@ export const STUDIO_STAGES = Object.freeze([
   { id: 'prompt', label: 'Prompt' },
   { id: 'image', label: 'Image' },
   { id: 'edit', label: 'Edit' },
-  { id: 'mesh', label: 'Mesh' },
+  { id: 'mesh', label: '3D Mesh' },
   { id: 'rig', label: 'Rig' },
   { id: 'export', label: 'Export' },
 ]);
@@ -53,7 +54,7 @@ export const STUDIO_NODE_KINDS = Object.freeze({
   },
   image_edit: {
     id: 'image_edit',
-    label: 'Image Edit',
+    label: 'Edit Image',
     stage: 'edit',
     runnable: true,
     taskType: 'image-edit',
@@ -61,11 +62,11 @@ export const STUDIO_NODE_KINDS = Object.freeze({
   },
   image_to_3d: {
     id: 'image_to_3d',
-    label: 'Image to 3D',
+    label: 'Image to 3D Mesh',
     stage: 'mesh',
     runnable: true,
     taskType: 'image-to-3d',
-    defaultModel: 'trellis2_image_to_textured_mesh',
+    defaultModel: 'pixal3d_image_to_textured_mesh',
   },
   auto_rigging: {
     id: 'auto_rigging',
@@ -77,7 +78,7 @@ export const STUDIO_NODE_KINDS = Object.freeze({
   },
   appearance_clothing: {
     id: 'appearance_clothing',
-    label: 'Appearance Clothing',
+    label: 'Clothing Fit',
     stage: 'rig',
     runnable: true,
     taskType: 'auto-rigging',
@@ -95,27 +96,26 @@ export const STUDIO_NODE_KINDS = Object.freeze({
 export const STUDIO_TEMPLATES = Object.freeze([
   {
     id: 'krea_trellis2',
-    label: 'Krea → TRELLIS.2',
-    shortLabel: 'TRELLIS.2',
-    description: 'Single mesh-ready image → TRELLIS.2 textured mesh',
-    defaultName: 'Krea → TRELLIS.2',
+    label: 'Textured 3D Mesh',
+    shortLabel: 'Mesh',
+    description: 'Text to image, then textured mesh',
+    defaultName: 'Textured 3D Mesh',
     imageModel: 'krea2_turbo_text_to_image',
-    meshModel: 'trellis2_image_to_textured_mesh',
+    meshModel: 'pixal3d_image_to_textured_mesh',
     promptOptions: STUDIO_MESH_READY_TEXT_TO_IMAGE_OPTIONS,
     bodyRigMode: AUTO_RIG_MODES.FULL,
     bodyRigModel: 'skintokens_auto_rig',
     includeClothing: false,
   },
   {
-    id: 'krea_mage_trellis2',
-    label: 'Krea → Mage Edit → TRELLIS.2',
-    shortLabel: 'Mage Edit',
-    description:
-      'Mesh-ready Krea image → Mage-Flow-Edit-Turbo → TRELLIS.2 textured mesh',
-    defaultName: 'Krea → Mage → TRELLIS.2',
+    id: 'krea_mage_pixel3dm',
+    label: 'Edit then 3D Mesh',
+    shortLabel: 'Edit+Mesh',
+    description: 'Text to image, instruction edit, then textured mesh',
+    defaultName: 'Edit then 3D Mesh',
     imageModel: 'krea2_turbo_text_to_image',
     editModel: 'mage_flow_edit_turbo',
-    meshModel: 'trellis2_image_to_textured_mesh',
+    meshModel: 'pixal3d_image_to_textured_mesh',
     promptOptions: STUDIO_MESH_READY_TEXT_TO_IMAGE_OPTIONS,
     bodyRigMode: AUTO_RIG_MODES.FULL,
     bodyRigModel: 'skintokens_auto_rig',
@@ -124,13 +124,12 @@ export const STUDIO_TEMPLATES = Object.freeze([
   },
   {
     id: 'krea_trellis_multiview',
-    label: 'Krea → TRELLIS Multiview',
-    shortLabel: 'Multiview',
-    description:
-      'Six orthographic views (shared seed) → TRELLIS multiview mesh',
-    defaultName: 'Krea → TRELLIS Multiview',
+    label: 'Six Image View to 3D Mesh',
+    shortLabel: '6-View',
+    description: 'Six orthographic views, then Multiview Image to 3D Mesh',
+    defaultName: 'Six Image View to 3D Mesh',
     imageModel: 'krea2_turbo_text_to_image',
-    meshModel: 'trellis_image_to_textured_mesh',
+    meshModel: 'pixal3d_image_to_textured_mesh',
     promptOptions: STUDIO_MULTIVIEW_TEXT_TO_IMAGE_OPTIONS,
     bodyRigMode: AUTO_RIG_MODES.FULL,
     bodyRigModel: 'skintokens_auto_rig',
@@ -138,13 +137,12 @@ export const STUDIO_TEMPLATES = Object.freeze([
   },
   {
     id: 'krea_composable_avatar_body',
-    label: 'Krea body + clothing (composable)',
+    label: 'Body and Clothing',
     shortLabel: 'Body+Cloth',
-    description:
-      'Selfie (optional Arc2Avatar head) + neck-open Krea body → TRELLIS.2 → template_wrap; clothing → Appearance slots; head splat attaches to Head bone',
-    defaultName: 'Krea composable body',
+    description: 'Body plus clothing slots, optional 3DGSavatar',
+    defaultName: 'Body and Clothing',
     imageModel: 'krea2_turbo_text_to_image',
-    meshModel: 'trellis2_image_to_textured_mesh',
+    meshModel: 'pixal3d_image_to_textured_mesh',
     promptOptions: STUDIO_HEADLESS_BODY_TEXT_TO_IMAGE_OPTIONS,
     bodyRigMode: AUTO_RIG_MODES.TEMPLATE_WRAP,
     bodyRigModel: TEMPLATE_RIG_MODEL_ID,
@@ -153,15 +151,62 @@ export const STUDIO_TEMPLATES = Object.freeze([
   },
 ]);
 
+/** Legacy Studio template ids → current catalog ids. */
+export const STUDIO_TEMPLATE_ID_ALIASES = Object.freeze({
+  krea_mage_trellis2: 'krea_mage_pixel3dm',
+});
+
 export const DEFAULT_STUDIO_TEMPLATE_ID = 'krea_trellis2';
 
-/** Default canvas positions (staggered row — matches Body+Cloth reference layout). */
+/**
+ * Default canvas positions — Body+Cloth reference:
+ * top row Prompt → Image→3D → Auto Rig → Viewport; Text-to-Image dipped;
+ * Appearance Clothing on a lower row under Auto Rig (no overlap / spaghetti).
+ */
+export const STUDIO_GRAPH_LAYOUT_VERSION = 5;
+
+/**
+ * Heal mistaken one-word defaults back to descriptive ≤4-word names (no vendors).
+ * Also map vendor-revealing legacy titles → generic descriptive names.
+ */
+const LEGACY_STUDIO_PROJECT_NAMES = Object.freeze({
+  Mesh: 'Textured 3D Mesh',
+  Edit: 'Edit then 3D Mesh',
+  Turnaround: 'Six Image View to 3D Mesh',
+  'Textured Mesh': 'Textured 3D Mesh',
+  'Edit then Mesh': 'Edit then 3D Mesh',
+  'Six View Mesh': 'Six Image View to 3D Mesh',
+  'Six Image View 3D Mesh': 'Six Image View to 3D Mesh',
+  Clothing: 'Body and Clothing',
+  'Body+Cloth': 'Body and Clothing',
+  'Studio Body Clothing': 'Body and Clothing',
+  'Krea composable body': 'Body and Clothing',
+  'Krea → TRELLIS.2': 'Textured 3D Mesh',
+  'Krea → Pixel3D': 'Textured 3D Mesh',
+});
+
+/** Mistaken one-word / vendor card titles → descriptive ≤4-word labels. */
+const LEGACY_STUDIO_NODE_LABELS = Object.freeze({
+  Prompt: 'Text Prompt',
+  Image: 'Text to Image',
+  Edit: 'Edit Image',
+  'Instruction Edit': 'Edit Image',
+  'Image Edit': 'Edit Image',
+  Mesh: 'Image to 3D Mesh',
+  'Image to 3D': 'Image to 3D Mesh',
+  Rig: 'Auto Rigging',
+  Wrap: 'Wrap Auto Rig',
+  Clothing: 'Clothing Fit',
+  Viewport: 'Open in Viewport',
+  'Appearance Clothing': 'Clothing Fit',
+});
+
 export const STUDIO_GRAPH_LAYOUT = Object.freeze({
-  colStep: 280,
+  colStep: 300,
   originX: 40,
-  rowY: 48,
-  imageY: 196,
-  clothingY: 312,
+  rowY: 40,
+  imageY: 220,
+  clothingY: 460,
 });
 
 /**
@@ -193,10 +238,13 @@ export function getStudioGraphNodePosition(kind, layout = {}) {
 /** @deprecated Legacy flat row — used to heal stored projects on migrate. */
 const LEGACY_STUDIO_GRAPH_FLAT_Y = 120;
 const LEGACY_STUDIO_GRAPH_CLOTHING_Y = 280;
+const LEGACY_STUDIO_GRAPH_CLOTHING_Y_V1 = 312;
 
 export function getStudioTemplate(templateId) {
+  const resolved =
+    STUDIO_TEMPLATE_ID_ALIASES[templateId] || templateId;
   return (
-    STUDIO_TEMPLATES.find((t) => t.id === templateId) ||
+    STUDIO_TEMPLATES.find((t) => t.id === resolved) ||
     STUDIO_TEMPLATES.find((t) => t.id === DEFAULT_STUDIO_TEMPLATE_ID)
   );
 }
@@ -265,6 +313,10 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
       },
       taskId: null,
       imageUrl: null,
+      garbedImageUrl: null,
+      garbedJobId: null,
+      garbedTaskId: null,
+      garbedStatusMessage: null,
     },
     position: nodePos('text_to_image'),
   };
@@ -292,10 +344,7 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
   const meshNode = {
     id: newId('n'),
     kind: 'image_to_3d',
-    label:
-      template.id === 'krea_trellis_multiview'
-        ? 'Image to 3D (Multiview)'
-        : STUDIO_NODE_KINDS.image_to_3d.label,
+    label: STUDIO_NODE_KINDS.image_to_3d.label,
     stage: 'mesh',
     status: 'idle',
     data: {
@@ -314,7 +363,7 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
     kind: 'auto_rigging',
     label:
       bodyRigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
-        ? 'Auto Rigging (template wrap)'
+        ? 'Wrap Auto Rig'
         : STUDIO_NODE_KINDS.auto_rigging.label,
     stage: 'rig',
     status: 'idle',
@@ -365,7 +414,13 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
       position: nodePos('appearance_clothing'),
     };
     nodes.push(clothingNode);
-    edges.push({ id: newId('e'), source: rigNode.id, target: clothingNode.id });
+    edges.push({
+      id: newId('e'),
+      source: rigNode.id,
+      target: clothingNode.id,
+      sourceHandle: 'bottom',
+      targetHandle: 'left',
+    });
   }
 
   const exportNode = {
@@ -379,7 +434,17 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
   };
   nodes.push(exportNode);
   const exportSource = clothingNode || rigNode;
-  edges.push({ id: newId('e'), source: exportSource.id, target: exportNode.id });
+  edges.push(
+    clothingNode
+      ? {
+          id: newId('e'),
+          source: exportSource.id,
+          target: exportNode.id,
+          sourceHandle: 'right',
+          targetHandle: 'left',
+        }
+      : { id: newId('e'), source: exportSource.id, target: exportNode.id },
+  );
 
   return {
     id: newId('proj'),
@@ -390,6 +455,7 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
       clothingText,
       headJobId,
       avatarSessionId,
+      graphLayoutVersion: STUDIO_GRAPH_LAYOUT_VERSION,
     },
     nodes,
     edges,
@@ -397,7 +463,8 @@ export function createStudioProject(templateId = DEFAULT_STUDIO_TEMPLATE_ID, opt
 }
 
 /**
- * Locked single-image pipeline: Krea 2 Turbo → TRELLIS.2.
+ * Locked single-image pipeline: Krea 2 Turbo → Pixel3D (Multiview Image to 3D Mesh).
+ * Template id stays `krea_trellis2` for saved-project compatibility.
  * @param {{ prompt?: string, projectName?: string }} [opts]
  */
 export function createKreaTrellisTemplate(opts = {}) {
@@ -409,11 +476,15 @@ export function createKreaTrellisTemplate(opts = {}) {
  * @param {{ prompt?: string, editPrompt?: string, projectName?: string }} [opts]
  */
 export function createKreaMageTrellisTemplate(opts = {}) {
-  return createStudioProject('krea_mage_trellis2', opts);
+  return createStudioProject('krea_mage_pixel3dm', opts);
 }
 
+/** @deprecated Use {@link createKreaMageTrellisTemplate} (now TRELLIS.2 image mesh). */
+export const createKreaMagePixel3dTemplate = createKreaMageTrellisTemplate;
+
 /**
- * Orthographic turnaround pipeline: Krea ×6 → TRELLIS multiview.
+ * Orthographic turnaround pipeline: Krea ×6 → Pixel3D multi-view.
+ * Template id stays `krea_trellis_multiview` for saved-project compatibility.
  * @param {{ prompt?: string, projectName?: string }} [opts]
  */
 export function createKreaTrellisMultiviewTemplate(opts = {}) {
@@ -613,7 +684,8 @@ export function applyStudioTemplate(project, templateId, opts = {}) {
 }
 
 /**
- * Move nodes from the legacy flat row (y=120) to the staggered reference layout.
+ * Snap nodes to the current reference layout when the project still uses a
+ * legacy flat row or an older layout version (avoids overlapping clothing).
  * @param {object} project
  * @returns {object}
  */
@@ -624,12 +696,18 @@ export function healStudioGraphLayout(project) {
   const includeClothing = project.nodes.some((n) => n.kind === 'appearance_clothing');
   const layout = { includeImageEdit, includeClothing };
 
+  const layoutVersion = Number(project.data?.graphLayoutVersion) || 0;
+  const needsVersionHeal = layoutVersion < STUDIO_GRAPH_LAYOUT_VERSION;
+
   const usesLegacyFlatRow = project.nodes.some((n) => {
     if (n.kind === 'text_to_image') {
       return n.position?.y === LEGACY_STUDIO_GRAPH_FLAT_Y;
     }
     if (n.kind === 'appearance_clothing') {
-      return n.position?.y === LEGACY_STUDIO_GRAPH_CLOTHING_Y;
+      return (
+        n.position?.y === LEGACY_STUDIO_GRAPH_CLOTHING_Y ||
+        n.position?.y === LEGACY_STUDIO_GRAPH_CLOTHING_Y_V1
+      );
     }
     if (
       n.kind === 'text_prompt' ||
@@ -642,20 +720,96 @@ export function healStudioGraphLayout(project) {
     }
     return false;
   });
-  if (!usesLegacyFlatRow) return project;
 
   let next = project;
-  for (const node of project.nodes) {
-    const target = getStudioGraphNodePosition(node.kind, layout);
-    if (
-      node.position?.x === target.x &&
-      node.position?.y === target.y
-    ) {
-      continue;
+  let changed = false;
+
+  if (usesLegacyFlatRow || needsVersionHeal) {
+    for (const node of next.nodes) {
+      const target = getStudioGraphNodePosition(node.kind, layout);
+      if (
+        node.position?.x === target.x &&
+        node.position?.y === target.y
+      ) {
+        continue;
+      }
+      next = updateNode(next, node.id, { position: target });
+      changed = true;
     }
-    next = updateNode(next, node.id, { position: target });
   }
-  return next;
+
+  // Always ensure Clothing → Viewport wire (right→left). Missing handle ids used to drop it.
+  if (includeClothing && Array.isArray(next.edges)) {
+    const byKind = Object.fromEntries(next.nodes.map((n) => [n.kind, n]));
+    const clothing = byKind.appearance_clothing;
+    const rig = byKind.auto_rigging;
+    const exp = byKind.export_asset;
+    let edges = next.edges.map((e) => {
+      if (rig && clothing && e.source === rig.id && e.target === clothing.id) {
+        if (e.sourceHandle === 'bottom' && e.targetHandle === 'left') return e;
+        changed = true;
+        return { ...e, sourceHandle: 'bottom', targetHandle: 'left' };
+      }
+      if (clothing && exp && e.source === clothing.id && e.target === exp.id) {
+        if (e.sourceHandle === 'right' && e.targetHandle === 'left') return e;
+        changed = true;
+        return { ...e, sourceHandle: 'right', targetHandle: 'left' };
+      }
+      return e;
+    });
+    if (clothing && exp) {
+      if (rig) {
+        const before = edges.length;
+        edges = edges.filter(
+          (e) => !(e.source === rig.id && e.target === exp.id),
+        );
+        if (edges.length !== before) changed = true;
+      }
+      if (!edges.some((e) => e.source === clothing.id && e.target === exp.id)) {
+        edges.push({
+          id: `e_cloth_export_${String(clothing.id).slice(-8)}`,
+          source: clothing.id,
+          target: exp.id,
+          sourceHandle: 'right',
+          targetHandle: 'left',
+        });
+        changed = true;
+      }
+    }
+    if (changed) next = { ...next, edges };
+  }
+
+  // Migrate legacy default project names (exact match only — never rename custom titles).
+  const mappedName = LEGACY_STUDIO_PROJECT_NAMES[String(next.name || '').trim()];
+  if (mappedName && mappedName !== next.name) {
+    next = { ...next, name: mappedName };
+    changed = true;
+  }
+
+  // Migrate legacy node card titles to current short labels.
+  for (const node of next.nodes) {
+    const mappedLabel = LEGACY_STUDIO_NODE_LABELS[String(node.label || '').trim()];
+    const wrapLabel =
+      node.kind === 'auto_rigging' &&
+      node.data?.rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
+        ? 'Wrap Auto Rig'
+        : null;
+    const targetLabel = wrapLabel || mappedLabel || null;
+    if (targetLabel && targetLabel !== node.label) {
+      next = updateNode(next, node.id, { label: targetLabel });
+      changed = true;
+    }
+  }
+
+  if (!changed && !needsVersionHeal) return project;
+
+  return {
+    ...next,
+    data: {
+      ...(next.data || {}),
+      graphLayoutVersion: STUDIO_GRAPH_LAYOUT_VERSION,
+    },
+  };
 }
 
 export function getNodeKind(kind) {
@@ -792,12 +946,54 @@ export function setClothingText(project, clothingText) {
   }
   const clothingNode = next.nodes.find((n) => n.kind === 'appearance_clothing');
   if (clothingNode) {
+    const prevAcc = clothingNode.data?.accessories || [];
+    const merged = accessories.map((acc) => {
+      const prior =
+        prevAcc.find(
+          (p) =>
+            p?.label === acc.label && p?.appearance_slot === acc.appearance_slot,
+        ) ||
+        prevAcc.find((p) => p?.object_name && p.object_name === acc.object_name);
+      const editPrompt =
+        typeof prior?.editPrompt === 'string' ? prior.editPrompt : '';
+      return editPrompt ? { ...acc, editPrompt } : { ...acc, editPrompt: '' };
+    });
     next = updateNode(next, clothingNode.id, {
-      status: accessories.length ? 'ready' : 'idle',
-      data: { accessories, results: clothingNode.data?.results || [] },
+      status: merged.length ? 'ready' : 'idle',
+      data: { accessories: merged, results: clothingNode.data?.results || [] },
     });
   }
   return next;
+}
+
+/**
+ * Per-garment Mage-Flow-Edit instruction (Body+Cloth clothing cards).
+ * @param {object} project
+ * @param {number} index
+ * @param {string} editPrompt
+ */
+export function setClothingEditPrompt(project, index, editPrompt) {
+  const clothingNode = project.nodes.find((n) => n.kind === 'appearance_clothing');
+  if (!clothingNode) return project;
+  const accessories = [...(clothingNode.data?.accessories || [])];
+  if (!accessories[index]) return project;
+  const text = typeof editPrompt === 'string' ? editPrompt : '';
+  accessories[index] = {
+    ...accessories[index],
+    editPrompt: text,
+  };
+  return updateNode(project, clothingNode.id, { data: { accessories } });
+}
+
+/**
+ * @param {object} project
+ * @param {number} index
+ * @returns {string}
+ */
+export function getClothingEditPrompt(project, index) {
+  const clothingNode = project?.nodes?.find((n) => n.kind === 'appearance_clothing');
+  const acc = clothingNode?.data?.accessories?.[index];
+  return typeof acc?.editPrompt === 'string' ? acc.editPrompt : '';
 }
 
 export function getHeadJobId(project) {
@@ -1114,10 +1310,13 @@ export function bindProjectToWorkspace(project, workspaceId) {
   };
 }
 
-/** Options stamped onto every Studio Task Manager job for multi-workspace heal. */
+/** Options stamped onto every Studio Task Manager job for multi-workspace heal + wipe. */
 export function studioTaskScopeOptions(project) {
   const workspaceId = getStudioWorkspaceId(project);
-  const out = {};
+  const out = {
+    job_origin: 'studio',
+    studio_template_id: project?.templateId || null,
+  };
   if (workspaceId) out.studio_workspace_id = workspaceId;
   if (project?.id) out.studio_project_id = project.id;
   return out;
@@ -1479,10 +1678,17 @@ export function hydrateStudioImageFromTasks(project, tasks = [], resolveImageUrl
  * @param {number} [index]
  */
 export function studioClothingObjectName(project, acc, index = 0) {
-  return slugifyObjectName(
-    `${project?.name || 'studio'}_${acc?.object_name || acc?.label || `garment_${index}`}`,
+  // Put garment token first so OBJECT_NAME_MAX_LEN truncation keeps slot/item identity.
+  const garment = slugifyObjectName(
+    acc?.object_name || acc?.label || acc?.appearance_slot || `garment_${index}`,
     `garment_${index}`,
   );
+  const job = slugifyObjectName(project?.name || 'studio', 'studio');
+  return buildStudioObjectName({
+    templateId: project?.templateId,
+    projectName: `${garment}_${job}`,
+    role: 'garment',
+  });
 }
 
 function taskAppearanceSlot(task) {
@@ -2000,6 +2206,7 @@ export function isStudioEdgePending(project, edge) {
 }
 
 export function toReactFlowElements(project, { apiEndpoint, running, onRerunClothing } = {}) {
+  const creatureMotion = projectIsCreatureMotion(project);
   const nodes = project.nodes.map((n) => ({
     id: n.id,
     type: 'studio',
@@ -2024,7 +2231,10 @@ export function toReactFlowElements(project, { apiEndpoint, running, onRerunClot
     data: {
       kind: n.kind,
       label: n.label,
-      stage: n.stage,
+      stage:
+        n.kind === 'image_to_3d' && creatureMotion
+          ? 'mesh'
+          : n.stage,
       status: n.status,
       displayStatus: getStudioNodeDisplayStatus(n),
       payload: n.data,
@@ -2034,6 +2244,15 @@ export function toReactFlowElements(project, { apiEndpoint, running, onRerunClot
       clothingProgress:
         n.kind === 'appearance_clothing' ? getClothingProgress(n) : null,
       running: Boolean(running),
+      creatureMotion,
+      previewLabel:
+        n.kind === 'auto_rigging'
+          ? 'Rigged'
+          : n.kind === 'image_to_3d' && creatureMotion
+            ? 'Creature Template'
+            : n.kind === 'image_to_3d'
+              ? 'Mesh'
+              : null,
       onRerunClothing:
         n.kind === 'appearance_clothing' && typeof onRerunClothing === 'function'
           ? onRerunClothing
@@ -2048,6 +2267,9 @@ export function toReactFlowElements(project, { apiEndpoint, running, onRerunClot
       id: e.id,
       source: e.source,
       target: e.target,
+      sourceHandle: e.sourceHandle || undefined,
+      targetHandle: e.targetHandle || undefined,
+      type: 'smoothstep',
       animated: pending,
       className: pending ? 'studio-edge-pending' : 'studio-edge-done',
       style: pending
@@ -2066,6 +2288,16 @@ export function toReactFlowElements(project, { apiEndpoint, running, onRerunClot
   return { nodes, edges };
 }
 
+/** Creature / animal pipelines use user-facing "Creature Template" instead of plain "Mesh". */
+export function projectIsCreatureMotion(project) {
+  if (!project?.nodes) return false;
+  const image = project.nodes.find((n) => n.kind === 'text_to_image');
+  if (image?.data?.promptOptions?.creature_rig_ready) return true;
+  const rig = project.nodes.find((n) => n.kind === 'auto_rigging');
+  const mode = String(rig?.data?.rigMode || rig?.data?.modelPreference || '').toLowerCase();
+  return mode.includes('creature');
+}
+
 /** Ensure older localStorage projects map to the selectable template catalog. */
 export function migrateStudioProject(project) {
   if (!project?.nodes) return project;
@@ -2077,6 +2309,13 @@ export function migrateStudioProject(project) {
     next = {
       ...next,
       templateId: looksMultiview ? 'krea_trellis_multiview' : 'krea_trellis2',
+    };
+  }
+
+  if (STUDIO_TEMPLATE_ID_ALIASES[next.templateId]) {
+    next = {
+      ...next,
+      templateId: STUDIO_TEMPLATE_ID_ALIASES[next.templateId],
     };
   }
 
@@ -2105,10 +2344,19 @@ export function migrateStudioProject(project) {
   }
 
   const meshNode = next.nodes.find((n) => n.kind === 'image_to_3d');
-  if (meshNode && !meshNode.data?.modelPreference) {
-    next = updateNode(next, meshNode.id, {
-      data: { modelPreference: template.meshModel },
-    });
+  if (meshNode && template.meshModel) {
+    const currentMesh = meshNode.data?.modelPreference;
+    const upgradeLegacyMultiview =
+      next.templateId === 'krea_trellis_multiview' &&
+      currentMesh === 'trellis_image_to_textured_mesh';
+    const upgradeTrellis2ToPixel3dDefault =
+      template.meshModel === 'pixal3d_image_to_textured_mesh' &&
+      currentMesh === 'trellis2_image_to_textured_mesh';
+    if (!currentMesh || upgradeLegacyMultiview || upgradeTrellis2ToPixel3dDefault) {
+      next = updateNode(next, meshNode.id, {
+        data: { modelPreference: template.meshModel },
+      });
+    }
   }
 
   // Keep body auto-rig node aligned with the selected Studio template
@@ -2122,7 +2370,7 @@ export function migrateStudioProject(project) {
       next = updateNode(next, existingRig.id, {
         label:
           template.bodyRigMode === AUTO_RIG_MODES.TEMPLATE_WRAP
-            ? 'Auto Rigging (template wrap)'
+            ? 'Wrap Auto Rig'
             : STUDIO_NODE_KINDS.auto_rigging.label,
         data: {
           rigMode: template.bodyRigMode,
@@ -2239,16 +2487,47 @@ function newWorkspaceId() {
  */
 export function createStudioWorkspace(project, opts = {}) {
   const id = newWorkspaceId();
+  const nameHint =
+    typeof opts.name === 'string' && opts.name.trim() ? opts.name.trim() : '';
+  const jobTabName = /^Job\s+\d+$/i.test(nameHint);
   let proj = migrateStudioProject(
-    project || createStudioProject(DEFAULT_STUDIO_TEMPLATE_ID),
+    project ||
+      createStudioProject(DEFAULT_STUDIO_TEMPLATE_ID, {
+        ...(nameHint && !jobTabName ? { projectName: nameHint } : {}),
+      }),
   );
   proj = bindProjectToWorkspace(proj, id);
   return {
     id,
-    name: opts.name || proj.name || 'Workspace',
+    name: nameHint || proj.name || 'Workspace',
     project: recoverInterruptedStudioNodes(proj),
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Next unused workspace/job tab name (`Job 2`, `Job 3`, …).
+ * @param {Iterable<string>} existingNames
+ * @param {string} [baseName]
+ * @returns {string}
+ */
+export function uniqueStudioWorkspaceName(existingNames, baseName = 'Job') {
+  const base = String(baseName || 'Job').trim() || 'Job';
+  const taken = new Set(
+    [...(existingNames || [])].map((n) => String(n || '').trim()).filter(Boolean),
+  );
+  if (!taken.has(base) && base !== 'Job') return base;
+  let i = base === 'Job' ? 1 : 2;
+  const prefix = base === 'Job' ? 'Job' : base;
+  if (prefix === 'Job') {
+    i = 1;
+    while (taken.has(`Job ${i}`)) i += 1;
+    return `Job ${i}`;
+  }
+  if (!taken.has(prefix)) return prefix;
+  i = 2;
+  while (taken.has(`${prefix} ${i}`)) i += 1;
+  return `${prefix} ${i}`;
 }
 
 /**

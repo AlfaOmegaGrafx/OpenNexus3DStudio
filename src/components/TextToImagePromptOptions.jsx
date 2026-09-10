@@ -349,7 +349,7 @@ export default function TextToImagePromptOptions({ value, onChange, basePrompt =
           </div>
 
           <div style={{ color: '#888', marginBottom: '0.2rem' }}>
-            Head track (template_wrap — GNM / MeshMonk / Arc2Avatar)
+            Head track (Ethnicity / Likeness / 3DGSavatar)
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.35rem' }}>
             {HEAD_TRACK_OPTIONS.map((h) => (
@@ -365,7 +365,7 @@ export default function TextToImagePromptOptions({ value, onChange, basePrompt =
             ))}
           </div>
           <div style={{ color: '#888', marginBottom: '0.2rem' }}>
-            Ethnicity (GNM — MeshMonk track)
+            Ethnicity
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.35rem' }}>
             {TEXT_TO_IMAGE_ETHNICITY_OPTIONS.map((e) => (
@@ -376,7 +376,7 @@ export default function TextToImagePromptOptions({ value, onChange, basePrompt =
                 onClick={() => setOpt({ character_ethnicity: e.id })}
                 title={
                   e.id
-                    ? `Krea prompt bias + template_wrap GNM IdentitySampler (${e.id}) when head track includes MeshMonk`
+                    ? `Image prompt bias + ethnicity sampler (${e.id}) when head track includes Likeness`
                     : 'No ethnicity bias'
                 }
               >
@@ -404,7 +404,7 @@ export default function TextToImagePromptOptions({ value, onChange, basePrompt =
               </div>
               {opts.likeness_source !== 'body_roi' ? (
                 <div style={{ color: '#888', marginBottom: '0.35rem', fontSize: '0.55rem' }}>
-                  Upload Face selfie on Body+Cloth (same photo can feed Arc2Avatar).
+                  Upload Face selfie on Body+Cloth (same photo can feed 3DGSavatar).
                 </div>
               ) : null}
             </>

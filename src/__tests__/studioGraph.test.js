@@ -81,7 +81,7 @@ describe('studioGraph', () => {
       prompt: 'knight',
       editPrompt: 'remove background',
     });
-    expect(project.templateId).toBe('krea_mage_trellis2');
+    expect(project.templateId).toBe('krea_mage_pixel3dm');
     expect(project.nodes.map((n) => n.kind)).toEqual([
       'text_prompt',
       'text_to_image',
@@ -95,15 +95,24 @@ describe('studioGraph', () => {
     expect(getEditPrompt(project)).toBe('T-pose');
     const edit = project.nodes.find((n) => n.kind === 'image_edit');
     expect(edit.data.modelPreference).toBe('mage_flow_edit_turbo');
+    const mesh = project.nodes.find((n) => n.kind === 'image_to_3d');
+    expect(mesh.data.modelPreference).toBe('pixal3d_image_to_textured_mesh');
   });
 
-  it('creates separate multiview template with TRELLIS v1 mesh model', () => {
+  it('migrates legacy krea_mage_trellis2 id to krea_mage_pixel3dm', () => {
+    let project = createKreaMageTrellisTemplate({ prompt: 'knight' });
+    project = { ...project, templateId: 'krea_mage_trellis2' };
+    project = migrateStudioProject(project);
+    expect(project.templateId).toBe('krea_mage_pixel3dm');
+  });
+
+  it('creates separate multiview template with Pixal3D mesh model', () => {
     const project = createKreaTrellisMultiviewTemplate({ prompt: 'dragon knight' });
     expect(project.templateId).toBe('krea_trellis_multiview');
     const opts = getTextToImagePromptOptions(project);
     expect(opts.all_orthographic_views).toBe(true);
     const mesh = project.nodes.find((n) => n.kind === 'image_to_3d');
-    expect(mesh.data.modelPreference).toBe('trellis_image_to_textured_mesh');
+    expect(mesh.data.modelPreference).toBe('pixal3d_image_to_textured_mesh');
   });
 
   it('creates composable body+clothing template with wrap rig and clothing node', () => {
@@ -117,12 +126,15 @@ describe('studioGraph', () => {
     expect(getClothingText(project)).toContain('red joggers');
 
     const pos = (kind) => project.nodes.find((n) => n.kind === kind)?.position;
-    expect(pos('text_prompt')).toEqual({ x: 40, y: 48 });
-    expect(pos('text_to_image')).toEqual({ x: 320, y: 196 });
-    expect(pos('image_to_3d')).toEqual({ x: 600, y: 48 });
-    expect(pos('auto_rigging')).toEqual({ x: 880, y: 48 });
-    expect(pos('appearance_clothing')).toEqual({ x: 880, y: 312 });
-    expect(pos('export_asset')).toEqual({ x: 1160, y: 48 });
+    expect(pos('text_prompt')).toEqual({ x: 40, y: 40 });
+    expect(pos('text_to_image')).toEqual({ x: 340, y: 220 });
+    expect(pos('image_to_3d')).toEqual({ x: 640, y: 40 });
+    expect(pos('auto_rigging')).toEqual({ x: 940, y: 40 });
+    expect(pos('appearance_clothing')).toEqual({ x: 940, y: 460 });
+    expect(pos('export_asset')).toEqual({ x: 1240, y: 40 });
+
+    const mesh = project.nodes.find((n) => n.kind === 'image_to_3d');
+    expect(mesh.data.modelPreference).toBe('pixal3d_image_to_textured_mesh');
 
     const kinds = project.nodes.map((n) => n.kind);
     expect(kinds).toEqual([
@@ -141,12 +153,27 @@ describe('studioGraph', () => {
     const rig = project.nodes.find((n) => n.kind === 'auto_rigging');
     expect(rig.data.rigMode).toBe(AUTO_RIG_MODES.TEMPLATE_WRAP);
     expect(rig.data.modelPreference).toBe(TEMPLATE_RIG_MODEL_ID);
-    expect(rig.data.humanoidTemplateId).toBe('template');
+    expect(rig.data.humanoidTemplateId).toBe('humanoid');
 
     const clothing = project.nodes.find((n) => n.kind === 'appearance_clothing');
     expect(clothing.data.accessories).toHaveLength(2);
     expect(clothing.data.accessories[0].appearance_slot).toBe('Legs');
     expect(clothing.data.accessories[1].appearance_slot).toBe('Shoes');
+    expect(project.name).toBe('Body and Clothing');
+    expect(clothing.label).toBe('Clothing Fit');
+    expect(project.nodes.find((n) => n.kind === 'export_asset').label).toBe('Open in Viewport');
+
+    const clothExport = project.edges.find(
+      (e) => e.source === clothing.id && e.target === project.nodes.find((n) => n.kind === 'export_asset').id,
+    );
+    expect(clothExport).toBeTruthy();
+    expect(clothExport.sourceHandle).toBe('right');
+    expect(clothExport.targetHandle).toBe('left');
+    const rigCloth = project.edges.find(
+      (e) => e.source === rig.id && e.target === clothing.id,
+    );
+    expect(rigCloth.sourceHandle).toBe('bottom');
+    expect(rigCloth.targetHandle).toBe('left');
 
     expect(getRunnablePipelineOrder(project).map((n) => n.kind)).toEqual([
       'text_to_image',
@@ -721,14 +748,54 @@ describe('studioGraph', () => {
     }
     const healed = healStudioGraphLayout(project);
     expect(healed.nodes.find((n) => n.kind === 'text_to_image').position).toEqual({
-      x: 320,
-      y: 196,
+      x: 340,
+      y: 220,
     });
     expect(healed.nodes.find((n) => n.kind === 'appearance_clothing').position).toEqual({
-      x: 880,
-      y: 312,
+      x: 940,
+      y: 460,
     });
-    expect(healed.nodes.find((n) => n.kind === 'auto_rigging').position.y).toBe(48);
+    expect(healed.nodes.find((n) => n.kind === 'auto_rigging').position.y).toBe(40);
+  });
+
+  it('heals missing Clothing → Viewport edge and legacy default names', () => {
+    let project = createKreaComposableAvatarBodyTemplate({ projectName: 'Clothing' });
+    const clothing = project.nodes.find((n) => n.kind === 'appearance_clothing');
+    const exp = project.nodes.find((n) => n.kind === 'export_asset');
+    const rig = project.nodes.find((n) => n.kind === 'auto_rigging');
+    project = {
+      ...project,
+      name: 'Clothing',
+      data: { ...(project.data || {}), graphLayoutVersion: 1 },
+      nodes: project.nodes.map((n) =>
+        n.kind === 'appearance_clothing'
+          ? { ...n, label: 'Clothing' }
+          : n.kind === 'export_asset'
+            ? { ...n, label: 'Viewport' }
+            : n,
+      ),
+      edges: [
+        ...project.edges.filter(
+          (e) => !(e.source === clothing.id && e.target === exp.id),
+        ),
+        { id: 'e_bypass', source: rig.id, target: exp.id },
+      ],
+    };
+    const healed = healStudioGraphLayout(project);
+    expect(healed.name).toBe('Body and Clothing');
+    expect(healed.nodes.find((n) => n.kind === 'appearance_clothing').label).toBe('Clothing Fit');
+    expect(healed.nodes.find((n) => n.kind === 'export_asset').label).toBe('Open in Viewport');
+    expect(
+      healed.edges.some((e) => e.source === clothing.id && e.target === exp.id),
+    ).toBe(true);
+    expect(
+      healed.edges.some((e) => e.source === rig.id && e.target === exp.id),
+    ).toBe(false);
+    const wire = healed.edges.find(
+      (e) => e.source === clothing.id && e.target === exp.id,
+    );
+    expect(wire.sourceHandle).toBe('right');
+    expect(wire.targetHandle).toBe('left');
   });
 
   it('workspace store isolates projects and syncs tab name', () => {
@@ -740,6 +807,7 @@ describe('studioGraph', () => {
       workspaces: [...store.workspaces, second],
     };
     expect(getActiveWorkspace(next).name).toBe('Job 2');
+    expect(second.project.name).toBe('Textured 3D Mesh');
     next = updateWorkspaceProject(next, second.id, (proj) => ({
       ...proj,
       name: 'Dragon body',
@@ -1087,8 +1155,8 @@ describe('studioGraph', () => {
       data: { meshUrl: '/api/v1/system/jobs/mesh1/download', jobId: 'mesh1' },
     });
 
-    const mage = applyStudioTemplate(project, 'krea_mage_trellis2');
-    expect(mage.templateId).toBe('krea_mage_trellis2');
+    const mage = applyStudioTemplate(project, 'krea_mage_pixel3dm');
+    expect(mage.templateId).toBe('krea_mage_pixel3dm');
     expect(mage.name).toBe('My knight');
     expect(mage.id).toBe(project.id);
     expect(mage.nodes.find((n) => n.kind === 'text_to_image').id).toBe(imageId);

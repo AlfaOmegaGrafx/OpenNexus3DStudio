@@ -218,6 +218,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const [meshEditSourceImage, setMeshEditSourceImage] = useState(null);
   const [meshEditMaskImage, setMeshEditMaskImage] = useState(null);
   const [deletingTaskId, setDeletingTaskId] = useState(null);
+  const [stoppingTaskId, setStoppingTaskId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const [isSyncingTasks, setIsSyncingTasks] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
@@ -231,7 +232,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const cardHeaderRef = useRef(null);
   const newTaskFormRef = useRef(null);
   const { currentModel, clearModel } = useScene();
-  const { deleteTask, syncTasksFromApi, clearCompletedTasks, getApiEndpoint } = useTask();
+  const { deleteTask, cancelTask, syncTasksFromApi, clearCompletedTasks, getApiEndpoint } = useTask();
   const apiEndpoint = getApiEndpoint();
   const {
     openSceneAssembler,
@@ -643,7 +644,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       return;
     }
     if (newTaskType === 'mesh-painting' && !newTaskImage) {
-      alert('⚠️ Mesh painting (image) requires a reference image.');
+      alert('⚠️ Image 3D Mesh Painting requires a reference image.');
       return;
     }
     if (newTaskType === 'mesh-editing-image' && !newTaskImage) {
@@ -714,12 +715,12 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
       }
     }
     if (newTaskType === 'avatar-from-image' && !newTaskImage) {
-      alert('⚠️ Avatar from Image requires a photo (TRELLIS to VRM).');
+      alert('⚠️ Photo to Avatar requires a photo (Multiview Image to 3D Mesh → VRM).');
       return;
     }
     if (isArc2AvatarTaskType(newTaskType)) {
       if (!newTaskImage) {
-        alert('⚠️ Avatar head (Arc2Avatar) requires a face photo.');
+        alert('⚠️ 3DGSavatar Head requires a face photo.');
         return;
       }
       try {
@@ -727,16 +728,16 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
         if (!status?.integrated) {
           const reasons = (status?.blocking_reasons || []).join('\n• ') || 'not installed';
           alert(
-            '⚠️ Arc2Avatar API not ready on DGX.\n\n• ' +
+            '⚠️ 3DGSavatar API not ready on DGX.\n\n• ' +
               reasons +
               '\n\nInstall thirdparty/Arc2Avatar env + weights (docs/ARC2AVATAR_TRACK.md), then retry.\n' +
-              'Meanwhile use Avatar from Image / template_wrap.',
+              'Meanwhile use Photo to Avatar / template_wrap.',
           );
           return;
         }
       } catch (err) {
         alert(
-          `⚠️ Could not reach Arc2Avatar status: ${err?.message || err}\n\n` +
+          `⚠️ Could not reach 3DGSavatar status: ${err?.message || err}\n\n` +
             (ARC2AVATAR_API_READY
               ? ''
               : 'API may need restart after adapter deploy.'),
@@ -765,7 +766,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     let prompt =
       newTaskPrompt.trim() ||
       (newTaskType === 'avatar-from-image'
-        ? 'Generate avatar from image (TRELLIS to VRM)'
+        ? 'Generate avatar from image (Multiview Image to 3D Mesh → VRM)'
           : newTaskType === 'image-to-world'
             ? objectName
             : newTaskType === 'environment-scan'
@@ -1301,6 +1302,18 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
     }
   };
 
+  const handleStopTask = async (task) => {
+    setDeleteError(null);
+    setStoppingTaskId(task.id);
+    try {
+      await cancelTask(task.id);
+    } catch (error) {
+      setDeleteError(error?.message || 'Failed to stop task');
+    } finally {
+      setStoppingTaskId(null);
+    }
+  };
+
   const dispatchLoadTask = (task, source = 'taskRow') => {
     if (task.status !== 'completed' || !task.result) return;
     const jobId = resolveTaskJobId(task);
@@ -1541,26 +1554,53 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                       ) : null}
                     </p>
                   </div>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDeleteTask(task);
-                    }}
-                    className="btn btn-danger"
-                    disabled={deletingTaskId === task.id}
-                    title={
-                      resolveTaskJobId(task)
-                        ? 'Delete from this browser and DGX Spark'
-                        : 'Delete from this browser'
-                    }
-                    style={{ 
-                      padding: '0.1rem 0.35rem', 
-                      fontSize: '0.6rem',
-                      minWidth: 'auto'
-                    }}
-                  >
-                    {deletingTaskId === task.id ? '…' : 'Delete'}
-                  </button>
+                  <div className="task-row-actions" style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                    {(task.status === 'running' ||
+                      task.status === 'pending' ||
+                      task.status === 'queued') && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleStopTask(task);
+                        }}
+                        className="btn btn-secondary"
+                        disabled={stoppingTaskId === task.id || deletingTaskId === task.id}
+                        title="Stop this job where it is — do not proceed further"
+                        data-testid="task-stop-btn"
+                        style={{
+                          padding: '0.1rem 0.35rem',
+                          fontSize: '0.6rem',
+                          minWidth: 'auto',
+                          background: '#5a2a2a',
+                          color: '#fcc',
+                          border: '1px solid #844',
+                        }}
+                      >
+                        {stoppingTaskId === task.id ? '…' : 'Stop'}
+                      </button>
+                    )}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteTask(task);
+                      }}
+                      className="btn btn-danger"
+                      disabled={deletingTaskId === task.id || stoppingTaskId === task.id}
+                      title={
+                        resolveTaskJobId(task)
+                          ? 'Delete from this browser and DGX Spark'
+                          : 'Delete from this browser'
+                      }
+                      style={{ 
+                        padding: '0.1rem 0.35rem', 
+                        fontSize: '0.6rem',
+                        minWidth: 'auto'
+                      }}
+                    >
+                      {deletingTaskId === task.id ? '…' : 'Delete'}
+                    </button>
+                  </div>
                 </div>
 
                 {task.status === 'running' && (
@@ -2196,9 +2236,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               >
                 Open3DStudio
               </a>{' '}
-              Workflows use DGX-verified defaults: TRELLIS.2 for image→3D;{' '}
-              <strong>SkinTokens</strong> for <em>Auto Rigging → full rig</em>;{' '}
-              <strong>UniRig</strong> for <em>Avatar from Image → TRELLIS to VRM</em> (not SkinTokens).
+              Workflows use DGX-verified defaults: Multiview Image to 3D Mesh for image→3D;{' '}
+              <strong>Full Auto Rig</strong> for character auto-rig;{' '}
+              <strong>Template Auto Rig</strong> for <em>Photo to Avatar</em> (not Full Auto Rig).
               {isApiConnected
                 ? ' Models list updates from the API when connected.'
                 : canBrowseCatalog
@@ -2233,9 +2273,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   lineHeight: 1.35,
                 }}
               >
-                Same humanoid <strong>head track</strong> as Body+Cloth / GNM+MeshMonk — Arc2Avatar
-                engine only (selfie → FLAME 3DGS <code>.ply</code>). Prefer{' '}
-                <em>Head track · Body+Cloth (Studio)</em> for the full path. Status:{' '}
+                Same humanoid <strong>head track</strong> as Studio Body Clothing / Identity+Likeness —{' '}
+                3DGSavatar engine only (selfie → FLAME 3DGS <code>.ply</code>). Prefer{' '}
+                <em>Studio Body Clothing</em> for the full path. Status:{' '}
                 <code>/api/v1/arc2avatar/status</code>. Pipeline:{' '}
                 {PREFERRED_PIPELINES.arc2AvatarHead.steps.join(' → ')}.
               </p>
@@ -2270,25 +2310,25 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                 >
                   <option value="text-to-3d">Text to 3D</option>
                   <option value="text-to-image">Text to Image</option>
-                  <option value="image-to-3d">Image to 3D (textured mesh)</option>
+                  <option value="image-to-3d">Image to 3D</option>
                   <option value="image-to-raw-mesh">Image to Raw Mesh</option>
-                  <option value="image-to-splat">Image to Gaussian Splat</option>
-                  <option value="image-to-world">Image to World (splat + props)</option>
-                  <option value="environment-scan">Environment scan (walk → 1:1 twin)</option>
-                  <option value="avatar-from-image">Avatar from Image</option>
+                  <option value="image-to-splat">Photo to Splat</option>
+                  <option value="image-to-world">Image to World</option>
+                  <option value="environment-scan">Walk Environment Scan</option>
+                  <option value="avatar-from-image">Photo to Avatar</option>
                   <option value={BODY_CLOTH_STUDIO_TASK_TYPE}>
-                    Head track · Body+Cloth (Studio)
+                    Studio Body Clothing
                   </option>
                   <option value={ARC2AVATAR_TASK_TYPE}>
-                    Head track · Arc2Avatar (Body+Cloth)
+                    3DGSavatar Head
                   </option>
-                  <option value="mesh-painting-text">Mesh painting (text)</option>
-                  <option value="mesh-painting">Mesh painting (image)</option>
-                  <option value="mesh-segmentation">Mesh Segmentation</option>
-                  <option value="mesh-retopology">Mesh Retopology</option>
-                  <option value="mesh-uv-unwrapping">Mesh UV Unwrapping</option>
-                  <option value="mesh-editing-text">Mesh editing (text)</option>
-                  <option value="mesh-editing-image">Mesh editing (image)</option>
+                  <option value="mesh-painting-text">Text 3D Mesh Painting</option>
+                  <option value="mesh-painting">Image 3D Mesh Painting</option>
+                  <option value="mesh-segmentation">3D Mesh Segmentation</option>
+                  <option value="mesh-retopology">3D Mesh Retopo</option>
+                  <option value="mesh-uv-unwrapping">UV Unwrapping</option>
+                  <option value="mesh-editing-text">Text 3D Mesh Edit</option>
+                  <option value="mesh-editing-image">Image 3D Mesh Edit</option>
                   <option value="auto-rigging">Auto Rigging</option>
                 </select>
               </div>
@@ -2324,7 +2364,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                           ? ' — morph head + XR blendshapes'
                           : opt.id === HEAD_TRACK.ARC2AVATAR
                             ? ' — photoreal splat (needs selfie)'
-                            : ' — morph head + Arc2Avatar overlay'}
+                            : ' — morph head + 3DGSavatar overlay'}
                       </option>
                     ))}
                   </select>
@@ -2692,7 +2732,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
               {newTaskType === 'image-to-world' && (
                 <div className="mb-1.5" style={{ fontSize: '0.6rem', color: '#aaa' }}>
                   <label style={{ fontSize: '0.65rem', display: 'block', marginBottom: '0.25rem' }}>
-                    Prop mesh model (TRELLIS.2 for interactable props)
+                    Prop mesh model (Standard Image to Textured for props)
                   </label>
                   <select
                     className="input w-full"
@@ -2725,8 +2765,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     style={{ padding: '0.375rem', fontSize: '0.6rem', fontFamily: 'monospace' }}
                   />
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Pipeline: photo → TripoSplat env (.ply) → optional TRELLIS.2 props. Avatar stays
-                    loaded; world goes on a separate layer.
+                    Pipeline: photo → Photo to Splat env (.ply) → optional Standard Image props.
+                    Avatar stays loaded; world goes on a separate layer.
                   </p>
                 </div>
               )}
@@ -2936,8 +2976,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     approximate. Phase A is fast isotropic Gaussians; Phase B gsplat train is
                     photometric (sharper) and can take a long time on a full walk. Bake writes
                     environment_mesh.glb for Scene Assembler (Spark splat stays viewport-only).
-                    Image-to-World RP1 still uses TRELLIS props only — TripoSplat has no cameras
-                    for TSDF bake. Docs: LINGBOT_MAP_ENVIRONMENT_SCAN.md.
+                    Image-to-World RP1 still uses Standard Image props only — Photo to Splat has no
+                    cameras for TSDF bake. Docs: LINGBOT_MAP_ENVIRONMENT_SCAN.md.
                   </p>
                 </div>
               )}
@@ -2958,7 +2998,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     Also generate Gaussian splat preview (TripoSplat → Spark.js)
                   </label>
                   <p style={{ fontSize: '0.55rem', color: '#888', margin: '0.25rem 0 0' }}>
-                    Pipeline: TRELLIS to VRM. Optional splat loads
+                    Pipeline: Multiview Image to 3D Mesh → VRM. Optional splat loads
                     in parallel when ready.
                   </p>
                 </div>
@@ -3034,7 +3074,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                         : newTaskType === 'avatar-from-image'
                           ? 'Upload Photo (avatar pipeline):'
                           : isArc2AvatarTaskType(newTaskType)
-                            ? 'Upload face selfie (Arc2Avatar head — not a full-body shot):'
+                            ? 'Upload face selfie (3DGSavatar Head — not a full-body shot):'
                           : newTaskType === 'mesh-painting' || newTaskType === 'mesh-editing-image'
                         ? 'Upload Reference Image:'
                         : 'Upload Face Photo:'}
@@ -3099,7 +3139,7 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                             }))
                           }
                         />
-                        Use all photos for mesh (TRELLIS multiview)
+                        Use all photos for Multiview Image to 3D Mesh
                       </label>
                       <div
                         style={{

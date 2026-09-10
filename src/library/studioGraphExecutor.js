@@ -14,6 +14,7 @@ import {
   buildTextToImagePrompt,
   createMultiviewSeed,
   normalizeTextToImagePromptOptions,
+  STUDIO_GARBED_BODY_TEXT_TO_IMAGE_OPTIONS,
 } from './textToImagePromptOptions.js';
 import { cropHeadlessBodyReferenceImage } from './headlessBodyImageCrop.js';
 import { sampleFaceSkinSwatch } from './sampleFaceSkinSwatch.js';
@@ -25,12 +26,13 @@ import {
   getClothingText,
   updateNode,
   studioTaskScopeOptions,
+  studioClothingObjectName,
   setHeadJobId,
   setHeadSplatUrl,
   jobIdFromArtifactUrl,
 } from './studioGraph.js';
 import { get3daigcAuthHeaders } from './taskManager.js';
-import { slugifyObjectName } from './objectNameUtils.js';
+import { buildStudioObjectName } from './studioOutputId.js';
 import {
   getDefaultAutoRigOutputFormat,
   resolveAutoRigModelForTask,
@@ -46,10 +48,10 @@ import {
   headTrackIsNone,
   normalizeHeadTrack,
 } from './avatarPipelineCatalog.js';
-import { buildTemplateWrapClientOptions } from './templateWrapParams.js';
 import {
   buildAppearanceComponentAutoRigOptions,
   buildAppearanceGarmentSubjectPrompt,
+  buildGarbedBodySubjectPrompt,
   DEFAULT_STUDIO_CLOTHING_TEXT,
   equipAppearanceComponentTrait,
   parseClothingAccessoryLines,
@@ -153,7 +155,7 @@ async function hydrateClothingImageFromTasks(deps, objectName, apiEndpoint) {
 export async function fetchImageAsFile(relativeOrAbsoluteUrl, apiEndpoint, filename = 'studio.png') {
   const absolute = resolveTaskModelUrl(relativeOrAbsoluteUrl, apiEndpoint);
   if (!absolute) {
-    throw new Error('No image URL to fetch for Image to 3D');
+    throw new Error('No image URL to fetch for Image to 3D Mesh');
   }
   const response = await fetch(absolute, { headers: get3daigcAuthHeaders() });
   if (!response.ok) {
@@ -185,6 +187,15 @@ function resolveImageTaskRow(apiResult, deps, jobId) {
     };
   }
   return taskRow;
+}
+
+function studioObjectNameFor(project, opts = {}) {
+  return buildStudioObjectName({
+    templateId: project?.templateId,
+    projectName: opts.projectName || project?.name,
+    role: opts.role,
+    viewId: opts.viewId,
+  });
 }
 
 /**
@@ -269,7 +280,7 @@ async function queueStudioArc2AvatarHead(current, deps, faceSelfieFile) {
     'Studio Arc2Avatar head',
     faceSelfieFile,
     {
-      object_name: `${current.name || 'studio'}_arc2head`,
+      object_name: studioObjectNameFor(current, { role: 'arc2head' }),
       model_parameters: {},
     },
   );
@@ -355,7 +366,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
     !opts.skipArc2AvatarHead
   ) {
     onStatus?.(
-      'Head track includes Arc2Avatar — upload a face selfie (or switch to Ethnicity + Likeness)',
+      'Head track includes Arc2Avatar — upload a face selfie (or switch to GNM + MeshMonk)',
     );
   }
 
@@ -392,7 +403,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
     if (node.kind === 'text_to_image') {
       let promptOptions = getTextToImagePromptOptions(current);
       const modelPreference = node.data?.modelPreference || 'krea2_turbo_text_to_image';
-      const objectName = current.name || 'studio_image';
+      const objectName = studioObjectNameFor(current, { role: 'img' });
 
       // Body+Cloth: bias neck-open Krea body toward selfie face skin tone.
       if (
@@ -449,7 +460,11 @@ export async function runStudioPipeline(project, deps, opts = {}) {
                   camera_view: spec.viewId,
                 }),
                 modelPreference,
-                objectName: `${objectName}_${spec.viewId}`,
+                objectName: studioObjectNameFor(current, {
+                  projectName: current.name || 'studio',
+                  role: 'img',
+                  viewId: spec.viewId,
+                }),
                 seed,
                 viewId: spec.viewId,
                 studioScope,
@@ -503,6 +518,62 @@ export async function runStudioPipeline(project, deps, opts = {}) {
           );
           onStatus?.('Image ready');
         }
+
+        // Body+Cloth: clothed Krea preview (does not replace nude imageUrl for mesh).
+        if (template?.includeClothing && promptOptions.headless_body) {
+          try {
+            const accessories = parseClothingAccessoryLines(getClothingText(current));
+            const bodyOpts = getTextToImagePromptOptions(current);
+            const garbedOpts = normalizeTextToImagePromptOptions({
+              ...STUDIO_GARBED_BODY_TEXT_TO_IMAGE_OPTIONS,
+              character_gender: bodyOpts.character_gender,
+              body_composition: bodyOpts.body_composition,
+              stature_cm: bodyOpts.stature_cm,
+              skin_tone_phrase: bodyOpts.skin_tone_phrase,
+              skin_tone_hex: bodyOpts.skin_tone_hex,
+            });
+            const garbedSubject = buildGarbedBodySubjectPrompt({
+              subjectPrompt: prompt,
+              accessories,
+            });
+            const garbedComposed = buildTextToImagePrompt(garbedSubject, garbedOpts);
+            onStatus?.('Generating fully clothed preview image…');
+            const garbed = await runSingleTextToImageView(createAndStartTask, deps, {
+              prompt: garbedComposed,
+              promptOptions: garbedOpts,
+              modelPreference,
+              objectName: studioObjectNameFor(current, { role: 'garbed' }),
+              seed: null,
+              viewId: 'front',
+              studioScope,
+            });
+            emit(
+              updateNode(current, node.id, {
+                data: {
+                  garbedImageUrl: garbed.imageUrl,
+                  garbedJobId: garbed.jobId,
+                  garbedTaskId: garbed.taskId,
+                  garbedStatusMessage: 'Fully clothed preview (not used for body mesh)',
+                  composedGarbedPrompt: garbedComposed,
+                },
+              }),
+            );
+            onStatus?.('Clothed preview ready — nude body still used for mesh');
+          } catch (garbedErr) {
+            console.warn('Garbed body preview failed', garbedErr);
+            emit(
+              updateNode(current, node.id, {
+                data: {
+                  garbedStatusMessage:
+                    garbedErr?.message || 'Clothed preview failed',
+                },
+              }),
+            );
+            onStatus?.(
+              `Clothed preview skipped: ${garbedErr?.message || 'error'}`,
+            );
+          }
+        }
       } catch (err) {
         emit(updateNode(current, node.id, { status: 'failed' }));
         throw err;
@@ -521,7 +592,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
       if (!sourceUrl) {
         emit(updateNode(current, node.id, { status: 'failed' }));
         throw new Error(
-          'Image Edit needs a completed Text to Image result before editing.',
+          'Edit Image needs a completed Text to Image result before editing.',
         );
       }
       if (!editPrompt) {
@@ -545,10 +616,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
 
       onStatus?.(`Editing image with Mage-Flow-Edit: ${editPrompt.slice(0, 60)}…`);
       try {
-        const baseName = slugifyObjectName(
-          current.name || 'studio_edit',
-          'studio_edit',
-        );
+        const baseName = studioObjectNameFor(current, { role: 'edit' });
         const imageFile = await fetchImageAsFile(
           sourceUrl,
           apiEndpoint,
@@ -615,7 +683,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
       if (!imageUrl) {
         emit(updateNode(current, node.id, { status: 'failed' }));
         throw new Error(
-          'Image to 3D needs a completed Text to Image result. Run Generate image first, then Generate mesh.',
+          'Image to 3D Mesh needs a completed Text to Image result. Run Generate image first, then Generate mesh.',
         );
       }
 
@@ -632,19 +700,33 @@ export async function runStudioPipeline(project, deps, opts = {}) {
         views[0] || { imageUrl, viewId: 'front' };
       const referenceMetas = views.filter((v) => v.viewId !== primaryMeta.viewId && v.imageUrl);
 
+      const meshTemplate = getStudioTemplate(current.templateId);
+      const meshModelId =
+        node.data?.modelPreference ||
+        meshTemplate?.meshModel ||
+        'pixal3d_image_to_textured_mesh';
+      const meshStatusName = meshModelId.startsWith('pixal3d')
+        ? 'Multiview Image to 3D Mesh'
+        : meshModelId.startsWith('trellis2')
+          ? 'Standard Image to Textured 3D Mesh'
+          : meshModelId === 'trellis_image_to_textured_mesh'
+            ? 'Fast Image to Textured 3D Mesh'
+            : meshModelId.startsWith('trellis_')
+              ? 'Text to Textured 3D Mesh'
+              : 'mesh';
       onStatus?.(
         referenceMetas.length
-          ? `Building TRELLIS multiview mesh (${1 + referenceMetas.length} views)…`
+          ? `Building ${meshStatusName} multiview mesh (${1 + referenceMetas.length} views)…`
           : useEditedPrimary
-            ? 'Building TRELLIS.2 mesh from edited image…'
-            : 'Building TRELLIS.2 mesh…',
+            ? `Building ${meshStatusName} mesh from edited image…`
+            : `Building ${meshStatusName} mesh…`,
       );
 
       try {
-        const baseName = slugifyObjectName(
-          node.data?.objectName || current.name || 'studio',
-          'studio',
-        );
+        const baseName = studioObjectNameFor(current, {
+          projectName: node.data?.objectName || current.name || 'studio',
+          role: 'body',
+        });
         let imageFile = await fetchImageAsFile(
           primaryMeta.imageUrl || imageUrl,
           apiEndpoint,
@@ -654,11 +736,11 @@ export async function runStudioPipeline(project, deps, opts = {}) {
         const promptOptsForMesh = getTextToImagePromptOptions(current);
         const composableBodyMesh =
           current.templateId === 'krea_composable_avatar_body' ||
-          getStudioTemplate(current.templateId)?.id === 'krea_composable_avatar_body';
+          meshTemplate?.id === 'krea_composable_avatar_body';
         const headlessForMesh =
           composableBodyMesh || Boolean(promptOptsForMesh?.headless_body);
         if (headlessForMesh) {
-          onStatus?.('Cropping head band from body reference before TRELLIS…');
+          onStatus?.('Cropping head band from body reference before mesh…');
           imageFile = await cropHeadlessBodyReferenceImage(imageFile);
         }
 
@@ -675,8 +757,10 @@ export async function runStudioPipeline(project, deps, opts = {}) {
           referenceFiles.push(refFile);
         }
 
-        const objectName =
-          slugifyObjectName(node.data?.objectName || current.name || 'studio_asset', 'studio_asset');
+        const objectName = studioObjectNameFor(current, {
+          projectName: node.data?.objectName || current.name || 'studio_asset',
+          role: 'body',
+        });
         onStatus?.(`Submitting ${objectName} to mesh API…`);
         const apiResult = await createAndStartTask(
           {
@@ -684,8 +768,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
             prompt: getPromptText(current) || 'Studio image to 3D',
             imageFile,
             options: {
-              model_preference:
-                node.data?.modelPreference || 'trellis2_image_to_textured_mesh',
+              model_preference: meshModelId,
               object_name: objectName,
               reference_image_files: referenceFiles,
               use_multiview_mesh: referenceFiles.length > 0,
@@ -698,7 +781,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
         if (!apiResult?.job_id && !getTaskResultModelUrl(apiResult)) {
           emit(updateNode(current, node.id, { status: 'failed' }));
           throw new Error(
-            'Image to 3D did not return a job id — check API connection and Task Manager.',
+            'Image to 3D Mesh did not return a job id — check API connection and Task Manager.',
           );
         }
 
@@ -745,14 +828,15 @@ export async function runStudioPipeline(project, deps, opts = {}) {
       if (!meshUrl) {
         emit(updateNode(current, node.id, { status: 'failed' }));
         throw new Error(
-          'Auto Rigging needs a completed Image to 3D mesh. Run Generate mesh first.',
+          'Auto Rigging needs a completed Image to 3D Mesh. Run Generate mesh first.',
         );
       }
 
-      const objectName = slugifyObjectName(
-        node.data?.objectName || meshNode?.data?.objectName || current.name || 'studio_asset',
-        'studio_asset',
-      );
+      const objectName = studioObjectNameFor(current, {
+        projectName:
+          node.data?.objectName || meshNode?.data?.objectName || current.name || 'studio_asset',
+        role: 'body',
+      });
       // Prefer catalog template (Body+Cloth → template_wrap) over stale node prefs
       // that heal may have overwritten with a SkinTokens Task Manager job.
       const template = getStudioTemplate(current.templateId);
@@ -794,26 +878,53 @@ export async function runStudioPipeline(project, deps, opts = {}) {
         }
         if (rigMode === AUTO_RIG_MODES.TEMPLATE_WRAP) {
           const promptOpts = getTextToImagePromptOptions(current);
-          const wrapClient = buildTemplateWrapClientOptions({
-            promptOpts,
-            template,
-            current,
-            faceSelfieFile,
-          });
-          if (wrapClient.rigMode) {
-            options.rig_mode = wrapClient.rigMode;
-          }
-          options.model_parameters = {
-            ...(options.model_parameters || {}),
-            ...(wrapClient.model_parameters || {}),
-          };
-          if (wrapClient.likeness_image_file) {
-            options.likeness_image_file = wrapClient.likeness_image_file;
-          }
-          if (wrapClient.statusSuffix) {
+          const gender = promptOpts?.character_gender || '';
+          const ethnicity = promptOpts?.character_ethnicity || '';
+          const wrapHeadTrack = normalizeHeadTrack(promptOpts?.head_track);
+          // Voxel / non-humanoid heads: skip face wrap engines; keep generated mesh head.
+          if (headTrackIsNone(wrapHeadTrack)) {
+            options.rig_mode = AUTO_RIG_MODES.TEMPLATE;
+            options.model_parameters = {
+              ...(options.model_parameters || {}),
+              head_track: HEAD_TRACK.NONE,
+              gnm_identity: false,
+              gnm_bake_expressions: false,
+              face_likeness: false,
+              likeness_alpha: 0,
+            };
             onStatus?.(
-              `Auto-rigging ${objectName} with ${TEMPLATE_RIG_MODEL_ID} (${wrapClient.statusSuffix})…`,
+              `Auto-rigging ${objectName} with ${TEMPLATE_RIG_MODEL_ID} (template bones-only — head track none)…`,
             );
+          } else {
+            const useMeshMonk = headTrackUsesMeshMonk(wrapHeadTrack);
+            const likenessSource = String(promptOpts?.likeness_source || 'auto').toLowerCase();
+            const resolvedLikeness =
+              likenessSource === 'selfie' && !faceSelfieFile ? 'auto' : likenessSource;
+            const composableBody =
+              current.templateId === 'krea_composable_avatar_body' ||
+              template?.id === 'krea_composable_avatar_body';
+            const expectHeadless = composableBody || Boolean(promptOpts?.headless_body);
+            options.model_parameters = {
+              ...(options.model_parameters || {}),
+              // Same humanoid wrap track — engine chosen via head_track chips.
+              head_track: wrapHeadTrack,
+              // Body+Cloth → neck-open scale hint (Blender overrides if mesh still has a head).
+              expect_headless_body: expectHeadless ? true : undefined,
+              gnm_identity: useMeshMonk && (Boolean(ethnicity) || Boolean(gender)),
+              gnm_bake_expressions: useMeshMonk,
+              face_likeness: useMeshMonk,
+              likeness_alpha: useMeshMonk ? 0.65 : 0,
+              likeness_source: useMeshMonk ? resolvedLikeness : 'body_roi',
+              ...(gender ? { character_gender: gender } : {}),
+              ...(ethnicity ? { character_ethnicity: ethnicity } : {}),
+            };
+            // Same Face selfie upload as Arc2Avatar — MeshMonk can use it as likeness source.
+            if (useMeshMonk && faceSelfieFile) {
+              options.likeness_image_file = faceSelfieFile;
+              if (resolvedLikeness === 'auto' || resolvedLikeness === 'selfie') {
+                options.model_parameters.likeness_source = resolvedLikeness;
+              }
+            }
           }
         }
         if (rigMode === AUTO_RIG_MODES.APPEARANCE_COMPONENT) {
@@ -1001,18 +1112,17 @@ export async function runStudioPipeline(project, deps, opts = {}) {
             continue;
           }
           const acc = accessories[i];
-          const objectName = slugifyObjectName(
-            `${current.name || 'studio'}_${acc.object_name || `garment_${i}`}`,
-            `garment_${i}`,
-          );
+          const objectName = studioClothingObjectName(current, acc, i);
           let existing = findClothingResultEntry(results, acc, objectName);
           const force = forceClothingIndexes.has(i);
+          const editPrompt = String(acc?.editPrompt || '').trim();
+          const keepImageForMage = Boolean(force && editPrompt && existing?.imageUrl);
           if (force && existing) {
-            // Drop prior artifacts so this index regenerates end-to-end.
+            // Drop prior mesh/trait; keep image when Mage Edit will refine it.
             results = upsertClothingResultEntry(results, {
               ...existing,
-              imageUrl: null,
-              imageJobId: null,
+              imageUrl: keepImageForMage ? existing.imageUrl : null,
+              imageJobId: keepImageForMage ? existing.imageJobId : null,
               meshUrl: null,
               meshJobId: null,
               traitUrl: null,
@@ -1055,6 +1165,48 @@ export async function runStudioPipeline(project, deps, opts = {}) {
               imageUrl: existing.imageUrl,
               jobId: existing.imageJobId || null,
             };
+          } else if (keepImageForMage && existing?.imageUrl && editPrompt) {
+            onStatus?.(
+              `Clothing ${i + 1}/${accessories.length}: Mage Edit — ${acc.label}…`,
+            );
+            const sourceFile = await fetchImageAsFile(
+              existing.imageUrl,
+              apiEndpoint,
+              `${objectName}_mage_src.png`,
+            );
+            const mageApi = await createAndStartTask({
+              type: 'image-edit',
+              prompt: editPrompt,
+              imageFile: sourceFile,
+              options: {
+                model_preference: 'mage_flow_edit_turbo',
+                object_name: `${objectName}_edit`,
+                model_parameters: {
+                  num_inference_steps: 4,
+                  guidance_scale: 1.0,
+                  max_size: 1024,
+                },
+                ...studioScope,
+              },
+            });
+            const mageJobId = mageApi?.job_id || null;
+            const mageRow = resolveImageTaskRow(
+              { ...mageApi, feature: 'image_edit', type: 'image-edit' },
+              deps,
+              mageJobId,
+            );
+            mageRow.type = 'image-edit';
+            const mageUrl =
+              (mageJobId ? `/api/v1/system/jobs/${mageJobId}/download` : null) ||
+              resolveTextToImageDownloadUrl(mageRow);
+            if (!mageUrl) {
+              throw new Error(`Mage Edit completed but no image URL for ${acc.label}`);
+            }
+            imageResult = {
+              imageUrl: mageUrl,
+              jobId: mageJobId,
+              taskId: mageRow?.id || null,
+            };
           } else {
             const hydrated =
               force
@@ -1084,8 +1236,18 @@ export async function runStudioPipeline(project, deps, opts = {}) {
           let meshUrl = force ? null : existing?.meshUrl || null;
           let meshApi = !force && existing?.meshJobId ? { job_id: existing.meshJobId } : null;
           if (!meshUrl) {
+            const clothingMeshModel =
+              getStudioTemplate(current.templateId)?.meshModel ||
+              'pixal3d_image_to_textured_mesh';
+            const clothingMeshLabel = clothingMeshModel.startsWith('pixal3d')
+              ? 'Multiview Image to 3D Mesh'
+              : clothingMeshModel.startsWith('trellis2')
+                ? 'Standard Image to Textured 3D Mesh'
+                : clothingMeshModel === 'trellis_image_to_textured_mesh'
+                  ? 'Fast Image to Textured 3D Mesh'
+                  : 'mesh';
             onStatus?.(
-              `Clothing ${i + 1}/${accessories.length}: TRELLIS.2 mesh…`,
+              `Clothing ${i + 1}/${accessories.length}: ${clothingMeshLabel} mesh…`,
             );
             const imageFile = await fetchImageAsFile(
               imageResult.imageUrl,
@@ -1098,7 +1260,7 @@ export async function runStudioPipeline(project, deps, opts = {}) {
                 prompt: garmentSubject,
                 imageFile,
                 options: {
-                  model_preference: 'trellis2_image_to_textured_mesh',
+                  model_preference: clothingMeshModel,
                   object_name: objectName,
                   ...studioScope,
                 },

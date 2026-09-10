@@ -33,12 +33,23 @@ function StudioFlowNode({ data }) {
       ? `partial · ${clothingProgress.done}/${clothingProgress.total} garments`
       : displayStatus;
   const timingLine = data?.timingLine || formatStudioNodeTiming({ kind, data: payload, status });
+  const meshPreviewLabel =
+    data?.previewLabel ||
+    (kind === 'auto_rigging' ? 'Rigged' : data?.creatureMotion ? 'Creature Template' : 'Mesh');
 
   return (
     <div
       className={`studio-flow-node studio-flow-node--${kind || 'default'} ${STATUS_CLASS[displayStatus] || STATUS_CLASS[status] || ''}`}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} id="left" />
+      <Handle type="source" position={Position.Right} id="right" />
+      {kind === 'auto_rigging' && (
+        <Handle type="source" position={Position.Bottom} id="bottom" />
+      )}
+      {kind === 'export_asset' && (
+        <Handle type="target" position={Position.Bottom} id="bottom" />
+      )}
+
       <div className="studio-flow-node-kind">{data?.stage}</div>
       <div className="studio-flow-node-label">{data?.label}</div>
       <div
@@ -95,7 +106,7 @@ function StudioFlowNode({ data }) {
             apiEndpoint={apiEndpoint}
             boneToggle={kind === 'auto_rigging'}
             defaultShowBones={kind === 'auto_rigging'}
-            label={kind === 'auto_rigging' ? 'Rigged' : 'Mesh'}
+            label={meshPreviewLabel}
           />
         </div>
       ) : null}
@@ -145,7 +156,7 @@ function StudioFlowNode({ data }) {
                   <StudioAuthenticatedThumb
                     imageUrl={item.imageUrl}
                     apiEndpoint={apiEndpoint}
-                    label="Krea"
+                    label="Image"
                   />
                 ) : null}
                 {url ? (
@@ -165,8 +176,6 @@ function StudioFlowNode({ data }) {
           })}
         </div>
       ) : null}
-
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

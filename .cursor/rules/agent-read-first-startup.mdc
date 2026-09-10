@@ -17,21 +17,22 @@ Skipping any helper or rule is a **regression**.
 
 - [ ] **1. Continuity verify** — `bash scripts/verify-agent-continuity.sh --all-repos`
 - [ ] **2. Entry routers** — `AGENTS.md` → `CLAUDE.md` → `CURSOR.md`
-- [ ] **3. RepoResident** — `.agent/STATE.md`; `MAP.md` / `DECISIONS.md` when routing
+- [ ] **3. RepoResident** — `.agent/STATE.md` + `.agent/INFLIGHT.md`; `MAP.md` / `DECISIONS.md` when routing; run `bash scripts/agent-workboard.sh status`
 - [ ] **4. cursor-memory-bank** — `memory-bank/activeContext.md` + `progress.md`
 - [ ] **5. MindLink** — `.brain/MEMORY.md` (Core + User Profile), `.brain/SESSION.md`, `.brain/LOG.md` last 5, `.brain/SHARED.md`
 - [ ] **6. SessionMem** — MCP `retrieveMemories`; fallback `memory-bank/sessionmem-seeds.md`
 - [ ] **7. Cursor rules** — **Read every** `.cursor/rules/*.mdc` with `alwaysApply: true` (index: `memory-bank/cursor-rules-always-apply-index.md`); on DGX also Read `~/.cursor/rules/*.mdc` with `alwaysApply: true`. **Read the files — do not skip because an index exists.**
 - [ ] **8. Graphify** — `graphify query "<task question>"` before Read/Grep/Glob
 
-**Authority:** RepoResident `.agent/STATE.md` outranks `memory-bank/activeContext.md`.
+**Authority:** RepoResident `.agent/STATE.md` outranks `memory-bank/activeContext.md`. Cross-chat dirty claims: `.agent/INFLIGHT.md` (see `cross-chat-workboard.mdc`).
 
 ## Checklist B — every turn before repo-touching tools
 
 - [ ] **SessionMem** — `retrieveMemories` (every turn)
 - [ ] **Graphify** — `graphify query` (every turn)
+- [ ] **Workboard** — if touching `src/` or running git restore/checkout/stash: `bash scripts/agent-workboard.sh status` (and `guard-destructive-git.sh` before destructive git)
 - [ ] **Cursor rules** — Read any `.cursor/rules/*.mdc` whose `globs` match files you will touch; re-read alwaysApply rules if unsure
-- [ ] **RepoResident + memory-bank + MindLink** — re-read `STATE.md` + `activeContext.md` + `SESSION.md` if task area changed or after compaction
+- [ ] **RepoResident + memory-bank + MindLink** — re-read `STATE.md` + `INFLIGHT.md` + `activeContext.md` + `SESSION.md` if task area changed or after compaction
 
 After code edits: `graphify update . --no-cluster`.
 

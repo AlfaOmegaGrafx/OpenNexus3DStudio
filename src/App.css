@@ -104,7 +104,8 @@
   text-decoration: underline;
 }
 
-/* Header controls horizontal scroll wrapper — mirrors scene-controls-scroll */
+/* Header controls: keep overflow for narrow widths / drag-pan, but no visible
+   scrollbar — OpenNexus 3D desktop chrome should not show a horizontal bar. */
 .header-controls-scroll {
   overflow-x: auto;
   overflow-y: hidden;
@@ -112,8 +113,8 @@
   overscroll-behavior-y: none;
   touch-action: pan-x;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: #555 #2a2a2a;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
   box-sizing: border-box;
   user-select: text;
   -webkit-user-select: text;
@@ -126,16 +127,8 @@
 }
 
 .header-controls-scroll::-webkit-scrollbar {
-  height: 4px;
-}
-
-.header-controls-scroll::-webkit-scrollbar-track {
-  background: #2a2a2a;
-}
-
-.header-controls-scroll::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 2px;
+  display: none; /* Chrome / Safari / Electron */
+  height: 0;
 }
 
 .header-controls {

@@ -6,6 +6,13 @@ import {
   isAppearanceClothingName,
   parseClothingAccessoryLines,
   buildAppearanceGarmentSubjectPrompt,
+  buildGarbedBodySubjectPrompt,
+  clothingEditorRowsToText,
+  clothingEditorSlotChoiceKey,
+  clothingEditorSlotChoiceOptions,
+  formatClothingEditorSlotLabel,
+  mergeAccessoriesIntoClothingEditorRows,
+  parseClothingEditorSlotChoiceKey,
   DEFAULT_STUDIO_CLOTHING_TEXT,
   STUDIO_CLOTHING_ITEM_POOL,
   randomizeStudioClothingText,
@@ -104,6 +111,49 @@ describe('appearanceClothing', () => {
     });
     expect(shortPrompt).toContain('shorts only');
     expect(shortPrompt).toContain('NOT full-length');
+  });
+
+  it('buildGarbedBodySubjectPrompt lists every accessory as a worn outfit', () => {
+    const prompt = buildGarbedBodySubjectPrompt({
+      subjectPrompt: 'athletic streetwear body',
+      accessories: parseClothingAccessoryLines(
+        'Chest: navy hoodie\nLegs: charcoal joggers\nShoes: white sneakers',
+      ),
+    });
+    expect(prompt).toContain('athletic streetwear body');
+    expect(prompt).toMatch(/navy hoodie \(Chest\)/);
+    expect(prompt).toMatch(/charcoal joggers \(Legs\)/);
+    expect(prompt).toMatch(/white sneakers \(Shoes\)/);
+    expect(prompt).toMatch(/fully dressed|fully visible|garbed/i);
+    expect(prompt).toMatch(/no nude/i);
+  });
+
+  it('clothing editor blueprint keeps Head hat/eyewear/earrings as separate rows', () => {
+    const rows = mergeAccessoriesIntoClothingEditorRows(
+      parseClothingAccessoryLines(
+        'Head: baseball cap\nHead: aviator sunglasses\nHead: stud earrings on both ears\nChest: hoodie',
+      ),
+    );
+    const headRows = rows.filter((r) => r.slot === 'Head');
+    expect(headRows).toHaveLength(3);
+    expect(headRows.map((r) => r.segment)).toEqual(['hat', 'eyewear', 'earrings']);
+    expect(clothingEditorRowsToText(rows)).toMatch(/Head: baseball cap/);
+    expect(clothingEditorRowsToText(rows)).toMatch(/Head: aviator sunglasses/);
+    expect(clothingEditorRowsToText(rows)).toMatch(/Chest: hoodie/);
+  });
+
+  it('clothing editor slot choices use parenthetical subcategory labels', () => {
+    expect(formatClothingEditorSlotLabel('Head', 'hat')).toBe('Head (Hat / Cap)');
+    expect(formatClothingEditorSlotLabel('Chest', null)).toBe('Chest');
+    expect(clothingEditorSlotChoiceKey('Head', 'eyewear')).toBe('Head|eyewear');
+    expect(parseClothingEditorSlotChoiceKey('Neck|scarf')).toEqual({
+      slot: 'Neck',
+      segment: 'scarf',
+    });
+    const labels = clothingEditorSlotChoiceOptions().map((o) => o.label);
+    expect(labels).toContain('Head (Sunglasses)');
+    expect(labels).toContain('Head (Earrings)');
+    expect(labels).toContain('Chest');
   });
 
   it('Legs garment prompts exclude footwear so joggers do not grow shoes', () => {
@@ -214,11 +264,24 @@ describe('appearanceClothing', () => {
   it('DEFAULT_STUDIO_CLOTHING_TEXT parses to expected slots', () => {
     const rows = parseClothingAccessoryLines(DEFAULT_STUDIO_CLOTHING_TEXT);
     expect(rows.map((r) => r.appearance_slot)).toEqual([
+      'Head',
+      'Head',
+      'Head',
+      'Neck',
       'Chest',
+      'Waist',
       'Legs',
       'Shoes',
-      'Waist',
-      'Neck',
+    ]);
+    expect(rows.map((r) => r.accessory_segment)).toEqual([
+      'hat',
+      'eyewear',
+      'earrings',
+      'necklace',
+      null,
+      null,
+      null,
+      null,
     ]);
   });
 

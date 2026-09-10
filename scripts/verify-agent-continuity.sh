@@ -232,6 +232,29 @@ if [[ "$ALL_REPOS" -eq 1 ]]; then
   else
     warn "scripts/verify-companion-navbar.sh missing"
   fi
+  note ""
+  note "=== Studio sync invariants (Stop + labels + Body+Cloth) ==="
+  if [[ -f "${ROOT}/scripts/verify-studio-sync-invariants.sh" ]]; then
+    if bash "${ROOT}/scripts/verify-studio-sync-invariants.sh"; then
+      ok "Studio Stop/cancel + generic labels + garbed preview"
+    else
+      fail "Studio sync invariants (see scripts/verify-studio-sync-invariants.sh)"
+    fi
+  else
+    warn "scripts/verify-studio-sync-invariants.sh missing"
+  fi
+  note ""
+  note "=== Cross-chat workboard ==="
+  if [[ -f "${ROOT}/scripts/agent-workboard.sh" ]]; then
+    bash "${ROOT}/scripts/agent-workboard.sh" refresh-dirty >/dev/null 2>&1 || true
+    if bash "${ROOT}/scripts/agent-workboard.sh" status; then
+      ok "cross-chat workboard status printed"
+    else
+      warn "agent-workboard status failed"
+    fi
+  else
+    warn "scripts/agent-workboard.sh missing"
+  fi
 fi
 
 note ""

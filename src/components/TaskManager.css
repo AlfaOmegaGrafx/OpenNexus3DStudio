@@ -167,3 +167,108 @@
 .task-completed-scroll::-webkit-scrollbar-thumb:hover {
   background: #777;
 }
+
+/* Task cards — keep long studio_ IDs / meta inside the card */
+.task-item {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.task-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+  min-width: 0;
+}
+
+.task-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.task-item-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.task-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: #eee;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.task-item-status {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  line-height: 1.2;
+  margin-top: 0.05rem;
+}
+
+.task-item-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.6rem;
+  line-height: 1.35;
+  color: #9a9a9a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.task-item-meta .task-item-job {
+  color: #666;
+}
+
+.task-item-prompt {
+  margin: 0.2rem 0 0;
+  font-size: 0.6rem;
+  line-height: 1.35;
+  color: #aaa;
+  font-style: italic;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.task-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 42%;
+}
+
+.task-item-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-item-result-actions .task-action-btn {
+  margin-left: 0 !important;
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+}

@@ -29,8 +29,8 @@ describe('aiModelsCatalog auto-rig helpers', () => {
   });
 
   it('getModelLabel uses catalog labels', () => {
-    expect(getModelLabel('unirig_auto_rig')).toContain('UniRig');
-    expect(getModelLabel('skintokens_auto_rig')).toContain('SkinTokens Auto Rig');
+    expect(getModelLabel('unirig_auto_rig')).toBe('Template Auto Rig');
+    expect(getModelLabel('skintokens_auto_rig')).toBe('Full Auto Rig');
   });
 
   it('cleanModelLabel title-cases unknown ids', () => {
@@ -133,12 +133,12 @@ describe('aiModelsCatalog auto-rig helpers', () => {
     expect(getAutoRigModelsForRigMode('template').map((m) => m.value)).toEqual(['unirig_auto_rig']);
   });
 
-  it('resolveMeshModelForAvatarFromImage ignores stale rig and legacy mesh models', () => {
+  it('resolveMeshModelForAvatarFromImage ignores stale rig and keeps valid mesh models', () => {
     expect(resolveMeshModelForAvatarFromImage('unirig_auto_rig')).toBe(
-      'trellis2_image_to_textured_mesh',
+      'pixal3d_image_to_textured_mesh',
     );
     expect(resolveMeshModelForAvatarFromImage('trellis_image_to_textured_mesh')).toBe(
-      'trellis2_image_to_textured_mesh',
+      'trellis_image_to_textured_mesh',
     );
     expect(resolveMeshModelForAvatarFromImage('hunyuan3dv21_image_to_textured_mesh')).toBe(
       'hunyuan3dv21_image_to_textured_mesh',

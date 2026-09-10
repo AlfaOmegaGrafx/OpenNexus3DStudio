@@ -1,0 +1,61 @@
+# Keep CLI deploys close to a GitHub clone (no local GPU/dev bloat).
+# Vercel build runs `npm install` + `get-assets` with CDN loot path.
+
+node_modules
+build
+dist
+.git
+.cursor
+.vscode
+.idea
+.turbo
+.cache
+coverage
+logs
+tmp
+temp
+*.log
+*.bak
+
+# Secrets / local env (also gitignored)
+.env
+.env.*
+!.env.example
+!.env.production.example
+.vercel
+
+# Protected / local-only
+src/moat
+assets/moat
+memory-bank
+.brain
+.sessionmem-team
+.agent
+secrets
+certs
+*.pem
+*.key
+MONETIZATION_ROADMAP.md
+FUTURE_RD.md
+Pitch Deck
+scripts/staging-ardy
+scripts/tmp-*
+
+# Large local trees not needed for public demo (CDN loot via VITE_ASSET_PATH)
+public/loot-assets
+OpenXR
+native
+uploads
+thirdparty
+graphify-out
+**/graphify-out
+docs/static
+
+# Common local noise
+**/.jdk
+**/app/build
+**/*.apk
+**/*.aab
+**/*.blend
+**/*.zip
+**/*.pdf

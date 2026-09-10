@@ -1,0 +1,63 @@
+---
+description: HARD — Unify Cursor chats via INFLIGHT workboard + destructive-git guard. Prevents purge/checkout from wiping another chat's uncommitted Studio work.
+alwaysApply: true
+---
+
+# Cross-chat workboard (HARD)
+
+Cursor chats **do not share context**. Shared truth is disk + `.agent/INFLIGHT.md` + SessionMem — not chat history.
+
+## Checklist A / B addition
+
+After reading `.agent/STATE.md`, also:
+
+```bash
+bash scripts/agent-workboard.sh status
+```
+
+Read `.agent/INFLIGHT.md` when status shows claims or dirty protected paths.
+
+## When you ship uncommitted Studio / Task Manager work
+
+```bash
+bash scripts/agent-workboard.sh claim \
+  --id short-kebab \
+  --chat "short chat topic" \
+  --note "what shipped / still dirty" \
+  --files "src/library/aiModelsCatalog.js,src/pages/StudioPage.jsx"
+bash scripts/agent-workboard.sh refresh-dirty
+```
+
+Prefer a **WIP git commit** when the slice is usable. Release the claim after commit or when the work is abandoned:
+
+```bash
+bash scripts/agent-workboard.sh release --id short-kebab
+```
+
+Store a SessionMem decision (importance ≥ 8) naming the claim id + files.
+
+## Before destructive git (NO EXCEPTIONS)
+
+Never run these on `src/` without the guard:
+
+- `git checkout HEAD -- …`
+- `git restore …`
+- `git stash push -u` (or stash that includes Studio paths)
+- `git reset --hard` / `git filter-repo` that resets the working tree
+
+Required:
+
+```bash
+bash scripts/guard-destructive-git.sh --check
+bash scripts/guard-destructive-git.sh --paths <each path you will restore>
+```
+
+If it **exits 1**, stop. Do not “save dirty then checkout HEAD” unless the user explicitly OK’d discarding those files in **this** turn. `--allow-with-user-ok` only after that explicit OK.
+
+Root cause reference: Sep 8 2026 moat/history-purge chat wiped naming/Stop/garbed work via `git checkout HEAD --` + stash + sync.
+
+## Related
+
+- `scripts/verify-studio-sync-invariants.sh` — fail-closed before DGX→Surface scp
+- `scripts/agent-workboard.sh` / `scripts/guard-destructive-git.sh`
+- SessionMem / MindLink — still load on startup; workboard is the live dirty ledger

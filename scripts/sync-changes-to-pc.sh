@@ -2,6 +2,11 @@
 # Push only git-changed DGX-owned files to Surface (fast incremental sync).
 # Run ON DGX after editing docs, README, sync scripts, etc.
 #
+# IMPORTANT: each file is full-file scp (DGX overwrites Surface). There is no
+# merge. A regressing DGX working tree will wipe a good Surface copy. Before
+# --include-src (or when Studio/Task files changed), we run
+# scripts/verify-studio-sync-invariants.sh and abort on failure.
+#
 # Usage:
 #   bash scripts/sync-changes-to-pc.sh
 #   bash scripts/sync-changes-to-pc.sh --retry-until-complete
@@ -69,6 +74,19 @@ mapfile -t CHANGED < <(sync_collect_changed_paths "$ROOT" "$INCLUDE_SRC" "$INCLU
 if [[ ${#CHANGED[@]} -eq 0 ]]; then
   echo "No DGX-owned git changes to push."
   exit 0
+fi
+
+# Fail closed: do not scp a regressing Studio/Task tree over Surface.
+STUDIO_INVARIANT_RE='^(src/(pages/StudioPage\.(jsx|css)|components/TaskManager\.jsx|components/studio/|context/TaskContext\.jsx|library/(aiModelsCatalog|taskManager|textToImagePromptOptions|studioGraph|studioGraphExecutor|appearanceClothing|avatarPipelineCatalog)\.js)|scripts/verify-studio-sync-invariants\.sh)$'
+need_studio_guard=0
+if [[ "$INCLUDE_SRC" -eq 1 ]]; then
+  need_studio_guard=1
+elif printf '%s\n' "${CHANGED[@]}" | grep -qE "$STUDIO_INVARIANT_RE"; then
+  need_studio_guard=1
+fi
+if [[ "$need_studio_guard" -eq 1 ]]; then
+  echo "Running Studio sync invariants (full-file overwrite guard) ..."
+  bash "${ROOT}/scripts/verify-studio-sync-invariants.sh"
 fi
 
 echo "Pushing ${#CHANGED[@]} changed file(s) ..."

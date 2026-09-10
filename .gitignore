@@ -306,6 +306,8 @@ SCENE_CONTROLS_UI_BACKUP.md
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/**
+!.cursor/skills/
+!.cursor/skills/**
 !.cursor/hooks.json
 !.cursor/hooks/
 !.cursor/hooks/**
@@ -466,6 +468,8 @@ certs/
 **/.cursor/*
 !**/.cursor/rules/
 !**/.cursor/rules/**
+!**/.cursor/skills/
+!**/.cursor/skills/**
 !**/.cursor/hooks.json
 !**/.cursor/hooks/
 !**/.cursor/hooks/**
@@ -595,3 +599,6 @@ scripts/sync-companion-to-surface.sh
 scripts/probe-companion-*.ps1
 scripts/probe-companion-*.sh
 scripts/sync-moechat-to-surface.sh
+
+# Patent drafts (counsel handoff — never commit)
+PATENT_PROVISIONAL*.md

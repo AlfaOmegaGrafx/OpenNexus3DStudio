@@ -131,6 +131,9 @@ sync_is_dgx_owned_path() {
       sync-sessionmem-team.sh|sync-sessionmem-team.ps1|verify-agent-continuity.sh|verify-agent-continuity.ps1|verify-agent-continuity-hook.ps1)
         return 0
         ;;
+      verify-studio-sync-invariants.sh|verify-companion-navbar.sh|agent-workboard.sh|guard-destructive-git.sh)
+        return 0
+        ;;
       verify-public-build-env.mjs|pre-commit-block-secrets.sh|verify_krea2_text_to_3d_pipeline.sh)
         return 0
         ;;
@@ -159,6 +162,12 @@ sync_is_dgx_owned_path() {
     return 0
   fi
   if [[ "$rel" =~ ^\.cursor/rules/agent-continuity-startup\.mdc || "$rel" =~ ^\.cursor/rules/agent-run-instructions\.mdc ]]; then
+    return 0
+  fi
+  if [[ "$rel" =~ ^\.cursor/rules/agent-read-first-startup\.mdc || "$rel" =~ ^\.cursor/rules/cross-chat-workboard\.mdc ]]; then
+    return 0
+  fi
+  if [[ "$rel" =~ ^\.cursor/skills/ ]]; then
     return 0
   fi
   if [[ "$include_docs" -eq 1 && "$rel" == "docs/scripts-cheatsheet.md" ]]; then

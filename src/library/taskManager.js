@@ -231,6 +231,8 @@ export class TaskManager {
     this.eventListeners = new Map();
     this._persistTimer = null;
     this._resumingJobs = new Set();
+    /** @type {Set<string>} job ids the user asked to stop (aborts poll loops) */
+    this._cancelledJobIds = new Set();
     this._hydrateFromStorage();
     
     // Supported task types
@@ -661,15 +663,20 @@ export class TaskManager {
       }
       
       const errorMessage =
-        TaskManager.formatApiError(error) ||
-        error.originalError?.message ||
-        'Unknown error occurred';
+        error.code === 'JOB_CANCELLED' || error.cancelled
+          ? 'Stopped by user'
+          : TaskManager.formatApiError(error) ||
+            error.originalError?.message ||
+            'Unknown error occurred';
       console.error(`Task ${taskId} failed:`, errorMessage);
       
       this.updateTaskStatus(taskId, 'failed', task.progress, null, errorMessage);
       this.emit('taskFailed', { task, error });
       throw error;
     } finally {
+      const row = this.tasks.get(taskId);
+      const finishedJobId = resolveTaskJobId(row || task);
+      if (finishedJobId) this._cancelledJobIds.delete(finishedJobId);
       this.activeTaskId = null;
     }
   }
@@ -2232,6 +2239,12 @@ export class TaskManager {
     console.log(`Poll interval: ${pollInterval}ms, Max attempts: ${maxAttempts} (${(maxAttempts * pollInterval / 1000 / 60).toFixed(1)} minutes)`);
 
     while (attempts < maxAttempts) {
+      if (this._cancelledJobIds.has(jobId)) {
+        const err = new Error('Stopped by user');
+        err.code = 'JOB_CANCELLED';
+        err.cancelled = true;
+        throw err;
+      }
       try {
         const jobStatus = await this.checkJobStatus(jobId);
         consecutive404 = 0;
@@ -2256,13 +2269,20 @@ export class TaskManager {
         }
 
         if (failed) {
+          const statusLower = String(status || '').toLowerCase();
           const errorMessage =
             jobStatus.error ||
             jobStatus.error_message ||
             jobStatus.message ||
-            'Job failed';
+            (statusLower === 'cancelled' || statusLower === 'canceled'
+              ? 'Stopped by user'
+              : 'Job failed');
           const err = new Error(errorMessage);
-          err.code = 'JOB_TERMINAL_FAILURE';
+          err.code =
+            statusLower === 'cancelled' || statusLower === 'canceled'
+              ? 'JOB_CANCELLED'
+              : 'JOB_TERMINAL_FAILURE';
+          if (err.code === 'JOB_CANCELLED') err.cancelled = true;
           throw err;
         }
 
@@ -2326,6 +2346,14 @@ export class TaskManager {
           err.code = 'JOB_TERMINAL_FAILURE';
           throw err;
         }
+        if (status === 'cancelled' || status === 'canceled') {
+          const err = new Error(
+            jobStatus.error || jobStatus.error_message || 'Stopped by user',
+          );
+          err.code = 'JOB_CANCELLED';
+          err.cancelled = true;
+          throw err;
+        }
         if (status !== 'processing' && status !== 'running' && status !== 'queued' && status !== 'pending') {
           console.warn(`Unknown job status: ${status}, continuing to poll...`);
         }
@@ -2333,7 +2361,7 @@ export class TaskManager {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
       } catch (error) {
-        if (error.code === 'JOB_TERMINAL_FAILURE') {
+        if (error.code === 'JOB_TERMINAL_FAILURE' || error.code === 'JOB_CANCELLED') {
           throw error;
         }
         if (error.code === 'JOB_NOT_FOUND' || error.jobNotFound) {
@@ -2580,6 +2608,97 @@ export class TaskManager {
       validateStatus: (status) => status === 200 || status === 404,
     });
     return response.data;
+  }
+
+  /**
+   * Ask DGX to cancel a job so it does not proceed further.
+   * @param {string} jobId
+   */
+  async cancelJobOnApi(jobId) {
+    if (!jobId || !this.apiEndpoint) {
+      throw new Error('Missing job id or API endpoint');
+    }
+    const base = this.apiEndpoint.replace(/\/$/, '');
+    const headers = {
+      Accept: 'application/json',
+      ...get3daigcAuthHeaders(),
+    };
+    const response = await axios.post(
+      `${base}/api/v1/system/jobs/${jobId}/cancel`,
+      {},
+      {
+        headers,
+        timeout: 30000,
+        validateStatus: (status) =>
+          status === 200 || status === 404 || status === 409,
+      },
+    );
+    if (response.status === 404) {
+      const err = new Error('Job not found on API');
+      err.code = 'JOB_NOT_FOUND';
+      throw err;
+    }
+    return response.data;
+  }
+
+  /**
+   * Stop a running/queued task where it is (API cancel + stop local poll).
+   * @param {string} taskId
+   */
+  async cancelTask(taskId) {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return { cancelled: false, jobId: null };
+    }
+
+    const jobId = resolveTaskJobId(task);
+    if (jobId) {
+      this._cancelledJobIds.add(jobId);
+    }
+
+    let cancelledRemotely = false;
+    if (jobId && this.isConnected && this.apiEndpoint) {
+      try {
+        await this.cancelJobOnApi(jobId);
+        cancelledRemotely = true;
+      } catch (error) {
+        if (error.response?.status === 409 || error.code === 'JOB_NOT_FOUND') {
+          cancelledRemotely = error.response?.status === 409;
+        } else if (error.response?.status !== 404) {
+          console.warn(
+            `[TaskManager] API cancel failed for ${jobId}:`,
+            error?.message || error,
+          );
+        }
+      }
+    }
+
+    const message = 'Stopped by user';
+    if (task.status === 'running' || task.status === 'pending' || task.status === 'queued') {
+      task.statusMessage = message;
+      this.updateTaskStatus(taskId, 'failed', task.progress ?? null, task.result ?? null, message);
+      this.emit('taskFailed', { task: this.tasks.get(taskId), error: { message, cancelled: true } });
+    }
+
+    return { cancelled: true, cancelledRemotely, jobId };
+  }
+
+  /**
+   * Cancel every active (running/pending) task that has a backend job id.
+   * Used by Studio Stop to halt the pipeline where it is.
+   * @returns {Promise<{ cancelled: number, jobIds: string[] }>}
+   */
+  async cancelActiveTasks() {
+    const active = this.getAllTasks().filter(
+      (t) => t.status === 'running' || t.status === 'pending' || t.status === 'queued',
+    );
+    const jobIds = [];
+    for (const task of active) {
+      const jobId = resolveTaskJobId(task);
+      if (jobId) jobIds.push(jobId);
+      await this.cancelTask(task.id);
+    }
+    return { cancelled: active.length, jobIds };
   }
 
   /**

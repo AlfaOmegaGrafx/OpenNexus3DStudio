@@ -352,6 +352,24 @@ export const TaskProvider = ({ children }) => {
     }
   };
 
+  const cancelTask = async (taskId) => {
+    if (!taskManagerRef.current) return null;
+    const result = await taskManagerRef.current.cancelTask(taskId);
+    const latest = taskManagerRef.current.getTask(taskId);
+    if (latest) {
+      setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...latest } : task)));
+    }
+    return result;
+  };
+
+  const cancelActiveTasks = async () => {
+    if (!taskManagerRef.current) return { cancelled: 0, jobIds: [] };
+    const result = await taskManagerRef.current.cancelActiveTasks();
+    const latest = sortTasksForDisplay(taskManagerRef.current.getAllTasks());
+    setTasks(latest);
+    return result;
+  };
+
   const syncTasksFromApi = async () => {
     if (!taskManagerRef.current) return [];
     if (!taskManagerRef.current.isConnected) {
@@ -459,6 +477,8 @@ export const TaskProvider = ({ children }) => {
     getTasksByType,
     removeTask,
     deleteTask,
+    cancelTask,
+    cancelActiveTasks,
     syncTasksFromApi,
     adoptJobHandoff,
     clearCompletedTasks,

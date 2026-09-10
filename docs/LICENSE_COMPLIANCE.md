@@ -72,6 +72,18 @@ CONDITIONAL stacks (Hunyuan territory/MAU, TRELLIS aux, Krea revenue cap, Live S
 
 ---
 
+## Cursor agent skills (cherry-picks)
+
+| Skill | Source | License | Notes |
+|-------|--------|---------|-------|
+| `cross-chat-workboard` | OpenNexus | MIT (repo) | Local — INFLIGHT + destructive-git guard |
+| `constraint-driven-development` | Adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | MIT | Condensed; points at verify scripts — **not** full upstream pack |
+| `incremental-implementation` | Adapted from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | MIT | Condensed; OpenNexus sync / no-new-tab |
+
+**Not installed:** Utopia, OKF agent-memory, Warp Skill Doctor, full Osmani pack, HumanLayer pack (including `improve-claude-md`).
+
+---
+
 ## New dependency / repo checklist
 
 Before `npm i`, `pnpm add`, `pip install`, `git submodule`, or vendoring under `thirdparty/`:

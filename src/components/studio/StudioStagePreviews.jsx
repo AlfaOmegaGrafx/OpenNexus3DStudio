@@ -18,6 +18,7 @@ import { formatTaskTimestamp } from '../../library/taskPersistence.js';
  *   running?: boolean,
  *   onRerunStage?: (mode: 'image'|'mesh'|'rig') => void,
  *   onRerunClothing?: (accessoryIndex: number) => void,
+ *   onClothingEditPromptChange?: (accessoryIndex: number, text: string) => void,
  * }} props
  */
 export default function StudioStagePreviews({
@@ -26,6 +27,7 @@ export default function StudioStagePreviews({
   running = false,
   onRerunStage,
   onRerunClothing,
+  onClothingEditPromptChange,
 }) {
   if (!project?.nodes) return null;
 
@@ -34,18 +36,28 @@ export default function StudioStagePreviews({
   const meshNode = project.nodes.find((n) => n.kind === 'image_to_3d');
   const rigNode = project.nodes.find((n) => n.kind === 'auto_rigging');
   const clothingNode = project.nodes.find((n) => n.kind === 'appearance_clothing');
+  const isComposable = project.templateId === 'krea_composable_avatar_body';
 
   const imageUrl = imageNode?.data?.imageUrl || null;
+  const garbedImageUrl = imageNode?.data?.garbedImageUrl || null;
   const editImageUrl = editNode?.data?.imageUrl || null;
   const meshUrl = meshNode?.data?.meshUrl || null;
   const rigUrl = rigNode?.data?.meshUrl || null;
   const clothingProgress = clothingNode ? getClothingProgress(clothingNode) : null;
   const clothingResults = clothingProgress?.results?.length ? clothingProgress.results : [];
+  const clothingAccessories = clothingNode?.data?.accessories || [];
 
   const completedNodes = project.nodes.filter((n) => nodeHasStudioArtifact(n));
   const showPipelineSummary = completedNodes.length > 0;
 
-  if (!imageUrl && !editImageUrl && !meshUrl && !rigUrl && clothingResults.length === 0) {
+  if (
+    !imageUrl &&
+    !garbedImageUrl &&
+    !editImageUrl &&
+    !meshUrl &&
+    !rigUrl &&
+    clothingResults.length === 0
+  ) {
     return null;
   }
 
@@ -87,14 +99,14 @@ export default function StudioStagePreviews({
         <div className="studio-stage-preview-card">
           <header className="studio-stage-preview-header">
             <h2>Text to Image</h2>
-            <span>Review image</span>
+            <span>{isComposable ? 'Review image (nude body)' : 'Review image'}</span>
             {onRerunStage ? (
               <button
                 type="button"
                 className="studio-btn ghost studio-rerun-btn"
                 disabled={running}
                 onClick={() => onRerunStage('image')}
-                title="Re-run Krea text-to-image for this stage"
+                title="Re-run text-to-image for this stage"
               >
                 Re-run
               </button>
@@ -111,10 +123,31 @@ export default function StudioStagePreviews({
         </div>
       ) : null}
 
+      {isComposable && (garbedImageUrl || imageUrl) ? (
+        <div className="studio-stage-preview-card">
+          <header className="studio-stage-preview-header">
+            <h2>Generated image</h2>
+            <span>Fully clothed preview (not used for mesh)</span>
+          </header>
+          {garbedImageUrl ? (
+            <StudioAuthenticatedThumb
+              imageUrl={garbedImageUrl}
+              apiEndpoint={apiEndpoint}
+              label="Garbed"
+            />
+          ) : (
+            <p className="studio-field-hint">
+              {imageNode?.data?.garbedStatusMessage ||
+                'Clothed preview pending after nude body completes'}
+            </p>
+          )}
+        </div>
+      ) : null}
+
       {editImageUrl ? (
         <div className="studio-stage-preview-card">
           <header className="studio-stage-preview-header">
-            <h2>Image Edit</h2>
+            <h2>Edit Image</h2>
             <span>{editNode?.data?.skipped ? 'Passthrough' : 'Edited image'}</span>
           </header>
           {formatStudioNodeTiming(editNode) ? (
@@ -131,7 +164,7 @@ export default function StudioStagePreviews({
       {meshUrl ? (
         <div className="studio-stage-preview-card">
           <header className="studio-stage-preview-header">
-            <h2>Image to 3D</h2>
+            <h2>Image to 3D Mesh</h2>
             <span>Textured mesh preview</span>
             {onRerunStage ? (
               <button
@@ -139,7 +172,7 @@ export default function StudioStagePreviews({
                 className="studio-btn ghost studio-rerun-btn"
                 disabled={running}
                 onClick={() => onRerunStage('mesh')}
-                title="Re-run TRELLIS mesh from the current image"
+                title="Re-run textured mesh from the current image"
               >
                 Re-run
               </button>
@@ -221,27 +254,37 @@ export default function StudioStagePreviews({
         </div>
       ) : null}
 
-      {clothingResults.length > 0 ? (
+      {clothingResults.length > 0 || (isComposable && clothingAccessories.length > 0) ? (
         <div className="studio-stage-preview-card studio-stage-preview-card--clothing">
           <header className="studio-stage-preview-header">
             <h2>Clothing</h2>
             <span>
               {clothingProgress?.total
                 ? `${clothingProgress.done}/${clothingProgress.total} rigged garments`
-                : 'Rigged garment per slot — toggle bones'}
+                : 'Rigged garment per slot — edit then Re-run'}
             </span>
           </header>
           {formatStudioNodeTiming(clothingNode) ? (
             <p className="studio-node-timing">{formatStudioNodeTiming(clothingNode)}</p>
           ) : null}
           <div className="studio-clothing-preview-grid">
-            {clothingResults.map((item, index) => {
-              const previewUrl = item.traitUrl || item.meshUrl || null;
+            {(clothingResults.length
+              ? clothingResults
+              : clothingAccessories.map((acc) => ({
+                  label: acc.label,
+                  appearance_slot: acc.appearance_slot,
+                  objectName: acc.object_name,
+                }))
+            ).map((item, index) => {
               const accessoryIndex = findClothingAccessoryIndex(project, item);
+              const resolvedIndex = accessoryIndex >= 0 ? accessoryIndex : index;
+              const acc = clothingAccessories[resolvedIndex] || null;
+              const editPrompt = typeof acc?.editPrompt === 'string' ? acc.editPrompt : '';
               const canRerun =
                 typeof onRerunClothing === 'function' &&
-                accessoryIndex >= 0 &&
+                resolvedIndex >= 0 &&
                 Boolean(item.traitUrl || item.meshUrl || item.imageUrl);
+              const previewUrl = item.traitUrl || item.meshUrl || null;
               return (
                 <article
                   key={`${item.objectName || item.label || 'garment'}_${index}`}
@@ -258,13 +301,31 @@ export default function StudioStagePreviews({
                       </span>
                     ) : null}
                   </div>
+                  {typeof onClothingEditPromptChange === 'function' && resolvedIndex >= 0 ? (
+                    <label className="studio-clothing-mage-field">
+                      <span>Edit instruction</span>
+                      <textarea
+                        rows={2}
+                        value={editPrompt}
+                        disabled={running}
+                        placeholder="e.g. change clothes and accessories"
+                        onChange={(e) =>
+                          onClothingEditPromptChange(resolvedIndex, e.target.value)
+                        }
+                      />
+                    </label>
+                  ) : null}
                   {canRerun ? (
                     <button
                       type="button"
                       className="studio-btn ghost studio-rerun-btn studio-rerun-btn--compact"
                       disabled={running}
-                      onClick={() => onRerunClothing(accessoryIndex)}
-                      title="Re-generate this garment (Krea → TRELLIS → appearance_component)"
+                      onClick={() => onRerunClothing(resolvedIndex)}
+                      title={
+                        editPrompt.trim()
+                          ? 'Edit this garment image, then remesh + clothing fit'
+                          : 'Re-generate this garment (image → mesh → clothing fit)'
+                      }
                     >
                       Re-run
                     </button>
@@ -273,7 +334,7 @@ export default function StudioStagePreviews({
                     <StudioAuthenticatedThumb
                       imageUrl={item.imageUrl}
                       apiEndpoint={apiEndpoint}
-                      label="Krea"
+                      label="Image"
                     />
                   ) : null}
                   {previewUrl ? (
