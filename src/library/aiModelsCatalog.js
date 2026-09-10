@@ -4,13 +4,14 @@
  * Live list is filtered by GET /api/v1/system/models when connected.
  *
  * Verified DGX Spark paths (Sep 2026):
+ * - Text → image: Krea 2 Turbo (Task Manager default starting task)
+ * - Edit image: Mage-Flow-Edit Turbo (`mage_flow_edit_turbo`)
  * - Text → 3D: TRELLIS v1
- * - Image → 3D (single): TRELLIS.2 (Task Manager + Studio default)
+ * - Image → 3D default: Pixel3D (fallback TRELLIS.2 = Standard; TRELLIS v1 image = Fast)
  * - Multiview → 3D: Pixel3D (Six Image View Studio template)
  * - Auto rig (full ML): SkinTokens (recommended) or UniRig full (same model id, rig_mode=full)
  * - Auto rig (template): UniRig adapter in template mode (not a separate model)
- * - Avatar from image: TRELLIS.2 to VRM
- * - World props: TRELLIS.2; mesh paint: TRELLIS.2
+ * - Avatar from image / world props: Pixel3D mesh path
  *
  * Note: `unirig_auto_rig` is one API model with modes. UI template mode sets
  * rig_mode=template (no neural UniRig). True UniRig ML needs rig_mode=full|skeleton|skin.

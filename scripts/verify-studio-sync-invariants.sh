@@ -61,6 +61,18 @@ need "src/context/TaskContext.jsx" 'cancelActiveTasks' "TaskContext exports canc
 need "src/components/TaskManager.jsx" 'data-testid="task-stop-btn"' "Task Manager Stop button"
 need "src/pages/StudioPage.css" 'studio-btn-stop' "Stop button styles"
 
+# --- Task Manager dropdown labels (user-locked name list) ---
+need "src/components/TaskManager.jsx" '>Text to Image<' "Task type: Text to Image first"
+need "src/components/TaskManager.jsx" '>Text to 3D Mesh<' "Task type: Text to 3D Mesh"
+need "src/components/TaskManager.jsx" '>Image to 3D Mesh<' "Task type: Image to 3D Mesh"
+need "src/components/TaskManager.jsx" '>Image to Raw 3D Mesh<' "Task type: Image to Raw 3D Mesh"
+need "src/components/TaskManager.jsx" '>Photo / Multi Photos to Splat<' "Task type: Photo / Multi Photos to Splat"
+need "src/components/TaskManager.jsx" '>1:1 Walk Environment Scan<' "Task type: 1:1 Walk Environment Scan"
+need "src/components/TaskManager.jsx" '>Image Mesh Painting<' "Task type: Image Mesh Painting"
+need "src/components/TaskManager.jsx" '>3D Mesh Retopology<' "Task type: 3D Mesh Retopology"
+forbid "src/components/TaskManager.jsx" '>Text to 3D<' "Task type must not use shortened Text to 3D"
+forbid "src/components/TaskManager.jsx" '>3D Mesh Retopo<' "Task type must not use shortened Retopo"
+
 # --- User-facing catalog labels (generic, no vendor names in ALL_MODELS rows) ---
 need "src/library/aiModelsCatalog.js" "Multiview Image to 3D Mesh" "Pixel3D UI label"
 need "src/library/aiModelsCatalog.js" "Standard Image to Textured 3D Mesh" "TRELLIS.2 UI label"

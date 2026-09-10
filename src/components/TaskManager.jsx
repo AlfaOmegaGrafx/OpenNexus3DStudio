@@ -169,7 +169,8 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const [viewportFailedMessage, setViewportFailedMessage] = useState(null);
 
   const [showNewTask, setShowNewTask] = useState(false);
-  const [newTaskType, setNewTaskType] = useState('text-to-3d');
+  // Default starting task: Text to Image (user-locked 2026-09-08).
+  const [newTaskType, setNewTaskType] = useState('text-to-image');
   const [newObjectName, setNewObjectName] = useState('');
   /** True after the user edits the object-name field; blocks overwrite from filename/chain. */
   const objectNameTouchedRef = useRef(false);
@@ -179,7 +180,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImages, setNewTaskImages] = useState([]);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
-  const [newTaskModel, setNewTaskModel] = useState(() => getDefaultModelForFeature('text-to-3d'));
+  const [newTaskModel, setNewTaskModel] = useState(() =>
+    getDefaultModelForFeature('text-to-image'),
+  );
   const [taskOptions, setTaskOptions] = useState(() => {
     const pipeline = getPipelineSafeMeshGenerationDefaults();
     return {
@@ -2308,13 +2311,13 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   className="input w-full"
                   style={{ padding: '0.375rem', fontSize: '0.65rem' }}
                 >
-                  <option value="text-to-3d">Text to 3D</option>
                   <option value="text-to-image">Text to Image</option>
-                  <option value="image-to-3d">Image to 3D</option>
-                  <option value="image-to-raw-mesh">Image to Raw Mesh</option>
-                  <option value="image-to-splat">Photo to Splat</option>
+                  <option value="text-to-3d">Text to 3D Mesh</option>
+                  <option value="image-to-3d">Image to 3D Mesh</option>
+                  <option value="image-to-raw-mesh">Image to Raw 3D Mesh</option>
+                  <option value="image-to-splat">Photo / Multi Photos to Splat</option>
                   <option value="image-to-world">Image to World</option>
-                  <option value="environment-scan">Walk Environment Scan</option>
+                  <option value="environment-scan">1:1 Walk Environment Scan</option>
                   <option value="avatar-from-image">Photo to Avatar</option>
                   <option value={BODY_CLOTH_STUDIO_TASK_TYPE}>
                     Studio Body Clothing
@@ -2323,9 +2326,9 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                     3DGSavatar Head
                   </option>
                   <option value="mesh-painting-text">Text 3D Mesh Painting</option>
-                  <option value="mesh-painting">Image 3D Mesh Painting</option>
+                  <option value="mesh-painting">Image Mesh Painting</option>
                   <option value="mesh-segmentation">3D Mesh Segmentation</option>
-                  <option value="mesh-retopology">3D Mesh Retopo</option>
+                  <option value="mesh-retopology">3D Mesh Retopology</option>
                   <option value="mesh-uv-unwrapping">UV Unwrapping</option>
                   <option value="mesh-editing-text">Text 3D Mesh Edit</option>
                   <option value="mesh-editing-image">Image 3D Mesh Edit</option>
