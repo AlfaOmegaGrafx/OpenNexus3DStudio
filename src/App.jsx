@@ -1161,8 +1161,8 @@ function AppContent() {
               </span>
             </div>
           </div>
-          <a className="title-xr-lab-link" href="/studio" title="Node / Kanban studio (Krea → TRELLIS.2)">
-            Studio
+          <a className="title-xr-lab-link" href="/studio" title="Node / Kanban clothing studio (Krea → TRELLIS.2)">
+            Clothing Studio
           </a>
           <a className="title-xr-lab-link" href="/xr" title="IWSDK immersive mode (WebXR lab)">
             XR Lab
@@ -1179,7 +1179,7 @@ function AppContent() {
               }
             }}
           >
-            Companion
+            AI Companion Studio
           </a>
         </div>
 
@@ -1756,17 +1756,6 @@ function AppContent() {
 
           {!sidebarCollapsed && (
             <>
-          <TaskManager 
-            tasks={tasks}
-            onAITask={handleAITask}
-            isApiConnected={isConnected}
-          />
-          <WorldLibrary apiEndpoint={apiEndpoint} compact />
-          {showXrAiPanel() && (
-          <div ref={xrAiPanelRef}>
-            <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
-          </div>
-          )}
           <BlendShapeController 
             sceneManager={sceneManager}
             characterManager={characterManager}
@@ -1778,11 +1767,22 @@ function AppContent() {
             }}
             isActive={skeletonActive}
           />
-          <Core3DPanel />
           <CreatureAnimationPanel />
           <ErrorBoundary showDetails={false}>
             <TextureExtractor />
           </ErrorBoundary>
+          <TaskManager 
+            tasks={tasks}
+            onAITask={handleAITask}
+            isApiConnected={isConnected}
+          />
+          <WorldLibrary apiEndpoint={apiEndpoint} compact />
+          {showXrAiPanel() && (
+          <div ref={xrAiPanelRef}>
+            <XrAiPanel isApiConnected={isConnected} sceneManager={sceneManager} />
+          </div>
+          )}
+          <Core3DPanel />
           <VRMExport />
           <GLBExport apiEndpoint={apiEndpoint} />
           {showApiStatusPanel() && (

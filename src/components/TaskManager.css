@@ -145,6 +145,15 @@
   flex-direction: column;
   gap: 0.375rem;
   padding: 0.375rem;
+  touch-action: pan-y;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.task-completed-scroll.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .task-completed-scroll .task-item {

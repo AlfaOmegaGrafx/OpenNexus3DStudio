@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTask } from '../context/TaskContext';
 import { useScene } from '../context/SceneContext';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 import { ensureAbsoluteUrl, get3daigcAuthHeaders } from '../library/taskManager';
 import {
   ALL_MODELS,
@@ -162,6 +163,10 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
   });
 
   const navigate = useNavigate();
+  const { scrollRef: completedScrollRef, scrollHandlers: completedScrollHandlers } = useDragToScroll({
+    axis: 'y',
+    draggingClassName: 'is-drag-scrolling',
+  });
   
   const [viewportLoadingJobId, setViewportLoadingJobId] = useState(null);
   const [viewportActiveJobId, setViewportActiveJobId] = useState(null);
@@ -3266,7 +3271,12 @@ const TaskManager = ({ tasks, onAITask, isApiConnected }) => {
                   <span className="task-completed-count">({completedTasks.length})</span>
                 </div>
                 {isCompletedExpanded ? (
-                  <div className="task-completed-scroll">
+                  <div
+                    ref={completedScrollRef}
+                    className="task-completed-scroll"
+                    title="Drag to scroll panel"
+                    {...completedScrollHandlers}
+                  >
                     {completedTasks.length === 0 ? (
                       <p className="task-list-empty task-list-empty--inset">No completed tasks</p>
                     ) : (
