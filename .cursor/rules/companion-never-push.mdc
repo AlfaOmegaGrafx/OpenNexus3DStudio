@@ -1,0 +1,27 @@
+---
+description: HARD — Companion (chat) is moat; never git push, even if user asks by mistake
+alwaysApply: true
+---
+
+# Companion never push (HARD)
+
+**Locked 2026-09-09.** Companion is **moat**. Local commits only.
+
+## Scope
+
+- Git repo: `/home/sifr/chat`
+- OpenNexus: `src/moat/companion/` (gitignored; `--include-src` sync only)
+
+## Never
+
+- Any `git push` of Companion / chat remotes — including mistaken “push it” / “push Companion”
+
+## Allowed
+
+- Local commits in `chat/` when explicitly requested
+- Surface SCP sync for runtime (not remote publish)
+
+## If asked to push
+
+Refuse: Companion is moat — local only; no push.
+---
