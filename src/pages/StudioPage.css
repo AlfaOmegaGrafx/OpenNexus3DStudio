@@ -8,7 +8,11 @@
   --studio-ok: #3ecf8e;
   --studio-warn: #f0b429;
   --studio-fail: #f07178;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: radial-gradient(1200px 600px at 10% -10%, #1a2438 0%, var(--studio-bg) 55%);
@@ -16,23 +20,106 @@
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
+.studio-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  user-select: text;
+  -webkit-user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2a2a2a;
+}
+
+.studio-page-scroll.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Match OpenNexus 3D sidebar / panel scrollbars */
+.studio-page-scroll::-webkit-scrollbar,
+.studio-clothing-preview-grid::-webkit-scrollbar,
+.studio-flow-node-clothing-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.studio-page-scroll::-webkit-scrollbar-track,
+.studio-clothing-preview-grid::-webkit-scrollbar-track,
+.studio-flow-node-clothing-list::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.studio-page-scroll::-webkit-scrollbar-thumb,
+.studio-clothing-preview-grid::-webkit-scrollbar-thumb,
+.studio-flow-node-clothing-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.studio-page-scroll::-webkit-scrollbar-thumb:hover,
+.studio-clothing-preview-grid::-webkit-scrollbar-thumb:hover,
+.studio-flow-node-clothing-list::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+.studio-clothing-preview-grid,
+.studio-flow-node-clothing-list {
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2a2a2a;
+}
+
 .studio-page-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--studio-border);
   background: rgba(14, 17, 23, 0.85);
   backdrop-filter: blur(8px);
 }
 
+.studio-page-header-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.studio-page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
 .studio-page-brand h1 {
-  margin: 0.15rem 0;
+  margin: 0;
   font-size: 1.35rem;
   font-weight: 650;
   letter-spacing: 0.02em;
+}
+
+.studio-page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.65rem;
+  margin: 0.15rem 0 0;
+}
+
+.studio-page-sub {
+  display: inline;
+  color: var(--studio-muted);
+  font-size: 0.8rem;
 }
 
 .studio-page-nav {
@@ -63,18 +150,13 @@
   color: var(--studio-accent);
 }
 
-.studio-page-sub {
-  display: block;
-  color: var(--studio-muted);
-  font-size: 0.8rem;
-}
-
 .studio-page-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
   align-items: center;
   justify-content: flex-end;
+  margin-left: auto;
   max-width: min(100%, 42rem);
 }
 
@@ -84,6 +166,7 @@
   border-radius: 999px;
   border: 1px solid var(--studio-border);
   flex-shrink: 0;
+  align-self: center;
 }
 
 .studio-api-pill.ok {
@@ -1302,6 +1385,17 @@
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--studio-border);
+}
+
+.studio-view-thumb .image-panel-preview-inline-btn {
+  margin-top: 0;
+}
+
+.studio-view-thumb .image-panel-preview-inline {
+  max-height: 320px;
+  border: none;
+  border-radius: 0;
+  background: #0a0c10;
 }
 
 .studio-view-thumb img {

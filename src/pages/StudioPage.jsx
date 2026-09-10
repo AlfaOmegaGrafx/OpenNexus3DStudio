@@ -48,6 +48,7 @@ import StudioGraphView from '../components/studio/StudioGraphView.jsx';
 import StudioKanbanView from '../components/studio/StudioKanbanView.jsx';
 import StudioAuthenticatedThumb from '../components/studio/StudioAuthenticatedThumb.jsx';
 import StudioStagePreviews from '../components/studio/StudioStagePreviews.jsx';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 import './StudioPage.css';
 
 function StudioImagePreview({ imageUrl, views, apiEndpoint }) {
@@ -90,6 +91,10 @@ function StudioPageInner() {
     cancelActiveTasks,
     taskManager,
   } = useTask();
+  const { scrollRef: studioScrollRef, scrollHandlers: studioScrollHandlers } = useDragToScroll({
+    axis: 'y',
+    draggingClassName: 'is-drag-scrolling',
+  });
   const [viewMode, setViewMode] = useState('graph');
   const [store, setStore] = useState(() => loadWorkspaceStore());
   const [faceSelfieFile, setFaceSelfieFile] = useState(null);
@@ -769,114 +774,126 @@ function StudioPageInner() {
   return (
     <div className="studio-page">
       <header className="studio-page-header">
-        <div className="studio-page-brand">
-          <Link to="/" className="studio-page-back">
-            ← Viewport
-          </Link>
-          <h1>OpenNexus Studio</h1>
-          <span className="studio-page-sub">
-            Prompt · Canvas · Asset — local DGX via 3DAIGC-API
-          </span>
+        <div className="studio-page-header-main">
+          <div className="studio-page-brand">
+            <Link to="/" className="studio-page-back">
+              ← Viewport
+            </Link>
+            <div className="studio-page-title-row">
+              <h1>OpenNexus3D Clothing Studio</h1>
+              <span className="studio-page-sub">
+                Prompt · Canvas · Asset — local DGX via 3DAIGC-API
+              </span>
+            </div>
+          </div>
+          <nav className="studio-page-nav" aria-label="Labs">
+            <Link to="/xr">XR Lab</Link>
+            <Link to="/companion">AI Companion Studio</Link>
+          </nav>
         </div>
-        <nav className="studio-page-nav" aria-label="Labs">
-          <Link to="/xr">XR Lab</Link>
-          <Link to="/companion">Companion</Link>
-        </nav>
-        <div className="studio-page-actions">
+        <div className="studio-page-toolbar">
           <span
             className={`studio-api-pill ${isConnected ? 'ok' : 'down'}`}
             title="3DAIGC-API connection"
           >
             {isConnected ? 'API connected' : 'API offline'}
           </span>
-          <div className="studio-view-toggle" role="group" aria-label="View mode">
-            <button
-              type="button"
-              className={viewMode === 'graph' ? 'active' : ''}
-              onClick={() => setViewMode('graph')}
-            >
-              Graph
+          <div className="studio-page-actions">
+            <div className="studio-view-toggle" role="group" aria-label="View mode">
+              <button
+                type="button"
+                className={viewMode === 'graph' ? 'active' : ''}
+                onClick={() => setViewMode('graph')}
+              >
+                Graph
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'kanban' ? 'active' : ''}
+                onClick={() => setViewMode('kanban')}
+              >
+                Kanban
+              </button>
+            </div>
+            <button type="button" className="studio-btn ghost" onClick={handleReset} disabled={running}>
+              Reset template
             </button>
-            <button
-              type="button"
-              className={viewMode === 'kanban' ? 'active' : ''}
-              onClick={() => setViewMode('kanban')}
+            <span className="studio-btn-wrap" title={promptGatedTitle('Generate image')}>
+              <button
+                type="button"
+                className="studio-btn"
+                onClick={() => void runPipeline('image')}
+                disabled={running || !isConnected || !prompt.trim()}
+              >
+                {running ? 'Running…' : 'Generate image'}
+              </button>
+            </span>
+            <span
+              className="studio-btn-wrap"
+              title={
+                running
+                  ? 'Pipeline already running in this workspace'
+                  : !isConnected
+                    ? 'Connect the API (API Status) first'
+                    : imageReady
+                      ? isMultiview
+                        ? 'Send turnaround views to Multiview Image to 3D Mesh'
+                        : 'Send reviewed image to Image to 3D Mesh'
+                      : 'Generate and review an image first'
+              }
             >
-              Kanban
-            </button>
+              <button
+                type="button"
+                className="studio-btn"
+                onClick={() => void runPipeline('mesh')}
+                disabled={running || !isConnected || !imageReady}
+              >
+                Generate mesh
+              </button>
+            </span>
+            <span
+              className="studio-btn-wrap"
+              title={
+                running
+                  ? 'Pipeline already running in this workspace'
+                  : !isConnected
+                    ? 'Connect the API (API Status) first'
+                    : meshReady
+                      ? isComposableBody
+                        ? 'Auto-rig body (template wrap), then clothing fan-out'
+                        : 'Auto-rig the completed mesh'
+                      : 'Generate a mesh first'
+              }
+            >
+              <button
+                type="button"
+                className="studio-btn"
+                onClick={() => void runPipeline('rig')}
+                disabled={running || !isConnected || !meshReady}
+              >
+                Auto-rig mesh
+              </button>
+            </span>
+            <span className="studio-btn-wrap" title={promptGatedTitle('Run full pipeline')}>
+              <button
+                type="button"
+                className="studio-btn primary"
+                onClick={() => void runPipeline('full')}
+                disabled={running || !isConnected || !prompt.trim()}
+              >
+                {running ? 'Running…' : 'Run full pipeline'}
+              </button>
+            </span>
           </div>
-          <button type="button" className="studio-btn ghost" onClick={handleReset} disabled={running}>
-            Reset template
-          </button>
-          <span className="studio-btn-wrap" title={promptGatedTitle('Generate image')}>
-            <button
-              type="button"
-              className="studio-btn"
-              onClick={() => void runPipeline('image')}
-              disabled={running || !isConnected || !prompt.trim()}
-            >
-              {running ? 'Running…' : 'Generate image'}
-            </button>
-          </span>
-          <span
-            className="studio-btn-wrap"
-            title={
-              running
-                ? 'Pipeline already running in this workspace'
-                : !isConnected
-                  ? 'Connect the API (API Status) first'
-                  : imageReady
-                    ? isMultiview
-                      ? 'Send turnaround views to Multiview Image to 3D Mesh'
-                      : 'Send reviewed image to Image to 3D Mesh'
-                    : 'Generate and review an image first'
-            }
-          >
-            <button
-              type="button"
-              className="studio-btn"
-              onClick={() => void runPipeline('mesh')}
-              disabled={running || !isConnected || !imageReady}
-            >
-              Generate mesh
-            </button>
-          </span>
-          <span
-            className="studio-btn-wrap"
-            title={
-              running
-                ? 'Pipeline already running in this workspace'
-                : !isConnected
-                  ? 'Connect the API (API Status) first'
-                  : meshReady
-                    ? isComposableBody
-                      ? 'Auto-rig body (template wrap), then clothing fan-out'
-                      : 'Auto-rig the completed mesh'
-                    : 'Generate a mesh first'
-            }
-          >
-            <button
-              type="button"
-              className="studio-btn"
-              onClick={() => void runPipeline('rig')}
-              disabled={running || !isConnected || !meshReady}
-            >
-              Auto-rig mesh
-            </button>
-          </span>
-          <span className="studio-btn-wrap" title={promptGatedTitle('Run full pipeline')}>
-            <button
-              type="button"
-              className="studio-btn primary"
-              onClick={() => void runPipeline('full')}
-              disabled={running || !isConnected || !prompt.trim()}
-            >
-              {running ? 'Running…' : 'Run full pipeline'}
-            </button>
-          </span>
         </div>
       </header>
 
+      <div
+        ref={studioScrollRef}
+        className="studio-page-scroll"
+        title="Drag to scroll panel"
+        {...studioScrollHandlers}
+      >
       <nav className="studio-workspace-tabs" aria-label="Studio workspaces">
         {store.workspaces.map((ws) => {
           const isActive = ws.id === activeId;
@@ -1176,6 +1193,7 @@ function StudioPageInner() {
           </span>
         )}
       </footer>
+      </div>
     </div>
   );
 }

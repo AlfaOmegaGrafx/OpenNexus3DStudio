@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { resolveTaskModelUrl } from '../../library/taskModelUrl.js';
 import { get3daigcAuthHeaders } from '../../library/taskManager.js';
+import ImagePanelPreview from '../ImagePanelPreview.jsx';
 
-/** Auth-fetch image thumb for Studio galleries. */
+/** Auth-fetch image thumb for Studio galleries; click enlarges like Task Manager Completed. */
 export default function StudioAuthenticatedThumb({ imageUrl, apiEndpoint, label }) {
   const [src, setSrc] = useState(null);
 
@@ -35,7 +36,7 @@ export default function StudioAuthenticatedThumb({ imageUrl, apiEndpoint, label 
   return (
     <figure className="studio-view-thumb">
       {src ? (
-        <img src={src} alt={label || 'view'} />
+        <ImagePanelPreview src={src} alt={label || 'view'} />
       ) : (
         <div className="studio-image-preview-loading">…</div>
       )}
