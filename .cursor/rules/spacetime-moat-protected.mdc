@@ -10,8 +10,9 @@ alwaysApply: true
 ## Do not push
 
 1. **Do not** `git push` OpenNexus3DStudio or 3DAIGC-API to GitHub (or any public remote) unless the user **explicitly** orders a specific push in that turn.
-2. **Never** `git add` / commit / push: `src/moat/`, `3DAIGC-API/assets/moat/`, `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md` (API root), `Pitch Deck/`, `memory-bank/`, `.brain/`, `.sessionmem-team/`, `backups/`, companion proxy scripts, `.env`, `.cursor/mcp.json`, secrets, `scripts/staging-*/`, `scripts/tmp-*`.
+2. **Never** `git add` / commit / push: `src/moat/` (incl. **creatures** pets/roles/clothing packaging), `3DAIGC-API/assets/moat/`, `MONETIZATION_ROADMAP.md`, `FUTURE_RD.md`, `MESH_WRAP_ROADMAP.md` (API root), `Pitch Deck/`, `memory-bank/`, `.brain/`, `.sessionmem-team/`, `backups/`, companion proxy scripts, `.env`, `.cursor/mcp.json`, secrets, `scripts/staging-*/`, `scripts/tmp-*`, `PATENT_PROVISIONAL*.md`.
 3. **Never** invent a public stand-in for the wrap template. **Never** name vendors, kit repos, or internal template filenames in tracked public docs or chat replies.
+4. **Creatures:** shipped `creature_template` / fox catalog on `main` stays public product surface. New pet companion packaging, roles, and creature clothing accessories → `src/moat/creatures/` only.
 
 See also: `.cursor/rules/secrets-moat-memory-protection.mdc` (full memory/secrets table).
 

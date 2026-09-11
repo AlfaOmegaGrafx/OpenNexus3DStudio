@@ -561,9 +561,11 @@ native/android-xr-face-bridge/.jdk/
 !.agent/scratch/.gitkeep
 
 # Creature / appearance pipeline modules are REQUIRED by App.jsx / catalogs on main
-# (were briefly ignored as "moat"; that broke Vercel). Keep them tracked.
+# (were briefly ignored as "moat"; that broke Vercel). Keep them tracked:
+#   creaturePipelineCatalog.js, CreatureAnimationPanel, public/assets/creature/fox, …
+# Pet companion packaging / roles / creature clothing accessories → src/moat/creatures/ (below).
 
-# Local companion overlay (live iframe/proxy) — never publish
+# Local moat (companion, wrap, creatures pets→roles→clothing, …) — never publish
 src/moat/
 scripts/companion-*.mjs
 scripts/start-companion-*

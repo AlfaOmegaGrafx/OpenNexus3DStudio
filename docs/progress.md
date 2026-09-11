@@ -32,12 +32,12 @@
 
 Internal timed waves, unreleased companion/speech/motion strategy, and parked R&D live **only** in gitignored moat docs (and `memory-bank/`), not here.
 
-## Moat documentation (pointers only)
+## Proprietary boundaries (pointers only)
 
-- Full strategy: `memory-bank/spacetime-moat-strategy.md` (gitignored)
 - Public overview: `docs/SPACETIME_MOAT_OVERVIEW.md`
 - Dev topology: `docs/docs/DEV_MACHINE_TOPOLOGY.md`
 - Env-scan API: `3DAIGC-API/docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md`
+- Strategy / pricing / unreleased packaging: local gitignored docs only (never commit)
 
 ## Not done (public-safe)
 
