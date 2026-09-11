@@ -635,6 +635,124 @@ describe('SpacetimeXrAvatarView control cycle', () => {
   });
 });
 
+describe('SpacetimeXrAvatarView session-exit persist', () => {
+  it('re-plants the hidden first-person avatar at the live viewpoint (walked pose persists)', () => {
+    const rig = new THREE.Group();
+    const playerRoot = new THREE.Group();
+    rig.add(playerRoot);
+    playerRoot.position.set(0, 0, 0);
+
+    const headBone = new THREE.Object3D();
+    headBone.position.set(0, 1.55, 0);
+    playerRoot.add(headBone);
+
+    const camera = new THREE.PerspectiveCamera();
+    // Headset after walking in first-person (rig moved; camera stays in room).
+    camera.position.set(3, 1.55, -4);
+    camera.lookAt(3, 1.55, -5);
+    camera.updateMatrixWorld(true);
+
+    const view = new SpacetimeXrAvatarView({
+      locomotionRig: rig,
+      playerRoot,
+      camera,
+      getVrm: () => ({ humanoid: { humanBones: { head: { node: headBone } } } }),
+      locomotion: { setMode: vi.fn() },
+    });
+
+    view.setControlMode(SPACETIME_XR_CONTROL_FIRST_PERSON);
+    expect(playerRoot.visible).toBe(false);
+
+    // Simulate FP stick walk: world slides under a fixed headset; the hidden
+    // avatar's rig-local plant goes stale (this is what used to persist).
+    rig.position.set(-3, 0, 4);
+    rig.updateMatrixWorld(true);
+    const staleLocal = playerRoot.position.clone();
+
+    const moved = view.replantFirstPersonAvatarForSessionExit();
+    expect(moved).toBe(true);
+
+    // Rig-local plant now reflects the walked spot — what sessionend captures.
+    expect(playerRoot.position.distanceTo(staleLocal)).toBeGreaterThan(1);
+    expect(playerRoot.position.x).toBeCloseTo(6, 5);
+    expect(playerRoot.position.z).toBeCloseTo(-8, 5);
+
+    // World pose lands under the live headset XZ (same-frame as the exit view).
+    const world = new THREE.Vector3();
+    playerRoot.getWorldPosition(world);
+    expect(world.x).toBeCloseTo(camera.position.x, 5);
+    expect(world.z).toBeCloseTo(camera.position.z, 5);
+    // No walk BVH in tests — feet Y snap is a no-op and keeps the carried Y.
+    expect(world.y).toBeCloseTo(0, 5);
+
+    // Avatar faces the user's exit look direction (consistent with the
+    // persisted view quaternion restored on the next enter).
+    const avatarFwd = new THREE.Vector3();
+    playerRoot.getWorldDirection(avatarFwd);
+    const camFwd = new THREE.Vector3();
+    camera.getWorldDirection(camFwd);
+    expect(avatarFwd.dot(camFwd)).toBeGreaterThan(0.99);
+
+    // Visibility stays owned by the session lifecycle (onSessionEnd re-shows).
+    expect(playerRoot.visible).toBe(false);
+  });
+
+  it('keeps the planted avatar on session exit outside first-person (intentional offset)', () => {
+    const rig = new THREE.Group();
+    const playerRoot = new THREE.Group();
+    rig.add(playerRoot);
+    playerRoot.position.set(3, 0, 0);
+
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, 1.6, 0);
+    camera.updateMatrixWorld(true);
+
+    const view = new SpacetimeXrAvatarView({
+      locomotionRig: rig,
+      playerRoot,
+      camera,
+      getVrm: () => ({ humanoid: null }),
+      locomotion: { setMode: vi.fn() },
+    });
+
+    // Default walk-around: viewer↔avatar separation is intentional.
+    expect(view.controlMode).toBe(SPACETIME_XR_CONTROL_THIRD_FREE);
+    const before = playerRoot.position.clone();
+    expect(view.replantFirstPersonAvatarForSessionExit()).toBe(false);
+    expect(playerRoot.position.distanceTo(before)).toBe(0);
+  });
+
+  it('no-ops when the avatar unloaded mid first-person session', () => {
+    const rig = new THREE.Group();
+    const playerRoot = new THREE.Group();
+    rig.add(playerRoot);
+
+    const headBone = new THREE.Object3D();
+    headBone.position.set(0, 1.55, 0);
+    playerRoot.add(headBone);
+
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, 1.55, 0);
+    camera.updateMatrixWorld(true);
+
+    let vrm = { humanoid: { humanBones: { head: { node: headBone } } } };
+    const view = new SpacetimeXrAvatarView({
+      locomotionRig: rig,
+      playerRoot,
+      camera,
+      getVrm: () => vrm,
+      locomotion: { setMode: vi.fn() },
+    });
+
+    view.setControlMode(SPACETIME_XR_CONTROL_FIRST_PERSON);
+    vrm = null;
+
+    const before = playerRoot.position.clone();
+    expect(view.replantFirstPersonAvatarForSessionExit()).toBe(false);
+    expect(playerRoot.position.distanceTo(before)).toBe(0);
+  });
+});
+
 describe('spacetimeXrLocomotion avatar move', () => {
   it('moves playerRoot in avatar mode, not the locomotion rig', () => {
     const rig = new THREE.Group();

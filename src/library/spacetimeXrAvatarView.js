@@ -218,6 +218,30 @@ export class SpacetimeXrAvatarView {
   }
 
   /**
+   * XR session exit while first-person embodied: the hidden avatar never tracks
+   * the headset (walking moves the rig), so its rig-local plant is stale and
+   * would persist a pose the user left behind. Re-plant at the live viewpoint —
+   * same spot the mode-cycle disembody uses — so the exit persist captures where
+   * the user actually stood. No-op in third-person modes: there the avatar is
+   * live-planted and any viewer↔avatar offset is intentional.
+   * Must run while the camera still holds the in-XR pose and before the
+   * locomotion rig is zeroed (world→local conversion needs the exit transform).
+   * @returns {boolean} true when the avatar was re-planted
+   */
+  replantFirstPersonAvatarForSessionExit() {
+    if (!this.hasAvatar() || !this.isFirstPerson()) return false;
+    this.camera.getWorldPosition(_camPos);
+    if (!Number.isFinite(_camPos.x) || !Number.isFinite(_camPos.z)) return false;
+    this._placeAvatarAtDisembodySpot(true);
+    snapSpacetimeWalkerToWalkSurface(this.playerRoot, this.camera);
+    console.info('[spacetime-xr] XR exit re-plant first-person avatar at viewpoint', {
+      x: this.playerRoot.position.x,
+      z: this.playerRoot.position.z,
+    });
+    return true;
+  }
+
+  /**
    * True when the headset is inside / in front of the avatar (must pull rig back).
    * @returns {boolean}
    */

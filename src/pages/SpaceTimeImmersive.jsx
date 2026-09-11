@@ -342,6 +342,13 @@ export default function SpaceTimeImmersive() {
           avatarRestorePending = false;
           resetSpacetimeFallOffMapTracking();
 
+          // First-person embody hides the avatar and walks the rig, so its
+          // rig-local plant is stale while the view tracks the headset — re-plant
+          // at the live viewpoint before capture (mode-cycle disembody parity).
+          // Third-person modes keep the planted avatar; viewer↔avatar offset
+          // there is intentional. Runs before onSessionEnd resets control mode.
+          xrInteraction?.replantFirstPersonAvatarForSessionExit();
+
           // Capture rig-local avatar BEFORE zeroing the parent — world→local after
           // identity parent was teleporting the walker every exit.
           if (walkerVrm && playerRoot) {

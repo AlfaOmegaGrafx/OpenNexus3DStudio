@@ -118,6 +118,16 @@ export class SpacetimeXrInteraction {
   }
 
   /**
+   * Re-plant a first-person embodied avatar at the live viewpoint so sessionend
+   * persist captures the walked pose. Call before reading playerRoot for persist
+   * and before onSessionEnd() resets the control mode.
+   * @returns {boolean} true when the avatar was re-planted
+   */
+  replantFirstPersonAvatarForSessionExit() {
+    return this.avatarView.replantFirstPersonAvatarForSessionExit();
+  }
+
+  /**
    * @param {number} deltaSeconds
    * @param {XRFrame|null} frame
    * @param {XRReferenceSpace|null} referenceSpace
